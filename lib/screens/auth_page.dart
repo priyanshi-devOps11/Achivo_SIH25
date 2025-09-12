@@ -1,327 +1,754 @@
-import { motion } from 'motion/react';
-import { User, Mail, Lock, ChevronRight, BookOpen, Award, Users } from 'lucide-react';
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { useState } from 'react';
+import 'package:flutter/material.dart';
 
-export function AuthPage() {
-  const [isLoading, setIsLoading] = useState(false);
+class AuthPage extends StatefulWidget {
+  const AuthPage({Key? key}) : super(key: key);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  setIsLoading(false);
-  };
+  @override
+  State<AuthPage> createState() => _AuthPageState();
+}
 
-  return (
-  <div className="relative min-h-screen overflow-hidden">
-  {/* Enhanced Material You Inspired Gradient Background */}
-  <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50">
-  {/* Flowing gradient shapes */}
-  <div className="absolute top-0 left-0 w-full h-full">
-  <motion.div
-  initial={{ scale: 0.8, opacity: 0 }}
-  animate={{ scale: 1, opacity: 1 }}
-  transition={{ duration: 2, ease: "easeOut" }}
-  className="absolute -top-1/3 -left-1/4 w-4/5 h-4/5 bg-gradient-to-br from-indigo-400/20 via-purple-400/15 to-transparent rounded-full blur-3xl"
-  />
-  <motion.div
-  initial={{ scale: 0.8, opacity: 0 }}
-  animate={{ scale: 1, opacity: 1 }}
-  transition={{ duration: 2.5, ease: "easeOut", delay: 0.3 }}
-  className="absolute -bottom-1/3 -right-1/4 w-4/5 h-4/5 bg-gradient-to-tl from-blue-400/20 via-cyan-400/15 to-transparent rounded-full blur-3xl"
-  />
-  <motion.div
-  initial={{ scale: 0.8, opacity: 0 }}
-  animate={{ scale: 1, opacity: 1 }}
-  transition={{ duration: 2.2, ease: "easeOut", delay: 0.6 }}
-  className="absolute top-1/3 left-1/3 w-1/2 h-1/2 bg-gradient-to-r from-purple-400/15 via-indigo-400/10 to-blue-400/15 rounded-full blur-2xl"
-  />
-  </div>
-  </div>
+class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
+  late AnimationController _backgroundController;
+  late AnimationController _contentController;
+  late AnimationController _iconController;
 
-  {/* Subtle Achievement Micro-illustrations */}
-  <div className="absolute inset-0 overflow-hidden">
-  {/* Book icon - top left */}
-  <motion.div
-  initial={{ opacity: 0, y: -20, rotate: -5 }}
-  animate={{ opacity: 0.06, y: 0, rotate: 0 }}
-  transition={{ duration: 3, ease: "easeOut", delay: 1 }}
-  className="absolute top-20 left-16 text-indigo-500"
-  >
-  <BookOpen size={90} strokeWidth={0.8} />
-  </motion.div>
+  late Animation<double> _backgroundAnimation;
+  late Animation<double> _contentAnimation;
+  late Animation<double> _iconAnimation;
 
-  {/* Award icon - top right */}
-  <motion.div
-  initial={{ opacity: 0, scale: 0.8 }}
-  animate={{ opacity: 0.06, scale: 1 }}
-  transition={{ duration: 3, ease: "easeOut", delay: 1.3 }}
-  className="absolute top-32 right-20 text-purple-500"
-  >
-  <Award size={80} strokeWidth={0.8} />
-  </motion.div>
+  bool _isLoading = false;
+  bool _isLogin = false;
+  bool _rememberMe = false;
 
-  {/* Users icon - bottom left */}
-  <motion.div
-  initial={{ opacity: 0, x: -20 }}
-  animate={{ opacity: 0.06, x: 0 }}
-  transition={{ duration: 3, ease: "easeOut", delay: 1.6 }}
-  className="absolute bottom-32 left-12 text-blue-500"
-  >
-  <Users size={85} strokeWidth={0.8} />
-  </motion.div>
+  final _formKey = GlobalKey<FormState>();
+  final _fullNameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
-  {/* Additional decorative icons */}
-  <motion.div
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 0.04 }}
-  transition={{ duration: 4, ease: "easeOut", delay: 2 }}
-  className="absolute bottom-20 right-16 text-cyan-500"
-  >
-  <BookOpen size={60} strokeWidth={0.6} />
-  </motion.div>
+  @override
+  void initState() {
+    super.initState();
 
-  <motion.div
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 0.04 }}
-  transition={{ duration: 4, ease: "easeOut", delay: 2.3 }}
-  className="absolute top-1/2 left-8 text-indigo-400"
-  >
-  <Award size={55} strokeWidth={0.6} />
-  </motion.div>
-  </div>
+    _backgroundController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
 
-  {/* Main Content */}
-  <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-6 py-12">
-  {/* Header */}
-  <motion.div
-  initial={{ opacity: 0, y: 30 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 1.2, ease: "easeOut", delay: 0.3 }}
-  className="text-center mb-8"
-  >
-  <h1 className="text-4xl md:text-5xl font-bold relative mb-3">
-  <span className="bg-gradient-to-r from-slate-800 via-indigo-800 to-slate-800 bg-clip-text text-transparent">
-  Join Achivo
-  </span>
-  {/* Glow effect */}
-  <div className="absolute inset-0 bg-gradient-to-r from-indigo-400/15 to-purple-400/15 blur-2xl -z-10 scale-110" />
-  </h1>
-  <p className="text-lg text-slate-600 max-w-md mx-auto">
-  Start your achievement journey today
-  </p>
-  </motion.div>
+    _contentController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
 
-  {/* Auth Tabs */}
-  <motion.div
-  initial={{ opacity: 0, y: 30 }}
-  animate={{ opacity: 1, y: 0 }}
-  transition={{ duration: 1, ease: "easeOut", delay: 0.6 }}
-  className="w-full max-w-md"
-  >
-  <Tabs defaultValue="register" className="w-full">
-  <TabsList className="grid w-full grid-cols-2 mb-8 bg-white/60 backdrop-blur-sm rounded-2xl p-1 shadow-lg">
-  <TabsTrigger
-  value="register"
-  className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-500 data-[state=active]:text-white transition-all duration-300"
-  >
-  Register
-  </TabsTrigger>
-  <TabsTrigger
-  value="login"
-  className="rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-500 data-[state=active]:text-white transition-all duration-300"
-  >
-  Login
-  </TabsTrigger>
-  </TabsList>
+    _iconController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
+      vsync: this,
+    );
 
-  {/* Register Form */}
-  <TabsContent value="register" className="space-y-6">
-  <form onSubmit={handleSubmit} className="space-y-6">
-  <div className="space-y-4">
-  <div className="space-y-2">
-  <Label htmlFor="fullName" className="text-slate-700">Full Name</Label>
-  <div className="relative">
-  <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-  <Input
-  id="fullName"
-  type="text"
-  placeholder="Enter your full name"
-  className="pl-12 h-14 bg-white/80 backdrop-blur-sm border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/90 focus:bg-white/95"
-  required
-  />
-  </div>
-  </div>
+    _backgroundAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut),
+    );
 
-  <div className="space-y-2">
-  <Label htmlFor="email" className="text-slate-700">Email</Label>
-  <div className="relative">
-  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-  <Input
-  id="email"
-  type="email"
-  placeholder="Enter your email"
-  className="pl-12 h-14 bg-white/80 backdrop-blur-sm border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/90 focus:bg-white/95"
-  required
-  />
-  </div>
-  </div>
+    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
+    );
 
-  <div className="space-y-2">
-  <Label htmlFor="password" className="text-slate-700">Password</Label>
-  <div className="relative">
-  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-  <Input
-  id="password"
-  type="password"
-  placeholder="Create a password"
-  className="pl-12 h-14 bg-white/80 backdrop-blur-sm border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/90 focus:bg-white/95"
-  required
-  />
-  </div>
-  </div>
+    _iconAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _iconController, curve: Curves.easeOut));
 
-  <div className="space-y-2">
-  <Label htmlFor="confirmPassword" className="text-slate-700">Confirm Password</Label>
-  <div className="relative">
-  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-  <Input
-  id="confirmPassword"
-  type="password"
-  placeholder="Confirm your password"
-  className="pl-12 h-14 bg-white/80 backdrop-blur-sm border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/90 focus:bg-white/95"
-  required
-  />
-  </div>
-  </div>
-  </div>
+    // Start animations
+    _backgroundController.forward();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      _contentController.forward();
+    });
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      _iconController.forward();
+    });
+  }
 
-  <motion.div
-  whileHover={{ scale: 1.02 }}
-  whileTap={{ scale: 0.98 }}
-  className="pt-4"
-  >
-  <Button
-  type="submit"
-  disabled={isLoading}
-  className="w-full h-14 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative group"
-  >
-  {/* Glow effect */}
-  <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-2xl blur-xl opacity-60 scale-110 group-hover:opacity-80 transition-opacity" />
+  @override
+  void dispose() {
+    _backgroundController.dispose();
+    _contentController.dispose();
+    _iconController.dispose();
+    _fullNameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
 
-  <span className="relative flex items-center gap-3 text-lg">
-  {isLoading ? (
-  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-  ) : (
-  <>
-  Create Account
-  <ChevronRight size={20} />
-  </>
-  )}
-  </span>
-  </Button>
-  </motion.div>
-  </form>
-  </TabsContent>
+  Future<void> _handleSubmit() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
+      });
 
-  {/* Login Form */}
-  <TabsContent value="login" className="space-y-6">
-  <form onSubmit={handleSubmit} className="space-y-6">
-  <div className="space-y-4">
-  <div className="space-y-2">
-  <Label htmlFor="loginEmail" className="text-slate-700">Email</Label>
-  <div className="relative">
-  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-  <Input
-  id="loginEmail"
-  type="email"
-  placeholder="Enter your email"
-  className="pl-12 h-14 bg-white/80 backdrop-blur-sm border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/90 focus:bg-white/95"
-  required
-  />
-  </div>
-  </div>
+      // Simulate API call
+      await Future.delayed(const Duration(seconds: 2));
 
-  <div className="space-y-2">
-  <Label htmlFor="loginPassword" className="text-slate-700">Password</Label>
-  <div className="relative">
-  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={20} />
-  <Input
-  id="loginPassword"
-  type="password"
-  placeholder="Enter your password"
-  className="pl-12 h-14 bg-white/80 backdrop-blur-sm border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:bg-white/90 focus:bg-white/95"
-  required
-  />
-  </div>
-  </div>
-  </div>
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
-  <div className="flex items-center justify-between text-sm">
-  <label className="flex items-center space-x-2 text-slate-600">
-  <input type="checkbox" className="rounded border-slate-300" />
-  <span>Remember me</span>
-  </label>
-  <button type="button" className="text-indigo-600 hover:text-indigo-700 transition-colors">
-  Forgot password?
-  </button>
-  </div>
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Enhanced gradient background
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFF1F5F9), // indigo-50
+                  Color(0xFFFAF5FF), // purple-50
+                  Color(0xFFEFF6FF), // blue-50
+                ],
+              ),
+            ),
+          ),
 
-  <motion.div
-  whileHover={{ scale: 1.02 }}
-  whileTap={{ scale: 0.98 }}
-  className="pt-4"
-  >
-  <Button
-  type="submit"
-  disabled={isLoading}
-  className="w-full h-14 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 relative group"
-  >
-  {/* Glow effect */}
-  <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-2xl blur-xl opacity-60 scale-110 group-hover:opacity-80 transition-opacity" />
+          // Animated gradient shapes
+          AnimatedBuilder(
+            animation: _backgroundAnimation,
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  // Top left gradient blob
+                  Positioned(
+                    top: -MediaQuery.of(context).size.height * 0.3,
+                    left: -MediaQuery.of(context).size.width * 0.25,
+                    child: Transform.scale(
+                      scale: _backgroundAnimation.value,
+                      child: Opacity(
+                        opacity: _backgroundAnimation.value * 0.2,
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.8,
+                          height: MediaQuery.of(context).size.height * 0.8,
+                          decoration: const BoxDecoration(
+                            gradient: RadialGradient(
+                              colors: [
+                                Color(0x336366F1), // indigo-400/20
+                                Color(0x26A855F7), // purple-400/15
+                                Colors.transparent,
+                              ],
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
-  <span className="relative flex items-center gap-3 text-lg">
-  {isLoading ? (
-  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-  ) : (
-  <>
-  Sign In
-  <ChevronRight size={20} />
-  </>
-  )}
-  </span>
-  </Button>
-  </motion.div>
-  </form>
-  </TabsContent>
-  </Tabs>
-  </motion.div>
+                  // Bottom right gradient blob
+                  Positioned(
+                    bottom: -MediaQuery.of(context).size.height * 0.3,
+                    right: -MediaQuery.of(context).size.width * 0.25,
+                    child: Transform.scale(
+                      scale: _backgroundAnimation.value,
+                      child: Opacity(
+                        opacity: _backgroundAnimation.value * 0.2,
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.8,
+                          height: MediaQuery.of(context).size.height * 0.8,
+                          decoration: const BoxDecoration(
+                            gradient: RadialGradient(
+                              colors: [
+                                Color(0x333B82F6), // blue-400/20
+                                Color(0x2606B6D4), // cyan-400/15
+                                Colors.transparent,
+                              ],
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
-  {/* Footer */}
-  <motion.div
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  transition={{ duration: 1, ease: "easeOut", delay: 1.2 }}
-  className="mt-8 text-center text-sm text-slate-500"
-  >
-  By continuing, you agree to our{' '}
-  <button className="text-indigo-600 hover:text-indigo-700 transition-colors underline">
-  Terms of Service
-  </button>{' '}
-  and{' '}
-  <button className="text-indigo-600 hover:text-indigo-700 transition-colors underline">
-  Privacy Policy
-  </button>
-  </motion.div>
-  </div>
+                  // Center gradient blob
+                  Positioned(
+                    top: MediaQuery.of(context).size.height * 0.33,
+                    left: MediaQuery.of(context).size.width * 0.33,
+                    child: Transform.scale(
+                      scale: _backgroundAnimation.value,
+                      child: Opacity(
+                        opacity: _backgroundAnimation.value * 0.15,
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.5,
+                          height: MediaQuery.of(context).size.height * 0.5,
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Color(0x26A855F7), // purple-400/15
+                                Color(0x1A6366F1), // indigo-400/10
+                                Color(0x263B82F6), // blue-400/15
+                              ],
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
 
-  {/* Subtle overlay for depth */}
-  <div className="absolute inset-0 bg-gradient-to-t from-white/5 via-transparent to-white/10 pointer-events-none" />
-  </div>
-  );
+          // Decorative icons
+          AnimatedBuilder(
+            animation: _iconAnimation,
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  // Book icon - top left
+                  Positioned(
+                    top: 80,
+                    left: 60,
+                    child: Transform.translate(
+                      offset: Offset(0, 20 * (1 - _iconAnimation.value)),
+                      child: Transform.rotate(
+                        angle:
+                            -0.087 * (1 - _iconAnimation.value), // -5 degrees
+                        child: Opacity(
+                          opacity: _iconAnimation.value * 0.06,
+                          child: const Icon(
+                            Icons.book_outlined,
+                            size: 90,
+                            color: Color(0xFF6366F1), // indigo-500
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Award icon - top right
+                  Positioned(
+                    top: 130,
+                    right: 80,
+                    child: Transform.scale(
+                      scale: 0.8 + 0.2 * _iconAnimation.value,
+                      child: Opacity(
+                        opacity: _iconAnimation.value * 0.06,
+                        child: const Icon(
+                          Icons.emoji_events_outlined,
+                          size: 80,
+                          color: Color(0xFFA855F7), // purple-500
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Users icon - bottom left
+                  Positioned(
+                    bottom: 130,
+                    left: 50,
+                    child: Transform.translate(
+                      offset: Offset(-20 * (1 - _iconAnimation.value), 0),
+                      child: Opacity(
+                        opacity: _iconAnimation.value * 0.06,
+                        child: const Icon(
+                          Icons.people_outline,
+                          size: 85,
+                          color: Color(0xFF3B82F6), // blue-500
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          // Main content
+          SafeArea(
+            child: AnimatedBuilder(
+              animation: _contentAnimation,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, 30 * (1 - _contentAnimation.value)),
+                  child: Opacity(
+                    opacity: _contentAnimation.value,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 60),
+
+                          // Header
+                          Column(
+                            children: [
+                              ShaderMask(
+                                shaderCallback: (bounds) =>
+                                    const LinearGradient(
+                                      colors: [
+                                        Color(0xFF1E293B), // slate-800
+                                        Color(0xFF3730A3), // indigo-800
+                                        Color(0xFF1E293B), // slate-800
+                                      ],
+                                    ).createShader(bounds),
+                                child: const Text(
+                                  'Join Achivo',
+                                  style: TextStyle(
+                                    fontSize: 42,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Start your achievement journey today',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Color(0xFF475569), // slate-600
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 40),
+
+                          // Auth tabs and form
+                          Container(
+                            constraints: const BoxConstraints(maxWidth: 400),
+                            child: Column(
+                              children: [
+                                // Tab selector
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 32),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.6),
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 10,
+                                        spreadRadius: 0,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () =>
+                                              setState(() => _isLogin = false),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 16,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              gradient: !_isLogin
+                                                  ? const LinearGradient(
+                                                      colors: [
+                                                        Color(
+                                                          0xFF6366F1,
+                                                        ), // indigo-500
+                                                        Color(
+                                                          0xFFA855F7,
+                                                        ), // purple-500
+                                                      ],
+                                                    )
+                                                  : null,
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                            child: Text(
+                                              'Register',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: !_isLogin
+                                                    ? Colors.white
+                                                    : const Color(0xFF475569),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () =>
+                                              setState(() => _isLogin = true),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 16,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              gradient: _isLogin
+                                                  ? const LinearGradient(
+                                                      colors: [
+                                                        Color(
+                                                          0xFF6366F1,
+                                                        ), // indigo-500
+                                                        Color(
+                                                          0xFFA855F7,
+                                                        ), // purple-500
+                                                      ],
+                                                    )
+                                                  : null,
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                            child: Text(
+                                              'Login',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: _isLogin
+                                                    ? Colors.white
+                                                    : const Color(0xFF475569),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Form
+                                Form(
+                                  key: _formKey,
+                                  child: Column(
+                                    children: [
+                                      // Full Name field (only for registration)
+                                      if (!_isLogin) ...[
+                                        _buildInputField(
+                                          controller: _fullNameController,
+                                          label: 'Full Name',
+                                          placeholder: 'Enter your full name',
+                                          icon: Icons.person_outline,
+                                          validator: (value) {
+                                            if (value == null ||
+                                                value.isEmpty) {
+                                              return 'Please enter your full name';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 20),
+                                      ],
+
+                                      // Email field
+                                      _buildInputField(
+                                        controller: _emailController,
+                                        label: 'Email',
+                                        placeholder: 'Enter your email',
+                                        icon: Icons.mail_outline,
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'Please enter your email';
+                                          }
+                                          if (!RegExp(
+                                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                                          ).hasMatch(value)) {
+                                            return 'Please enter a valid email';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 20),
+
+                                      // Password field
+                                      _buildInputField(
+                                        controller: _passwordController,
+                                        label: 'Password',
+                                        placeholder: _isLogin
+                                            ? 'Enter your password'
+                                            : 'Create a password',
+                                        icon: Icons.lock_outline,
+                                        obscureText: true,
+                                        validator: (value) {
+                                          if (value == null || value.isEmpty) {
+                                            return 'Please enter your password';
+                                          }
+                                          if (!_isLogin && value.length < 6) {
+                                            return 'Password must be at least 6 characters';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                      const SizedBox(height: 20),
+
+                                      // Confirm Password field (only for registration)
+                                      if (!_isLogin) ...[
+                                        _buildInputField(
+                                          controller:
+                                              _confirmPasswordController,
+                                          label: 'Confirm Password',
+                                          placeholder: 'Confirm your password',
+                                          icon: Icons.lock_outline,
+                                          obscureText: true,
+                                          validator: (value) {
+                                            if (value == null ||
+                                                value.isEmpty) {
+                                              return 'Please confirm your password';
+                                            }
+                                            if (value !=
+                                                _passwordController.text) {
+                                              return 'Passwords do not match';
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                        const SizedBox(height: 20),
+                                      ],
+
+                                      // Remember me and forgot password (only for login)
+                                      if (_isLogin) ...[
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Checkbox(
+                                                  value: _rememberMe,
+                                                  onChanged: (value) =>
+                                                      setState(
+                                                        () => _rememberMe =
+                                                            value!,
+                                                      ),
+                                                  activeColor: const Color(
+                                                    0xFF6366F1,
+                                                  ),
+                                                ),
+                                                const Text(
+                                                  'Remember me',
+                                                  style: TextStyle(
+                                                    color: Color(0xFF475569),
+                                                    fontSize: 14,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            TextButton(
+                                              onPressed: () {
+                                                // Handle forgot password
+                                              },
+                                              child: const Text(
+                                                'Forgot password?',
+                                                style: TextStyle(
+                                                  color: Color(0xFF6366F1),
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 20),
+                                      ] else
+                                        const SizedBox(height: 20),
+
+                                      // Submit button
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 56,
+                                        child: ElevatedButton(
+                                          onPressed: _isLoading
+                                              ? null
+                                              : _handleSubmit,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            shadowColor: Colors.transparent,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                          ),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              gradient: const LinearGradient(
+                                                colors: [
+                                                  Color(
+                                                    0xFF6366F1,
+                                                  ), // indigo-500
+                                                  Color(
+                                                    0xFFA855F7,
+                                                  ), // purple-500
+                                                ],
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black
+                                                      .withOpacity(0.1),
+                                                  blurRadius: 10,
+                                                  spreadRadius: 0,
+                                                ),
+                                              ],
+                                            ),
+                                            child: Center(
+                                              child: _isLoading
+                                                  ? const SizedBox(
+                                                      width: 20,
+                                                      height: 20,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            color: Colors.white,
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    )
+                                                  : Row(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .center,
+                                                      children: [
+                                                        Text(
+                                                          _isLogin
+                                                              ? 'Sign In'
+                                                              : 'Create Account',
+                                                          style:
+                                                              const TextStyle(
+                                                                color: Colors
+                                                                    .white,
+                                                                fontSize: 18,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                              ),
+                                                        ),
+                                                        const SizedBox(
+                                                          width: 8,
+                                                        ),
+                                                        const Icon(
+                                                          Icons.chevron_right,
+                                                          color: Colors.white,
+                                                          size: 20,
+                                                        ),
+                                                      ],
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 40),
+
+                          // Footer
+                          Opacity(
+                            opacity: _contentAnimation.value,
+                            child: Text.rich(
+                              TextSpan(
+                                text: 'By continuing, you agree to our ',
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B), // slate-500
+                                  fontSize: 14,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: 'Terms of Service',
+                                    style: const TextStyle(
+                                      color: Color(0xFF6366F1), // indigo-600
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                  const TextSpan(text: ' and '),
+                                  TextSpan(
+                                    text: 'Privacy Policy',
+                                    style: const TextStyle(
+                                      color: Color(0xFF6366F1), // indigo-600
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+
+                          const SizedBox(height: 40),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    required String placeholder,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF374151), // slate-700
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFFE2E8F0).withOpacity(0.5), // slate-200/50
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: TextFormField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            validator: validator,
+            decoration: InputDecoration(
+              hintText: placeholder,
+              hintStyle: const TextStyle(color: Color(0xFF94A3B8)), // slate-400
+              prefixIcon: Icon(
+                icon,
+                color: const Color(0xFF94A3B8), // slate-400
+                size: 20,
+              ),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 20,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

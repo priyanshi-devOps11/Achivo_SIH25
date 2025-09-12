@@ -1,155 +1,455 @@
-import { motion } from 'motion/react';
-import { BookOpen, Award, Users, ChevronRight } from 'lucide-react';
+import 'package:flutter/material.dart';
 
-interface WelcomeScreenProps {
-onNext: () => void;
+// ------------------- WELCOME SCREEN -------------------
+class WelcomeScreen extends StatefulWidget {
+  const WelcomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-export function WelcomeScreen({ onNext }: WelcomeScreenProps) {
-return (
-<div className="relative min-h-screen overflow-hidden">
-{/* Material You Inspired Gradient Background */}
-<div className="absolute inset-0 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-{/* Flowing gradient shapes */}
-<div className="absolute top-0 left-0 w-full h-full">
-<motion.div
-initial={{ scale: 0.8, opacity: 0 }}
-animate={{ scale: 1, opacity: 1 }}
-transition={{ duration: 2, ease: "easeOut" }}
-className="absolute -top-1/4 -left-1/4 w-3/4 h-3/4 bg-gradient-to-br from-blue-400/20 via-purple-400/15 to-transparent rounded-full blur-3xl"
-/>
-<motion.div
-initial={{ scale: 0.8, opacity: 0 }}
-animate={{ scale: 1, opacity: 1 }}
-transition={{ duration: 2.5, ease: "easeOut", delay: 0.3 }}
-className="absolute -bottom-1/4 -right-1/4 w-3/4 h-3/4 bg-gradient-to-tl from-pink-400/20 via-purple-400/15 to-transparent rounded-full blur-3xl"
-/>
-<motion.div
-initial={{ scale: 0.8, opacity: 0 }}
-animate={{ scale: 1, opacity: 1 }}
-transition={{ duration: 2.2, ease: "easeOut", delay: 0.6 }}
-className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-1/2 h-1/2 bg-gradient-to-r from-indigo-400/15 via-blue-400/10 to-cyan-400/15 rounded-full blur-2xl"
-/>
-</div>
-</div>
+class _WelcomeScreenState extends State<WelcomeScreen>
+    with TickerProviderStateMixin {
+  late AnimationController _backgroundController;
+  late AnimationController _contentController;
+  late AnimationController _iconController;
+  late AnimationController _buttonController;
 
-{/* Subtle Micro-illustrations */}
-<div className="absolute inset-0 overflow-hidden">
-{/* Book icon - top left */}
-<motion.div
-initial={{ opacity: 0, y: -20 }}
-animate={{ opacity: 0.08, y: 0 }}
-transition={{ duration: 3, ease: "easeOut", delay: 1 }}
-className="absolute top-20 left-16 text-blue-600"
->
-<BookOpen size={120} strokeWidth={0.8} />
-</motion.div>
+  late Animation<double> _backgroundAnimation1;
+  late Animation<double> _backgroundAnimation2;
+  late Animation<double> _backgroundAnimation3;
+  late Animation<double> _contentAnimation;
+  late Animation<double> _iconAnimation;
+  late Animation<double> _buttonFloatingAnimation;
 
-{/* Award icon - top right */}
-<motion.div
-initial={{ opacity: 0, y: -20 }}
-animate={{ opacity: 0.08, y: 0 }}
-transition={{ duration: 3, ease: "easeOut", delay: 1.3 }}
-className="absolute top-32 right-20 text-purple-600"
->
-<Award size={100} strokeWidth={0.8} />
-</motion.div>
+  @override
+  void initState() {
+    super.initState();
 
-{/* Teamwork icon - bottom left */}
-<motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 0.08, y: 0 }}
-transition={{ duration: 3, ease: "easeOut", delay: 1.6 }}
-className="absolute bottom-40 left-20 text-pink-600"
->
-<Users size={110} strokeWidth={0.8} />
-</motion.div>
+    _backgroundController = AnimationController(
+      duration: const Duration(milliseconds: 2500),
+      vsync: this,
+    );
 
-{/* Additional smaller icons for richness */}
-<motion.div
-initial={{ opacity: 0, scale: 0.5 }}
-animate={{ opacity: 0.05, scale: 1 }}
-transition={{ duration: 4, ease: "easeOut", delay: 2 }}
-className="absolute bottom-20 right-16 text-indigo-600"
->
-<BookOpen size={80} strokeWidth={0.6} />
-</motion.div>
+    _contentController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
 
-<motion.div
-initial={{ opacity: 0, scale: 0.5 }}
-animate={{ opacity: 0.05, scale: 1 }}
-transition={{ duration: 4, ease: "easeOut", delay: 2.3 }}
-className="absolute top-1/2 left-8 text-cyan-600"
->
-<Award size={70} strokeWidth={0.6} />
-</motion.div>
-</div>
+    _iconController = AnimationController(
+      duration: const Duration(milliseconds: 4000),
+      vsync: this,
+    );
 
-{/* Main Content */}
-<div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-6">
-{/* App Name */}
-<motion.div
-initial={{ opacity: 0, y: 30 }}
-animate={{ opacity: 1, y: 0 }}
-transition={{ duration: 1.2, ease: "easeOut", delay: 0.5 }}
-className="text-center mb-8"
->
-<h1 className="text-7xl md:text-8xl lg:text-9xl font-bold bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 bg-clip-text text-transparent tracking-tight">
-Achivo
-</h1>
-</motion.div>
+    _buttonController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
 
-{/* Tagline */}
-<motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 1, y: 0 }}
-transition={{ duration: 1, ease: "easeOut", delay: 1 }}
-className="text-center mb-20"
->
-<p className="text-lg md:text-xl text-slate-600 max-w-md mx-auto leading-relaxed">
-Where student activities turn into achievements
-</p>
-</motion.div>
+    _backgroundAnimation1 = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _backgroundController,
+        curve: const Interval(0.0, 1.0, curve: Curves.easeOut),
+      ),
+    );
 
-{/* Next Button with Glowing Arrow */}
-<motion.div
-initial={{ opacity: 0, y: 20 }}
-animate={{ opacity: 1, y: 0 }}
-transition={{ duration: 1, ease: "easeOut", delay: 1.5 }}
-className="absolute bottom-12 left-1/2 transform -translate-x-1/2"
->
-<motion.button
-onClick={onNext}
-whileHover={{ scale: 1.05 }}
-whileTap={{ scale: 0.95 }}
-animate={{
-y: [0, -4, 0],
-}}
-transition={{
-duration: 2,
-repeat: Infinity,
-ease: "easeInOut"
-}}
-className="relative group"
->
-{/* Glow effect */}
-<div className="absolute inset-0 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full blur-xl opacity-60 scale-110 group-hover:opacity-80 transition-opacity" />
+    _backgroundAnimation2 = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _backgroundController,
+        curve: const Interval(0.12, 1.0, curve: Curves.easeOut),
+      ),
+    );
 
-{/* Button content */}
-<div className="relative bg-gradient-to-r from-purple-500 to-blue-500 rounded-full px-6 py-4 shadow-2xl flex items-center gap-3 group-hover:from-purple-600 group-hover:to-blue-600 transition-all">
-<span className="text-white drop-shadow-lg">Next</span>
-<ChevronRight
-size={24}
-className="text-white drop-shadow-lg"
-strokeWidth={2.5}
-/>
-</div>
-</motion.button>
-</motion.div>
-</div>
+    _backgroundAnimation3 = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _backgroundController,
+        curve: const Interval(0.24, 1.0, curve: Curves.easeOut),
+      ),
+    );
 
-{/* Subtle overlay for depth */}
-<div className="absolute inset-0 bg-gradient-to-t from-white/10 via-transparent to-white/20 pointer-events-none" />
-</div>
-);
+    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
+    );
+
+    _iconAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _iconController, curve: Curves.easeOut));
+
+    _buttonFloatingAnimation = Tween<double>(begin: 0.0, end: -4.0).animate(
+      CurvedAnimation(parent: _buttonController, curve: Curves.easeInOut),
+    );
+
+    _backgroundController.forward();
+
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _contentController.forward();
+    });
+
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      _iconController.forward();
+    });
+
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      _buttonController.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _backgroundController.dispose();
+    _contentController.dispose();
+    _iconController.dispose();
+    _buttonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Background gradient
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFEFF6FF),
+                  Color(0xFFFAF5FF),
+                  Color(0xFFFDF2F8),
+                ],
+              ),
+            ),
+          ),
+
+          // Animated gradient shapes
+          AnimatedBuilder(
+            animation: _backgroundController,
+            builder: (context, child) {
+              return Stack(
+                children: [
+                  Positioned(
+                    top: -MediaQuery.of(context).size.height * 0.25,
+                    left: -MediaQuery.of(context).size.width * 0.25,
+                    child: Transform.scale(
+                      scale: 0.8 + 0.2 * _backgroundAnimation1.value,
+                      child: Opacity(
+                        opacity: _backgroundAnimation1.value * 0.2,
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.75,
+                          height: MediaQuery.of(context).size.height * 0.75,
+                          decoration: const BoxDecoration(
+                            gradient: RadialGradient(
+                              colors: [
+                                Color(0x333B82F6),
+                                Color(0x26A855F7),
+                                Colors.transparent,
+                              ],
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          // Main content
+          SafeArea(
+            child: AnimatedBuilder(
+              animation: _contentController,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, 30 * (1 - _contentAnimation.value)),
+                  child: Opacity(
+                    opacity: _contentAnimation.value,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [
+                                Color(0xFF0F172A),
+                                Color(0xFF581C87),
+                                Color(0xFF0F172A),
+                              ],
+                            ).createShader(bounds),
+                            child: Text(
+                              'Achivo',
+                              style: TextStyle(
+                                fontSize:
+                                    MediaQuery.of(context).size.width > 600
+                                    ? 120
+                                    : MediaQuery.of(context).size.width > 400
+                                    ? 80
+                                    : 70,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: -2,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          const Text(
+                            'Where student activities turn into achievements',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Color(0xFF475569),
+                              height: 1.6,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Floating next button
+          Positioned(
+            bottom: 48,
+            left: 0,
+            right: 0,
+            child: AnimatedBuilder(
+              animation: _contentController,
+              builder: (context, child) {
+                return Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => SetupScreen(
+                            onSubmit: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const RegisterLoginScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFA855F7), Color(0xFF3B82F6)],
+                        ),
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.purple.withOpacity(0.6),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Next',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Icon(
+                            Icons.chevron_right,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------- SETUP SCREEN -------------------
+// ------------------- SETUP SCREEN (Dynamic) -------------------
+class SetupScreen extends StatefulWidget {
+  final VoidCallback onSubmit;
+
+  const SetupScreen({Key? key, required this.onSubmit}) : super(key: key);
+
+  @override
+  State<SetupScreen> createState() => _SetupScreenState();
+}
+
+class _SetupScreenState extends State<SetupScreen> {
+  String? selectedCountry;
+  String? selectedState;
+  String? selectedInstitute;
+
+  // Country -> States -> Institutes map
+  final Map<String, Map<String, List<String>>> data = {
+    "India": {
+      "Maharashtra": ["IIT Bombay", "Mumbai University"],
+      "Karnataka": ["IISc Bangalore", "NIT Surathkal"],
+    },
+    "USA": {
+      "California": ["Stanford University", "UC Berkeley"],
+      "New York": ["Columbia University", "NYU"],
+    },
+    "UK": {
+      "England": ["Oxford", "Cambridge"],
+      "Scotland": ["University of Edinburgh", "University of Glasgow"],
+    },
+  };
+
+  List<String> get states {
+    if (selectedCountry != null) {
+      return data[selectedCountry!]!.keys.toList();
+    }
+    return [];
+  }
+
+  List<String> get institutes {
+    if (selectedCountry != null &&
+        selectedState != null &&
+        data[selectedCountry!]!.containsKey(selectedState)) {
+      return data[selectedCountry!]![selectedState]!;
+    }
+    return [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Setup Profile")),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Text(
+              "Welcome 🎉",
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              "Let's get you started on your journey 🚀",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            const SizedBox(height: 30),
+
+            // Country Dropdown
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: "Select Country",
+              ),
+              value: selectedCountry,
+              items: data.keys.map((c) {
+                return DropdownMenuItem(value: c, child: Text(c));
+              }).toList(),
+              onChanged: (val) {
+                setState(() {
+                  selectedCountry = val;
+                  selectedState = null;
+                  selectedInstitute = null;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // State Dropdown
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: "Select State",
+              ),
+              value: selectedState,
+              items: states.map((s) {
+                return DropdownMenuItem(value: s, child: Text(s));
+              }).toList(),
+              onChanged: (val) {
+                setState(() {
+                  selectedState = val;
+                  selectedInstitute = null;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // Institute Dropdown
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: "Select Institute",
+              ),
+              value: selectedInstitute,
+              items: institutes.map((i) {
+                return DropdownMenuItem(value: i, child: Text(i));
+              }).toList(),
+              onChanged: (val) => setState(() => selectedInstitute = val),
+            ),
+            const SizedBox(height: 40),
+
+            ElevatedButton(
+              onPressed: () {
+                if (selectedCountry != null &&
+                    selectedState != null &&
+                    selectedInstitute != null) {
+                  widget.onSubmit();
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Please fill all fields")),
+                  );
+                }
+              },
+              child: const Text("Submit"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------- REGISTER / LOGIN SCREEN -------------------
+class RegisterLoginScreen extends StatelessWidget {
+  const RegisterLoginScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Register / Login")),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(onPressed: () {}, child: const Text("Register")),
+            const SizedBox(height: 20),
+            ElevatedButton(onPressed: () {}, child: const Text("Login")),
+          ],
+        ),
+      ),
+    );
+  }
 }
