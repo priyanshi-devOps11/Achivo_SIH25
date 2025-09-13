@@ -11,84 +11,78 @@ class WelcomeForm extends StatefulWidget {
 
 class _WelcomeFormState extends State<WelcomeForm>
     with TickerProviderStateMixin {
+  String? selectedCountry;
+  String? selectedState;
+  String? selectedInstitute;
+  String? selectedRole;
+
   late AnimationController _backgroundController;
   late AnimationController _contentController;
-  late AnimationController _iconController;
+  late AnimationController _glowController;
 
   late Animation<double> _backgroundAnimation;
   late Animation<double> _contentAnimation;
-  late Animation<double> _iconAnimation;
+  late Animation<double> _glowAnimation;
 
-  String _selectedCountry = '';
-  String _selectedState = '';
-  String _selectedInstitute = '';
-
-  final Map<String, List<Map<String, String>>> _states = {
-    'us': [
-      {'value': 'ca', 'label': 'California'},
-      {'value': 'ny', 'label': 'New York'},
-      {'value': 'tx', 'label': 'Texas'},
-      {'value': 'fl', 'label': 'Florida'},
-    ],
-    'uk': [
-      {'value': 'england', 'label': 'England'},
-      {'value': 'scotland', 'label': 'Scotland'},
-      {'value': 'wales', 'label': 'Wales'},
-    ],
-    'india': [
-      {'value': 'maharashtra', 'label': 'Maharashtra'},
-      {'value': 'karnataka', 'label': 'Karnataka'},
-      {'value': 'delhi', 'label': 'Delhi'},
-      {'value': 'gujarat', 'label': 'Gujarat'},
-    ],
-    'canada': [
-      {'value': 'ontario', 'label': 'Ontario'},
-      {'value': 'quebec', 'label': 'Quebec'},
-      {'value': 'british-columbia', 'label': 'British Columbia'},
-    ],
-    'australia': [
-      {'value': 'nsw', 'label': 'New South Wales'},
-      {'value': 'victoria', 'label': 'Victoria'},
-      {'value': 'queensland', 'label': 'Queensland'},
-    ],
-    'germany': [
-      {'value': 'bavaria', 'label': 'Bavaria'},
-      {'value': 'berlin', 'label': 'Berlin'},
-      {'value': 'hamburg', 'label': 'Hamburg'},
-    ],
-    'france': [
-      {'value': 'paris', 'label': 'Île-de-France'},
-      {'value': 'provence', 'label': 'Provence-Alpes-Côte d\'Azur'},
-      {'value': 'rhone', 'label': 'Auvergne-Rhône-Alpes'},
-    ],
+  // Data structures
+  final Map<String, String> countries = {
+    'us': 'United States',
+    'uk': 'United Kingdom',
+    'canada': 'Canada',
+    'australia': 'Australia',
+    'india': 'India',
+    'germany': 'Germany',
+    'france': 'France',
   };
 
-  final List<Map<String, String>> _countries = [
-    {'value': 'us', 'label': 'United States'},
-    {'value': 'uk', 'label': 'United Kingdom'},
-    {'value': 'canada', 'label': 'Canada'},
-    {'value': 'australia', 'label': 'Australia'},
-    {'value': 'india', 'label': 'India'},
-    {'value': 'germany', 'label': 'Germany'},
-    {'value': 'france', 'label': 'France'},
-  ];
+  final Map<String, Map<String, String>> states = {
+    'us': {
+      'ca': 'California',
+      'ny': 'New York',
+      'tx': 'Texas',
+      'fl': 'Florida',
+    },
+    'uk': {'england': 'England', 'scotland': 'Scotland', 'wales': 'Wales'},
+    'india': {
+      'maharashtra': 'Maharashtra',
+      'karnataka': 'Karnataka',
+      'delhi': 'Delhi',
+      'gujarat': 'Gujarat',
+    },
+  };
 
-  final List<Map<String, String>> _institutes = [
-    {'value': 'harvard', 'label': 'Harvard University'},
-    {'value': 'mit', 'label': 'MIT'},
-    {'value': 'stanford', 'label': 'Stanford University'},
-    {'value': 'oxford', 'label': 'Oxford University'},
-    {'value': 'cambridge', 'label': 'Cambridge University'},
-    {'value': 'iit-bombay', 'label': 'IIT Bombay'},
-    {'value': 'iit-delhi', 'label': 'IIT Delhi'},
-  ];
+  final Map<String, Map<String, List<String>>> institutes = {
+    'us': {
+      'ca': ['Stanford University', 'UC Berkeley', 'Caltech'],
+      'ny': ['Columbia University', 'NYU', 'Cornell University'],
+      'tx': ['University of Texas at Austin', 'Rice University'],
+      'fl': ['University of Florida', 'Florida State University'],
+    },
+    'uk': {
+      'england': [
+        'Oxford University',
+        'Cambridge University',
+        'Imperial College London',
+      ],
+      'scotland': ['University of Edinburgh', 'University of Glasgow'],
+      'wales': ['Cardiff University', 'Swansea University'],
+    },
+    'india': {
+      'maharashtra': ['IIT Bombay', 'University of Mumbai', 'Pune University'],
+      'karnataka': ['IIT Bangalore', 'Indian Institute of Science'],
+      'delhi': ['IIT Delhi', 'Delhi University', 'Jawaharlal Nehru University'],
+      'gujarat': ['IIT Gandhinagar', 'Gujarat University'],
+    },
+  };
+
+  final List<String> roles = ['Admin', 'HOD', 'Faculty', 'Student'];
 
   @override
   void initState() {
     super.initState();
 
     _backgroundController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(seconds: 2),
       vsync: this,
     );
 
@@ -97,12 +91,12 @@ class _WelcomeFormState extends State<WelcomeForm>
       vsync: this,
     );
 
-    _iconController = AnimationController(
-      duration: const Duration(milliseconds: 3000),
+    _glowController = AnimationController(
+      duration: const Duration(seconds: 3),
       vsync: this,
     );
 
-    _backgroundAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut),
     );
 
@@ -110,572 +104,561 @@ class _WelcomeFormState extends State<WelcomeForm>
       CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
     );
 
-    _iconAnimation = Tween<double>(
+    _glowAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
-    ).animate(CurvedAnimation(parent: _iconController, curve: Curves.easeOut));
+    ).animate(CurvedAnimation(parent: _glowController, curve: Curves.easeOut));
 
-    // Start animations
     _backgroundController.forward();
-    Future.delayed(const Duration(milliseconds: 300), () {
-      _contentController.forward();
-    });
-    Future.delayed(const Duration(milliseconds: 1000), () {
-      _iconController.forward();
-    });
+    _contentController.forward();
+    _glowController.forward();
   }
 
   @override
   void dispose() {
     _backgroundController.dispose();
     _contentController.dispose();
-    _iconController.dispose();
+    _glowController.dispose();
     super.dispose();
   }
 
-  List<Map<String, String>> get _availableStates {
-    return _states[_selectedCountry] ?? [];
+  List<String> getAvailableInstitutes() {
+    if (selectedCountry != null && selectedState != null) {
+      return institutes[selectedCountry]?[selectedState] ?? [];
+    }
+    return [];
   }
 
-  bool get _canContinue {
-    return _selectedCountry.isNotEmpty &&
-        _selectedState.isNotEmpty &&
-        _selectedInstitute.isNotEmpty;
+  bool get isFormComplete {
+    return selectedCountry != null &&
+        selectedState != null &&
+        selectedInstitute != null &&
+        selectedRole != null;
   }
 
-  void _handleContinue() {
-    if (_canContinue) {
+  void handleContinue() {
+    if (isFormComplete) {
       widget.onNext();
     }
-  }
-
-  void _onCountryChanged(String? value) {
-    setState(() {
-      _selectedCountry = value ?? '';
-      _selectedState = ''; // Reset state when country changes
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // Brighter gradient background
-          Container(
-            decoration: const BoxDecoration(
+      body: AnimatedBuilder(
+        animation: _backgroundAnimation,
+        builder: (context, child) {
+          return Container(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFFDBEAFE), // blue-100
-                  Color(0xFFE9D5FF), // purple-100
-                  Color(0xFFFCE7F3), // pink-100
+                  Colors.blue.shade100.withOpacity(_backgroundAnimation.value),
+                  Colors.purple.shade100.withOpacity(
+                    _backgroundAnimation.value,
+                  ),
+                  Colors.pink.shade100.withOpacity(_backgroundAnimation.value),
                 ],
               ),
             ),
-          ),
-
-          // Animated gradient shapes
-          AnimatedBuilder(
-            animation: _backgroundAnimation,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  // Top left gradient blob
-                  Positioned(
-                    top: -MediaQuery.of(context).size.height * 0.25,
-                    left: -MediaQuery.of(context).size.width * 0.25,
-                    child: Transform.scale(
-                      scale: _backgroundAnimation.value,
-                      child: Opacity(
-                        opacity: _backgroundAnimation.value * 0.25,
-                        child: Container(
-                          width: MediaQuery.of(context).size.width * 0.75,
-                          height: MediaQuery.of(context).size.height * 0.75,
-                          decoration: const BoxDecoration(
-                            gradient: RadialGradient(
-                              colors: [
-                                Color(0x403B82F6), // blue-400/25
-                                Color(0x33A855F7), // purple-400/20
-                                Colors.transparent,
-                              ],
-                            ),
-                            shape: BoxShape.circle,
-                          ),
+            child: Stack(
+              children: [
+                // Animated gradient blobs
+                Positioned(
+                  top: -100,
+                  left: -100,
+                  child: Transform.scale(
+                    scale: _backgroundAnimation.value,
+                    child: Container(
+                      width: 300,
+                      height: 300,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            Colors.blue.shade400.withOpacity(0.25),
+                            Colors.purple.shade400.withOpacity(0.20),
+                            Colors.transparent,
+                          ],
                         ),
                       ),
                     ),
                   ),
-
-                  // Bottom right gradient blob
-                  Positioned(
-                    bottom: -MediaQuery.of(context).size.height * 0.25,
-                    right: -MediaQuery.of(context).size.width * 0.25,
-                    child: Transform.scale(
-                      scale: _backgroundAnimation.value,
-                      child: Opacity(
-                        opacity: _backgroundAnimation.value * 0.25,
-                        child: Container(
-                          width: MediaQuery.of(context).size.width * 0.75,
-                          height: MediaQuery.of(context).size.height * 0.75,
-                          decoration: const BoxDecoration(
-                            gradient: RadialGradient(
-                              colors: [
-                                Color(0x40F472B6), // pink-400/25
-                                Color(0x33A855F7), // purple-400/20
-                                Colors.transparent,
-                              ],
-                            ),
-                            shape: BoxShape.circle,
-                          ),
+                ),
+                Positioned(
+                  bottom: -100,
+                  right: -100,
+                  child: Transform.scale(
+                    scale: _backgroundAnimation.value,
+                    child: Container(
+                      width: 300,
+                      height: 300,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            Colors.pink.shade400.withOpacity(0.25),
+                            Colors.purple.shade400.withOpacity(0.20),
+                            Colors.transparent,
+                          ],
                         ),
                       ),
                     ),
                   ),
-
-                  // Center gradient blob
-                  Positioned(
-                    top: MediaQuery.of(context).size.height * 0.5,
-                    left: MediaQuery.of(context).size.width * 0.5,
-                    child: Transform.translate(
-                      offset: Offset(
-                        -MediaQuery.of(context).size.width * 0.25,
-                        -MediaQuery.of(context).size.height * 0.25,
-                      ),
-                      child: Transform.scale(
-                        scale: _backgroundAnimation.value,
-                        child: Opacity(
-                          opacity: _backgroundAnimation.value * 0.2,
-                          child: Container(
-                            width: MediaQuery.of(context).size.width * 0.5,
-                            height: MediaQuery.of(context).size.height * 0.5,
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Color(0x336366F1), // indigo-400/20
-                                  Color(0x263B82F6), // blue-400/15
-                                  Color(0x3306B6D4), // cyan-400/20
-                                ],
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
+                ),
+                Positioned(
+                  top: MediaQuery.of(context).size.height / 2 - 100,
+                  left: MediaQuery.of(context).size.width / 2 - 100,
+                  child: Transform.scale(
+                    scale: _backgroundAnimation.value,
+                    child: Container(
+                      width: 200,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            Colors.indigo.shade400.withOpacity(0.20),
+                            Colors.blue.shade400.withOpacity(0.15),
+                            Colors.cyan.shade400.withOpacity(0.20),
+                            Colors.transparent,
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ],
-              );
-            },
-          ),
+                ),
 
-          // Academic micro-illustrations
-          AnimatedBuilder(
-            animation: _iconAnimation,
-            builder: (context, child) {
-              return Stack(
-                children: [
-                  // Globe icon - top left
-                  Positioned(
-                    top: 64,
-                    left: 48,
-                    child: Transform.rotate(
-                      angle: -0.175 * (1 - _iconAnimation.value), // -10 degrees
-                      child: Opacity(
-                        opacity: _iconAnimation.value * 0.1,
-                        child: const Icon(
+                // Decorative icons
+                Positioned(
+                  top: 60,
+                  left: 30,
+                  child: AnimatedBuilder(
+                    animation: _glowAnimation,
+                    builder: (context, child) {
+                      return Opacity(
+                        opacity: 0.1 * _glowAnimation.value,
+                        child: Icon(
                           Icons.public,
-                          size: 100,
-                          color: Color(0xFF2563EB), // blue-600
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // University icon - top right
-                  Positioned(
-                    top: 80,
-                    right: 64,
-                    child: Transform.translate(
-                      offset: Offset(0, -20 * (1 - _iconAnimation.value)),
-                      child: Opacity(
-                        opacity: _iconAnimation.value * 0.1,
-                        child: const Icon(
-                          Icons.school,
-                          size: 110,
-                          color: Color(0xFF9333EA), // purple-600
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Map icon - bottom left
-                  Positioned(
-                    bottom: 130,
-                    left: 64,
-                    child: Transform.scale(
-                      scale: 0.8 + 0.2 * _iconAnimation.value,
-                      child: Opacity(
-                        opacity: _iconAnimation.value * 0.1,
-                        child: const Icon(
-                          Icons.map_outlined,
-                          size: 120,
-                          color: Color(0xFF4F46E5), // indigo-600
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Map pin - bottom right
-                  Positioned(
-                    bottom: 64,
-                    right: 80,
-                    child: Transform.scale(
-                      scale: 0.5 + 0.5 * _iconAnimation.value,
-                      child: Opacity(
-                        opacity: _iconAnimation.value * 0.06,
-                        child: const Icon(
-                          Icons.location_on_outlined,
                           size: 80,
-                          color: Color(0xFFEC4899), // pink-600
+                          color: Colors.blue.shade600,
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
-
-                  // Small globe - middle right
-                  Positioned(
-                    top: MediaQuery.of(context).size.height * 0.5,
-                    right: 32,
-                    child: Transform.scale(
-                      scale: 0.5 + 0.5 * _iconAnimation.value,
-                      child: Opacity(
-                        opacity: _iconAnimation.value * 0.06,
-                        child: const Icon(
-                          Icons.public,
-                          size: 70,
-                          color: Color(0xFF0891B2), // cyan-600
+                ),
+                Positioned(
+                  top: 70,
+                  right: 40,
+                  child: AnimatedBuilder(
+                    animation: _glowAnimation,
+                    builder: (context, child) {
+                      return Opacity(
+                        opacity: 0.1 * _glowAnimation.value,
+                        child: Icon(
+                          Icons.school,
+                          size: 90,
+                          color: Colors.purple.shade600,
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
-                ],
-              );
-            },
-          ),
+                ),
+                Positioned(
+                  bottom: 120,
+                  left: 40,
+                  child: AnimatedBuilder(
+                    animation: _glowAnimation,
+                    builder: (context, child) {
+                      return Opacity(
+                        opacity: 0.1 * _glowAnimation.value,
+                        child: Icon(
+                          Icons.map,
+                          size: 100,
+                          color: Colors.indigo.shade600,
+                        ),
+                      );
+                    },
+                  ),
+                ),
 
-          // Main content
-          SafeArea(
-            child: AnimatedBuilder(
-              animation: _contentAnimation,
-              builder: (context, child) {
-                return Transform.translate(
-                  offset: Offset(0, 30 * (1 - _contentAnimation.value)),
-                  child: Opacity(
-                    opacity: _contentAnimation.value,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        children: [
-                          SizedBox(
-                            height: MediaQuery.of(context).size.height * 0.15,
-                          ),
-
-                          // Welcome headline with glow
-                          Column(
-                            children: [
-                              Stack(
-                                children: [
-                                  // Glow effect
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0x33A855F7), // purple-400/20
-                                          Color(0x333B82F6), // blue-400/20
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(50),
-                                    ),
-                                    child: ShaderMask(
-                                      shaderCallback: (bounds) =>
-                                          const LinearGradient(
-                                            colors: [
-                                              Color(0x33A855F7),
-                                              Color(0x333B82F6),
-                                            ],
-                                          ).createShader(bounds),
-                                      child: const Text(
+                // Main content
+                SafeArea(
+                  child: AnimatedBuilder(
+                    animation: _contentAnimation,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, 30 * (1 - _contentAnimation.value)),
+                        child: Opacity(
+                          opacity: _contentAnimation.value,
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                // Welcome title with glow
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: Stack(
+                                    children: [
+                                      // Glow effect
+                                      Text(
                                         'Welcome!',
                                         style: TextStyle(
-                                          fontSize: 50,
+                                          fontSize: 48,
                                           fontWeight: FontWeight.bold,
-                                          color: Colors.white,
+                                          foreground: Paint()
+                                            ..style = PaintingStyle.stroke
+                                            ..strokeWidth = 6
+                                            ..color = Colors.purple.shade200
+                                                .withOpacity(0.3),
                                         ),
                                       ),
-                                    ),
-                                  ),
-                                  // Main text
-                                  ShaderMask(
-                                    shaderCallback: (bounds) =>
-                                        const LinearGradient(
-                                          colors: [
-                                            Color(0xFF1E293B), // slate-800
-                                            Color(0xFF6B21A8), // purple-800
-                                            Color(0xFF1E293B), // slate-800
-                                          ],
-                                        ).createShader(bounds),
-                                    child: const Text(
-                                      'Welcome!',
-                                      style: TextStyle(
-                                        fontSize: 50,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
+                                      // Main text
+                                      ShaderMask(
+                                        shaderCallback: (bounds) =>
+                                            LinearGradient(
+                                              colors: [
+                                                Colors.grey.shade800,
+                                                Colors.purple.shade800,
+                                                Colors.grey.shade800,
+                                              ],
+                                            ).createShader(bounds),
+                                        child: const Text(
+                                          'Welcome!',
+                                          style: TextStyle(
+                                            fontSize: 48,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
                                       ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Subtitle
+                                Container(
+                                  margin: const EdgeInsets.only(bottom: 40),
+                                  child: Text(
+                                    'Your journey of achievements starts here',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.grey.shade700,
+                                      height: 1.4,
                                     ),
+                                    textAlign: TextAlign.center,
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Your journey of achievements starts here',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  color: Color(0xFF334155), // slate-700
-                                  height: 1.6,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 48),
-
-                          // Form section
-                          Container(
-                            constraints: const BoxConstraints(maxWidth: 400),
-                            child: Column(
-                              children: [
-                                // Country dropdown
-                                _buildDropdown(
-                                  label: 'Choose your country',
-                                  value: _selectedCountry,
-                                  items: _countries,
-                                  onChanged: _onCountryChanged,
-                                  placeholder: 'Select country',
                                 ),
 
-                                const SizedBox(height: 24),
-
-                                // State dropdown
-                                _buildDropdown(
-                                  label: 'Choose your state',
-                                  value: _selectedState,
-                                  items: _availableStates,
-                                  onChanged: (value) => setState(
-                                    () => _selectedState = value ?? '',
+                                // Form section
+                                Container(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 350,
                                   ),
-                                  placeholder: 'Select state',
-                                  enabled: _selectedCountry.isNotEmpty,
-                                ),
+                                  child: Column(
+                                    children: [
+                                      // Country dropdown
+                                      _buildDropdown(
+                                        label: 'Choose your country',
+                                        value: selectedCountry,
+                                        items: countries,
+                                        onChanged: (value) {
+                                          setState(() {
+                                            selectedCountry = value;
+                                            selectedState = null;
+                                            selectedInstitute = null;
+                                          });
+                                        },
+                                        hint: 'Select country',
+                                      ),
 
-                                const SizedBox(height: 24),
+                                      const SizedBox(height: 20),
 
-                                // Institute dropdown
-                                _buildDropdown(
-                                  label: 'Choose your institute',
-                                  value: _selectedInstitute,
-                                  items: _institutes,
-                                  onChanged: (value) => setState(
-                                    () => _selectedInstitute = value ?? '',
+                                      // State dropdown
+                                      _buildDropdown(
+                                        label: 'Choose your state',
+                                        value: selectedState,
+                                        items: selectedCountry != null
+                                            ? states[selectedCountry!] ?? {}
+                                            : {},
+                                        onChanged: selectedCountry != null
+                                            ? (value) {
+                                                setState(() {
+                                                  selectedState = value;
+                                                  selectedInstitute = null;
+                                                });
+                                              }
+                                            : null,
+                                        hint: 'Select state',
+                                      ),
+
+                                      const SizedBox(height: 20),
+
+                                      // Institute dropdown
+                                      _buildInstituteDropdown(),
+
+                                      const SizedBox(height: 20),
+
+                                      // Role selection
+                                      _buildRoleSelection(),
+
+                                      const SizedBox(height: 40),
+
+                                      // Continue button
+                                      _buildContinueButton(),
+                                    ],
                                   ),
-                                  placeholder: 'Select institute',
                                 ),
                               ],
                             ),
                           ),
-
-                          const SizedBox(height: 48),
-
-                          // Continue button
-                          GestureDetector(
-                            onTap: _canContinue ? _handleContinue : null,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              child: Stack(
-                                children: [
-                                  // Glow effect
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFFA855F7), // purple-400
-                                          Color(0xFF3B82F6), // blue-400
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: _canContinue
-                                              ? Colors.purple.withOpacity(0.6)
-                                              : Colors.grey.withOpacity(0.3),
-                                          blurRadius: 20,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 48,
-                                        vertical: 16,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: _canContinue
-                                              ? [
-                                                  const Color(
-                                                    0xFFA855F7,
-                                                  ), // purple-500
-                                                  const Color(
-                                                    0xFF3B82F6,
-                                                  ), // blue-500
-                                                ]
-                                              : [
-                                                  const Color(
-                                                    0xFF9CA3AF,
-                                                  ), // gray-400
-                                                  const Color(
-                                                    0xFF6B7280,
-                                                  ), // gray-500
-                                                ],
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            'Continue',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w500,
-                                              shadows: [
-                                                Shadow(
-                                                  color: Colors.black
-                                                      .withOpacity(0.3),
-                                                  blurRadius: 2,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Icon(
-                                            Icons.chevron_right,
-                                            color: Colors.white,
-                                            size: 24,
-                                            shadows: [
-                                              Shadow(
-                                                color: Colors.black.withOpacity(
-                                                  0.3,
-                                                ),
-                                                blurRadius: 2,
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 60),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
   Widget _buildDropdown({
     required String label,
-    required String value,
-    required List<Map<String, String>> items,
-    required ValueChanged<String?> onChanged,
-    required String placeholder,
-    bool enabled = true,
+    required String? value,
+    required Map<String, String> items,
+    required void Function(String?)? onChanged,
+    required String hint,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Color(0xFF374151), // slate-700
-            fontSize: 16,
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(enabled ? 0.8 : 0.5),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: const Color(0xFFE2E8F0).withOpacity(0.5), // slate-200/50
-            ),
+            borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.1),
                 blurRadius: 10,
-                spreadRadius: 0,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
           child: DropdownButtonFormField<String>(
-            value: value.isEmpty ? null : value,
-            onChanged: enabled ? onChanged : null,
+            value: value,
+            onChanged: onChanged,
             decoration: InputDecoration(
-              hintText: placeholder,
-              hintStyle: const TextStyle(color: Color(0xFF94A3B8)), // slate-400
-              border: InputBorder.none,
+              hintText: hint,
+              hintStyle: TextStyle(color: Colors.grey.shade500),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.purple.shade300),
+              ),
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 20,
+                horizontal: 16,
+                vertical: 16,
               ),
             ),
-            dropdownColor: Colors.white.withOpacity(0.95),
-            items: items.map((item) {
-              return DropdownMenuItem<String>(
-                value: item['value'],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    item['label']!,
-                    style: const TextStyle(
-                      color: Color(0xFF374151), // slate-700
-                    ),
-                  ),
-                ),
+            items: items.entries.map((entry) {
+              return DropdownMenuItem(
+                value: entry.key,
+                child: Text(entry.value),
               );
             }).toList(),
-            icon: const Icon(
-              Icons.keyboard_arrow_down,
-              color: Color(0xFF94A3B8), // slate-400
-            ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildInstituteDropdown() {
+    final availableInstitutes = getAvailableInstitutes();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Choose your institute',
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: DropdownButtonFormField<String>(
+            value: selectedInstitute,
+            onChanged: availableInstitutes.isNotEmpty
+                ? (value) {
+                    setState(() {
+                      selectedInstitute = value;
+                    });
+                  }
+                : null,
+            decoration: InputDecoration(
+              hintText: 'Select institute',
+              hintStyle: TextStyle(color: Colors.grey.shade500),
+              filled: true,
+              fillColor: availableInstitutes.isNotEmpty
+                  ? Colors.white.withOpacity(0.8)
+                  : Colors.grey.shade100.withOpacity(0.8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.purple.shade300),
+              ),
+              disabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+            ),
+            items: availableInstitutes.map((institute) {
+              return DropdownMenuItem(value: institute, child: Text(institute));
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleSelection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Choose your role',
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            color: Colors.white.withOpacity(0.8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: roles.map((role) {
+              return RadioListTile<String>(
+                title: Text(role, style: const TextStyle(fontSize: 16)),
+                value: role,
+                groupValue: selectedRole,
+                onChanged: (value) {
+                  setState(() {
+                    selectedRole = value;
+                  });
+                },
+                activeColor: Colors.purple.shade600,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContinueButton() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: isFormComplete
+                ? Colors.purple.shade300.withOpacity(0.6)
+                : Colors.grey.shade300.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+            spreadRadius: isFormComplete ? 2 : 0,
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: isFormComplete ? handleContinue : null,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isFormComplete
+              ? Colors.purple.shade500
+              : Colors.grey.shade400,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 0,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Continue',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              Icons.arrow_forward,
+              size: 24,
+              color: Colors.white.withOpacity(0.9),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
