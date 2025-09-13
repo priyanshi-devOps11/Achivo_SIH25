@@ -25,7 +25,11 @@ class MyApp extends StatelessWidget {
 
       // define all routes
       routes: {
-        '/': (context) => const WelcomeScreen(),
+        '/': (context) => WelcomeScreen(
+          onNext: () {
+            Navigator.pushNamed(context, '/form');
+          },
+        ),
         '/form': (context) => WelcomeForm(
           onNext: () {
             Navigator.pushNamed(context, '/auth');
