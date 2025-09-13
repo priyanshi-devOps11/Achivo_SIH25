@@ -138,7 +138,8 @@ class _WelcomeFormState extends State<WelcomeForm>
 
   void handleContinue() {
     if (isFormComplete) {
-      widget.onNext();
+      // Direct navigation to auth page
+      Navigator.pushNamed(context, '/auth');
     }
   }
 
@@ -385,11 +386,11 @@ class _WelcomeFormState extends State<WelcomeForm>
                                             : {},
                                         onChanged: selectedCountry != null
                                             ? (value) {
-                                                setState(() {
-                                                  selectedState = value;
-                                                  selectedInstitute = null;
-                                                });
-                                              }
+                                          setState(() {
+                                            selectedState = value;
+                                            selectedInstitute = null;
+                                          });
+                                        }
                                             : null,
                                         hint: 'Select state',
                                       ),
@@ -524,10 +525,10 @@ class _WelcomeFormState extends State<WelcomeForm>
             value: selectedInstitute,
             onChanged: availableInstitutes.isNotEmpty
                 ? (value) {
-                    setState(() {
-                      selectedInstitute = value;
-                    });
-                  }
+              setState(() {
+                selectedInstitute = value;
+              });
+            }
                 : null,
             decoration: InputDecoration(
               hintText: 'Select institute',
