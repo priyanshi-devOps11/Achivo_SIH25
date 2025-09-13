@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'screens/welcome_screen.dart';
 import 'screens/welcome_form.dart';
 import 'screens/auth_page.dart';
@@ -23,7 +24,6 @@ class MyApp extends StatelessWidget {
       // first screen when app launches
       initialRoute: '/',
 
-      // define all routes
       routes: {
         '/': (context) => WelcomeScreen(
           onNext: () {
