@@ -28,6 +28,8 @@ dependencies:
 
   # Shared preferences for local storage
   shared_preferences: ^2.2.3
+  flutter_dotenv: ^5.0.2
+  supabase_flutter: ^1.6.0
 
 dev_dependencies:
   flutter_test:

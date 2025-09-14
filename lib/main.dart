@@ -1,11 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Import your screens
 import 'package:achivo/screens/welcome_screen.dart';
 import 'package:achivo/screens/auth_page.dart';
 import 'package:achivo/screens/hod_dashboard.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables from .env.local
+  await dotenv.load(fileName: ".env.local");
+
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: dotenv.env['NEXT_PUBLIC_SUPABASE_URL']!,
+    anonKey: dotenv.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!,
+  );
+
   runApp(const MyApp());
 }
 
