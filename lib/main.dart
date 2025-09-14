@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 // Import your screens
 import 'package:achivo/screens/welcome_screen.dart';
-import 'package:achivo/screens/welcome_form.dart';
 import 'package:achivo/screens/auth_page.dart';
+import 'package:achivo/screens/hod_dashboard.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,9 +29,11 @@ class MyApp extends StatelessWidget {
       // Define all routes
       routes: {
         '/': (context) => WelcomeScreen(
-          onNext: () {}, // Empty callback since navigation is handled internally
-        ),
+              onNext:
+                  () {}, // Empty callback since navigation is handled internally
+            ),
         '/auth': (context) => const AuthPage(),
+        '/hod_dashboard': (context) => const HODDashboard(),
       },
 
       // Handle unknown routes safely
@@ -67,7 +69,7 @@ class MyApp extends StatelessWidget {
                     onPressed: () => Navigator.pushNamedAndRemoveUntil(
                       context,
                       '/',
-                          (route) => false,
+                      (route) => false,
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.deepPurple,
