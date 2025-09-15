@@ -708,7 +708,7 @@ class _HODDashboardState extends State<HODDashboard>
       ),
       body: Column(
         children: [
-          // Statistics Cards
+          // Statistics Cards  .
           Container(
             padding: const EdgeInsets.all(16),
             child: Row(

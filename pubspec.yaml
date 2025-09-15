@@ -42,6 +42,6 @@ flutter:
   # Assets (add your images/fonts here later if needed)
   # assets:
   #   - assets/images/
-  #   - assets/fonts/
+
   assets:
     - assets/.env.local

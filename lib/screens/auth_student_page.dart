@@ -452,7 +452,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                         ),
                         const SizedBox(height: 20),
 
-                        // Confirm Password field (only for registration)
+                        // Confirm Password field (only   for registration)
                         if (!_isLogin) ...[
                           _buildInputField(
                             controller: _confirmPasswordController,

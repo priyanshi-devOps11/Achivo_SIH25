@@ -893,7 +893,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           ),
         ),
 
-        // OTP Field (only for registration and when OTP is sent)
+        // OTP Field (only for registration and when OTP is .. sent)
         if (!_isLogin && _isOtpSent && !_isOtpVerified) ...[
           const SizedBox(height: 16),
           Container(
