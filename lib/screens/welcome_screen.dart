@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class WelcomeScreen extends StatefulWidget {
   final VoidCallback onNext;
@@ -11,11 +12,73 @@ class WelcomeScreen extends StatefulWidget {
 
 class _WelcomeScreenState extends State<WelcomeScreen>
     with TickerProviderStateMixin {
-
   // Page control
   bool _showWelcomeForm = false;
 
-  // Form data
+  // ✅ Save form data to Supabase
+  Future<void> _saveUserDataToSupabase() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No user logged in")),
+      );
+      return;
+    }
+
+    final updates = {
+      'id': user.id,
+      'country': selectedCountry,
+      'state': selectedState,
+      'institute': selectedInstitute,
+      'role': selectedRole,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    final response = await supabase.from('profiles').upsert(updates);
+
+    if (response.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: ${response.error!.message}")),
+      );
+    }
+  }
+
+  // ✅ Continue button logic (only one version now)
+  void handleContinue() async {
+    if (isFormComplete) {
+      await _saveUserDataToSupabase();
+
+      // Navigate to role-specific auth page
+      String route;
+      switch (selectedRole!.toLowerCase()) {
+        case 'admin':
+          route = '/auth-admin';
+          break;
+        case 'hod':
+          route = '/auth-hod';
+          break;
+        case 'faculty':
+          route = '/auth-faculty';
+          break;
+        case 'student':
+          route = '/auth-student';
+          break;
+        default:
+          route = '/auth';
+      }
+
+      Navigator.pushNamed(context, route, arguments: {
+        'country': selectedCountry,
+        'state': selectedState,
+        'institute': selectedInstitute,
+        'role': selectedRole,
+      });
+    }
+  }
+
+// Form data
   String? selectedCountry;
   String? selectedState;
   String? selectedInstitute;
@@ -35,60 +98,73 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   late Animation<double> _iconsAnimation;
   late Animation<Offset> _slideAnimation;
 
-  // Data structures for form
-  final Map<String, String> countries = {
-    'us': 'United States',
-    'uk': 'United Kingdom',
-    'canada': 'Canada',
-    'australia': 'Australia',
-    'india': 'India',
-    'germany': 'Germany',
-    'france': 'France',
-  };
-
-  final Map<String, Map<String, String>> states = {
-    'us': {
-      'ca': 'California',
-      'ny': 'New York',
-      'tx': 'Texas',
-      'fl': 'Florida',
-    },
-    'uk': {'england': 'England', 'scotland': 'Scotland', 'wales': 'Wales'},
-    'india': {
-      'maharashtra': 'Maharashtra',
-      'karnataka': 'Karnataka',
-      'delhi': 'Delhi',
-      'gujarat': 'Gujarat',
-      'up': 'Uttar Pradesh',
-    },
-  };
-
-  final Map<String, Map<String, List<String>>> institutes = {
-    'us': {
-      'ca': ['Stanford University', 'UC Berkeley', 'Caltech'],
-      'ny': ['Columbia University', 'NYU', 'Cornell University'],
-      'tx': ['University of Texas at Austin', 'Rice University'],
-      'fl': ['University of Florida', 'Florida State University'],
-    },
-    'uk': {
-      'england': [
-        'Oxford University',
-        'Cambridge University',
-        'Imperial College London',
-      ],
-      'scotland': ['University of Edinburgh', 'University of Glasgow'],
-      'wales': ['Cardiff University', 'Swansea University'],
-    },
-    'india': {
-      'maharashtra': ['IIT Bombay', 'University of Mumbai', 'Pune University'],
-      'karnataka': ['IIT Bangalore', 'Indian Institute of Science'],
-      'delhi': ['IIT Delhi', 'Delhi University', 'Jawaharlal Nehru University'],
-      'gujarat': ['IIT Gandhinagar', 'Gujarat University'],
-      'up': ['IIT BHU', 'SCRIET Meerut', 'Lucknow University'],
-    },
-  };
+  // Supabase data structures
+  List<Map<String, dynamic>> countries = [];
+  List<Map<String, dynamic>> states = [];
+  List<Map<String, dynamic>> institutes = [];
 
   final List<String> roles = ['Admin', 'HOD', 'Faculty', 'Student'];
+
+  // Supabase data fetching functions
+  Future<void> _fetchCountries() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response =
+          await supabase.from('countries').select('id, name').order('name');
+
+      if (response != null) {
+        setState(() {
+          countries = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error fetching countries: $e")),
+      );
+    }
+  }
+
+  Future<void> _fetchStates(String countryId) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase
+          .from('states')
+          .select('id, name')
+          .eq('country_id', countryId)
+          .order('name');
+
+      if (response != null) {
+        setState(() {
+          states = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error fetching states: $e")),
+      );
+    }
+  }
+
+  Future<void> _fetchInstitutes(String stateId) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase
+          .from('institutes')
+          .select('id, name')
+          .eq('state_id', stateId)
+          .order('name');
+
+      if (response != null) {
+        setState(() {
+          institutes = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error fetching institutes: $e")),
+      );
+    }
+  }
 
   @override
   void initState() {
@@ -139,7 +215,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(1.0, 0.0),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _transitionController, curve: Curves.easeInOut));
+    ).animate(CurvedAnimation(
+        parent: _transitionController, curve: Curves.easeInOut));
 
     _backgroundController.forward();
     _contentController.forward();
@@ -147,6 +224,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
     // Start floating animation and repeat
     _floatingController.repeat(reverse: true);
+
+    // Fetch countries on init
+    _fetchCountries();
   }
 
   @override
@@ -166,24 +246,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     _transitionController.forward();
   }
 
-  List<String> getAvailableInstitutes() {
-    if (selectedCountry != null && selectedState != null) {
-      return institutes[selectedCountry]?[selectedState] ?? [];
-    }
-    return [];
-  }
-
   bool get isFormComplete {
     return selectedCountry != null &&
         selectedState != null &&
         selectedInstitute != null &&
         selectedRole != null;
-  }
-
-  void handleContinue() {
-    if (isFormComplete) {
-      Navigator.pushNamed(context, '/auth');
-    }
   }
 
   @override
@@ -347,8 +414,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                   'Achivo',
                                   style: TextStyle(
                                     fontSize:
-                                    MediaQuery.of(context).size.width *
-                                        0.18,
+                                        MediaQuery.of(context).size.width *
+                                            0.18,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                     letterSpacing: -2,
@@ -567,39 +634,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         child: Column(
                           children: [
                             // Country dropdown
-                            _buildDropdown(
-                              label: 'Choose your country',
-                              value: selectedCountry,
-                              items: countries,
-                              onChanged: (value) {
-                                setState(() {
-                                  selectedCountry = value;
-                                  selectedState = null;
-                                  selectedInstitute = null;
-                                });
-                              },
-                              hint: 'Select country',
-                            ),
+                            _buildCountryDropdown(),
 
                             const SizedBox(height: 20),
 
                             // State dropdown
-                            _buildDropdown(
-                              label: 'Choose your state',
-                              value: selectedState,
-                              items: selectedCountry != null
-                                  ? states[selectedCountry!] ?? {}
-                                  : {},
-                              onChanged: selectedCountry != null
-                                  ? (value) {
-                                setState(() {
-                                  selectedState = value;
-                                  selectedInstitute = null;
-                                });
-                              }
-                                  : null,
-                              hint: 'Select state',
-                            ),
+                            _buildStateDropdown(),
 
                             const SizedBox(height: 20),
 
@@ -629,18 +669,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     );
   }
 
-  Widget _buildDropdown({
-    required String label,
-    required String? value,
-    required Map<String, String> items,
-    required void Function(String?)? onChanged,
-    required String hint,
-  }) {
+  Widget _buildCountryDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
+          'Choose your country',
           style: TextStyle(
             color: Colors.grey.shade700,
             fontSize: 14,
@@ -660,10 +694,21 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ],
           ),
           child: DropdownButtonFormField<String>(
-            value: value,
-            onChanged: onChanged,
+            value: selectedCountry,
+            onChanged: (value) {
+              setState(() {
+                selectedCountry = value;
+                selectedState = null;
+                selectedInstitute = null;
+                states.clear();
+                institutes.clear();
+              });
+              if (value != null) {
+                _fetchStates(value);
+              }
+            },
             decoration: InputDecoration(
-              hintText: hint,
+              hintText: 'Select country',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: Colors.white.withOpacity(0.8),
@@ -684,10 +729,88 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 vertical: 16,
               ),
             ),
-            items: items.entries.map((entry) {
+            items: countries.map((country) {
               return DropdownMenuItem(
-                value: entry.key,
-                child: Text(entry.value),
+                value: country['id'].toString(),
+                child: Text(country['name']),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStateDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Choose your state',
+          style: TextStyle(
+            color: Colors.grey.shade700,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: DropdownButtonFormField<String>(
+            value: selectedState,
+            onChanged: selectedCountry != null && states.isNotEmpty
+                ? (value) {
+                    setState(() {
+                      selectedState = value;
+                      selectedInstitute = null;
+                      institutes.clear();
+                    });
+                    if (value != null) {
+                      _fetchInstitutes(value);
+                    }
+                  }
+                : null,
+            decoration: InputDecoration(
+              hintText: 'Select state',
+              hintStyle: TextStyle(color: Colors.grey.shade500),
+              filled: true,
+              fillColor: selectedCountry != null
+                  ? Colors.white.withOpacity(0.8)
+                  : Colors.grey.shade100.withOpacity(0.8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade200),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.purple.shade300),
+              ),
+              disabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+            ),
+            items: states.map((state) {
+              return DropdownMenuItem(
+                value: state['id'].toString(),
+                child: Text(state['name']),
               );
             }).toList(),
           ),
@@ -697,8 +820,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 
   Widget _buildInstituteDropdown() {
-    final availableInstitutes = getAvailableInstitutes();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -724,18 +845,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: DropdownButtonFormField<String>(
             value: selectedInstitute,
-            onChanged: availableInstitutes.isNotEmpty
+            onChanged: selectedState != null && institutes.isNotEmpty
                 ? (value) {
-              setState(() {
-                selectedInstitute = value;
-              });
-            }
+                    setState(() {
+                      selectedInstitute = value;
+                    });
+                  }
                 : null,
             decoration: InputDecoration(
               hintText: 'Select institute',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
-              fillColor: availableInstitutes.isNotEmpty
+              fillColor: selectedState != null
                   ? Colors.white.withOpacity(0.8)
                   : Colors.grey.shade100.withOpacity(0.8),
               border: OutlineInputBorder(
@@ -759,8 +880,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 vertical: 16,
               ),
             ),
-            items: availableInstitutes.map((institute) {
-              return DropdownMenuItem(value: institute, child: Text(institute));
+            items: institutes.map((institute) {
+              return DropdownMenuItem(
+                value: institute['id'].toString(),
+                child: Text(institute['name']),
+              );
             }).toList(),
           ),
         ),
@@ -835,9 +959,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       child: ElevatedButton(
         onPressed: isFormComplete ? handleContinue : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isFormComplete
-              ? Colors.purple.shade500
-              : Colors.grey.shade400,
+          backgroundColor:
+              isFormComplete ? Colors.purple.shade500 : Colors.grey.shade400,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
           shape: RoundedRectangleBorder(
