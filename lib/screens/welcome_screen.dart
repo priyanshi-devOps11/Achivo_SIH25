@@ -17,35 +17,46 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   // ✅ Save form data to Supabase
   Future<void> _saveUserDataToSupabase() async {
-    final supabase = Supabase.instance.client;
-    final user = supabase.auth.currentUser;
+    try {
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
 
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No user logged in")),
-      );
-      return;
-    }
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No user logged in")),
+        );
+        return;
+      }
 
-    final updates = {
-      'id': user.id,
-      'country': selectedCountry,
-      'state': selectedState,
-      'institute': selectedInstitute,
-      'role': selectedRole,
-      'updated_at': DateTime.now().toIso8601String(),
-    };
+      final updates = {
+        'id': user.id,
+        'country': selectedCountryName,
+        'state': selectedStateName,
+        'institute': selectedInstituteName,
+        'role': selectedRole?.toLowerCase(),
+        'country_id': int.tryParse(selectedCountry ?? ''),
+        'state_id': int.tryParse(selectedState ?? ''),
+        'institute_id': int.tryParse(selectedInstitute ?? ''),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
 
-    final response = await supabase.from('profiles').upsert(updates);
+      final response = await supabase.from('profiles').upsert(updates);
 
-    if (response.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${response.error!.message}")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Profile updated successfully!")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error saving profile: $e")),
+        );
+      }
     }
   }
 
-  // ✅ Continue button logic (only one version now)
+  // ✅ Continue button logic
   void handleContinue() async {
     if (isFormComplete) {
       await _saveUserDataToSupabase();
@@ -66,23 +77,30 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           route = '/auth-student';
           break;
         default:
-          route = '/auth';
+          route = '/auth-student';
       }
 
-      Navigator.pushNamed(context, route, arguments: {
-        'country': selectedCountry,
-        'state': selectedState,
-        'institute': selectedInstitute,
-        'role': selectedRole,
-      });
+      if (mounted) {
+        Navigator.pushNamed(context, route, arguments: {
+          'country': selectedCountryName,
+          'state': selectedStateName,
+          'institute': selectedInstituteName,
+          'role': selectedRole,
+        });
+      }
     }
   }
 
-// Form data
-  String? selectedCountry;
-  String? selectedState;
-  String? selectedInstitute;
+  // Form data
+  String? selectedCountry; // This will store the ID
+  String? selectedState; // This will store the ID
+  String? selectedInstitute; // This will store the ID
   String? selectedRole;
+
+  // Store names for display and saving
+  String? selectedCountryName;
+  String? selectedStateName;
+  String? selectedInstituteName;
 
   // Animation controllers
   late AnimationController _backgroundController;
@@ -105,64 +123,104 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   final List<String> roles = ['Admin', 'HOD', 'Faculty', 'Student'];
 
+  // Loading states
+  bool isLoadingStates = false;
+  bool isLoadingInstitutes = false;
+
   // Supabase data fetching functions
   Future<void> _fetchCountries() async {
     try {
       final supabase = Supabase.instance.client;
-      final response =
-          await supabase.from('countries').select('id, name').order('name');
+      final response = await supabase
+          .from('countries')
+          .select('id, name')
+          .order('name');
 
-      if (response != null) {
+      if (mounted) {
         setState(() {
-          countries = List<Map<String, dynamic>>.from(response);
+          countries = List<Map<String, dynamic>>.from(response as List);
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error fetching countries: $e")),
-      );
+      print('Error fetching countries: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching countries: $e")),
+        );
+      }
     }
   }
 
   Future<void> _fetchStates(String countryId) async {
     try {
+      setState(() {
+        isLoadingStates = true;
+        states.clear();
+        selectedState = null;
+        selectedStateName = null;
+        institutes.clear();
+        selectedInstitute = null;
+        selectedInstituteName = null;
+      });
+
       final supabase = Supabase.instance.client;
       final response = await supabase
           .from('states')
           .select('id, name')
-          .eq('country_id', countryId)
+          .eq('country_id', int.parse(countryId))
           .order('name');
 
-      if (response != null) {
+      if (mounted) {
         setState(() {
-          states = List<Map<String, dynamic>>.from(response);
+          states = List<Map<String, dynamic>>.from(response as List);
+          isLoadingStates = false;
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error fetching states: $e")),
-      );
+      print('Error fetching states: $e');
+      if (mounted) {
+        setState(() {
+          isLoadingStates = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching states: $e")),
+        );
+      }
     }
   }
 
   Future<void> _fetchInstitutes(String stateId) async {
     try {
+      setState(() {
+        isLoadingInstitutes = true;
+        institutes.clear();
+        selectedInstitute = null;
+        selectedInstituteName = null;
+      });
+
       final supabase = Supabase.instance.client;
       final response = await supabase
           .from('institutes')
           .select('id, name')
-          .eq('state_id', stateId)
+          .eq('state_id', int.parse(stateId))
           .order('name');
 
-      if (response != null) {
+      if (mounted) {
         setState(() {
-          institutes = List<Map<String, dynamic>>.from(response);
+          institutes = List<Map<String, dynamic>>.from(response as List);
+          isLoadingInstitutes = false;
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error fetching institutes: $e")),
-      );
+      print('Error fetching institutes: $e');
+      if (mounted) {
+        setState(() {
+          isLoadingInstitutes = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error fetching institutes: $e")),
+        );
+      }
     }
   }
 
@@ -414,8 +472,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                   'Achivo',
                                   style: TextStyle(
                                     fontSize:
-                                        MediaQuery.of(context).size.width *
-                                            0.18,
+                                    MediaQuery.of(context).size.width *
+                                        0.18,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                     letterSpacing: -2,
@@ -696,14 +754,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           child: DropdownButtonFormField<String>(
             value: selectedCountry,
             onChanged: (value) {
-              setState(() {
-                selectedCountry = value;
-                selectedState = null;
-                selectedInstitute = null;
-                states.clear();
-                institutes.clear();
-              });
               if (value != null) {
+                final country = countries.firstWhere((c) => c['id'].toString() == value);
+                setState(() {
+                  selectedCountry = value;
+                  selectedCountryName = country['name'];
+                  selectedState = null;
+                  selectedStateName = null;
+                  selectedInstitute = null;
+                  selectedInstituteName = null;
+                  states.clear();
+                  institutes.clear();
+                });
                 _fetchStates(value);
               }
             },
@@ -767,20 +829,23 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: DropdownButtonFormField<String>(
             value: selectedState,
-            onChanged: selectedCountry != null && states.isNotEmpty
+            onChanged: selectedCountry != null && !isLoadingStates && states.isNotEmpty
                 ? (value) {
-                    setState(() {
-                      selectedState = value;
-                      selectedInstitute = null;
-                      institutes.clear();
-                    });
-                    if (value != null) {
-                      _fetchInstitutes(value);
-                    }
-                  }
+              if (value != null) {
+                final state = states.firstWhere((s) => s['id'].toString() == value);
+                setState(() {
+                  selectedState = value;
+                  selectedStateName = state['name'];
+                  selectedInstitute = null;
+                  selectedInstituteName = null;
+                  institutes.clear();
+                });
+                _fetchInstitutes(value);
+              }
+            }
                 : null,
             decoration: InputDecoration(
-              hintText: 'Select state',
+              hintText: isLoadingStates ? 'Loading states...' : 'Select state',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: selectedCountry != null
@@ -806,6 +871,19 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 horizontal: 16,
                 vertical: 16,
               ),
+              suffixIcon: isLoadingStates
+                  ? Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade300),
+                  ),
+                ),
+              )
+                  : null,
             ),
             items: states.map((state) {
               return DropdownMenuItem(
@@ -845,15 +923,19 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: DropdownButtonFormField<String>(
             value: selectedInstitute,
-            onChanged: selectedState != null && institutes.isNotEmpty
+            onChanged: selectedState != null && !isLoadingInstitutes && institutes.isNotEmpty
                 ? (value) {
-                    setState(() {
-                      selectedInstitute = value;
-                    });
-                  }
+              if (value != null) {
+                final institute = institutes.firstWhere((i) => i['id'].toString() == value);
+                setState(() {
+                  selectedInstitute = value;
+                  selectedInstituteName = institute['name'];
+                });
+              }
+            }
                 : null,
             decoration: InputDecoration(
-              hintText: 'Select institute',
+              hintText: isLoadingInstitutes ? 'Loading institutes...' : 'Select institute',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: selectedState != null
@@ -879,6 +961,19 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 horizontal: 16,
                 vertical: 16,
               ),
+              suffixIcon: isLoadingInstitutes
+                  ? Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade300),
+                  ),
+                ),
+              )
+                  : null,
             ),
             items: institutes.map((institute) {
               return DropdownMenuItem(
@@ -960,7 +1055,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         onPressed: isFormComplete ? handleContinue : null,
         style: ElevatedButton.styleFrom(
           backgroundColor:
-              isFormComplete ? Colors.purple.shade500 : Colors.grey.shade400,
+          isFormComplete ? Colors.purple.shade500 : Colors.grey.shade400,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
           shape: RoundedRectangleBorder(

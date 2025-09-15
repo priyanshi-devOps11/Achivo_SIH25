@@ -13,14 +13,20 @@ import 'package:achivo/screens/hod_dashboard.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables from .env.local
-  await dotenv.load(fileName: ".env.local");
+  try {
+    // Load environment variables from .env.local
+    await dotenv.load(fileName: ".env.local");
 
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: dotenv.env['NEXT_PUBLIC_SUPABASE_URL']!,
-    anonKey: dotenv.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!,
-  );
+    // Initialize Supabase with proper error handling
+    await Supabase.initialize(
+      url: dotenv.env['NEXT_PUBLIC_SUPABASE_URL']!,
+      anonKey: dotenv.env['NEXT_PUBLIC_SUPABASE_ANON_KEY']!,
+    );
+
+    print('Supabase initialized successfully');
+  } catch (e) {
+    print('Error initializing app: $e');
+  }
 
   runApp(const MyApp());
 }
@@ -48,9 +54,8 @@ class MyApp extends StatelessWidget {
       // Define all routes
       routes: {
         '/': (context) => WelcomeScreen(
-              onNext:
-                  () {}, // Empty callback since navigation is handled internally
-            ),
+          onNext: () {}, // Empty callback since navigation is handled internally
+        ),
         '/welcome': (context) => WelcomeScreen(onNext: () {}),
         '/auth-admin': (context) => const AuthAdminPage(),
         '/auth-hod': (context) => const AuthHodPage(),
@@ -130,7 +135,7 @@ class MyApp extends StatelessWidget {
                         onPressed: () => Navigator.pushNamedAndRemoveUntil(
                           context,
                           '/',
-                          (route) => false,
+                              (route) => false,
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
@@ -189,10 +194,16 @@ class AdminDashboard extends StatelessWidget {
         actions: [
           IconButton(
             onPressed: () async {
-              await supabase.auth.signOut();
-              if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                    context, '/', (route) => false);
+              try {
+                await supabase.auth.signOut();
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                      context, '/', (route) => false);
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error signing out: $e')),
+                );
               }
             },
             icon: const Icon(Icons.logout),
@@ -257,10 +268,16 @@ class FacultyDashboard extends StatelessWidget {
         actions: [
           IconButton(
             onPressed: () async {
-              await supabase.auth.signOut();
-              if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                    context, '/', (route) => false);
+              try {
+                await supabase.auth.signOut();
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                      context, '/', (route) => false);
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error signing out: $e')),
+                );
               }
             },
             icon: const Icon(Icons.logout),
@@ -325,10 +342,16 @@ class StudentDashboard extends StatelessWidget {
         actions: [
           IconButton(
             onPressed: () async {
-              await supabase.auth.signOut();
-              if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                    context, '/', (route) => false);
+              try {
+                await supabase.auth.signOut();
+                if (context.mounted) {
+                  Navigator.pushNamedAndRemoveUntil(
+                      context, '/', (route) => false);
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error signing out: $e')),
+                );
               }
             },
             icon: const Icon(Icons.logout),
