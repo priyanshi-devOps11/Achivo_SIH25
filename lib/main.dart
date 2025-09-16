@@ -9,6 +9,9 @@ import 'package:achivo/screens/auth_hod_page.dart';
 import 'package:achivo/screens/auth_faculty_page.dart';
 import 'package:achivo/screens/auth_student_page.dart';
 import 'package:achivo/screens/hod_dashboard.dart';
+import 'package:achivo/screens/student_dashboard.dart';
+// Import the admin dashboard from your admin_dashboard.dart file
+import 'package:achivo/screens/admin_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -90,9 +93,18 @@ class MyApp extends StatelessWidget {
         '/auth-faculty': (context) => const AuthFacultyPage(),
         '/auth-student': (context) => const AuthStudentPage(),
         '/hod-dashboard': (context) => const HODDashboard(),
-        '/admin-dashboard': (context) => const AdminDashboard(),
+        '/admin-dashboard': (context) => AdminDashboard(), // Updated to use the correct AdminDashboard
         '/faculty-dashboard': (context) => const FacultyDashboard(),
-        '/student-dashboard': (context) => const StudentDashboard(),
+        '/student-dashboard': (context) => StudentDashboard(), // Updated to use the correct StudentDashboard
+
+        // Additional routes for admin dashboard sub-pages
+        '/admin/departments': (context) => DepartmentsPage(),
+        '/admin/faculty': (context) => FacultyPage(),
+        '/admin/students': (context) => StudentsPage(),
+        '/admin/activities': (context) => ActivitiesPage(),
+        '/admin/portfolios': (context) => PortfoliosPage(),
+        '/admin/reports': (context) => ReportsPage(),
+        '/admin/settings': (context) => SettingsPage(),
       },
 
       onUnknownRoute: (settings) {
@@ -260,7 +272,15 @@ class _AppInitializerState extends State<AppInitializer> {
 
       // Navigate after successful initialization
       if (mounted) {
-        Navigator.pushReplacementNamed(context, '/welcome');
+        // Check if user is already logged in and redirect to appropriate dashboard
+        if (session != null) {
+          final user = session.user;
+          // You can add user role checking logic here
+          // For now, navigate to welcome screen
+          Navigator.pushReplacementNamed(context, '/welcome');
+        } else {
+          Navigator.pushReplacementNamed(context, '/welcome');
+        }
       }
 
     } catch (e) {
@@ -426,19 +446,22 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 }
 
-// Dashboard classes remain the same...
-class AdminDashboard extends StatelessWidget {
-  const AdminDashboard({super.key});
+// Remove the duplicate dashboard classes since they should be in separate files
+// Keep only the original basic dashboard classes or remove them entirely
+// if you're using the ones from your separate files
+
+class HODDashboard extends StatelessWidget {
+  const HODDashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
     return _buildDashboard(
       context,
-      title: 'Admin Dashboard',
-      color: Colors.red.shade400,
-      icon: Icons.admin_panel_settings,
-      welcomeText: 'Welcome to Admin Dashboard',
-      subtitle: 'Manage your institute here',
+      title: 'HOD Dashboard',
+      color: Colors.indigo.shade400,
+      icon: Icons.supervisor_account,
+      welcomeText: 'Welcome to HOD Dashboard',
+      subtitle: 'Manage your department here',
     );
   }
 }
@@ -455,22 +478,6 @@ class FacultyDashboard extends StatelessWidget {
       icon: Icons.school,
       welcomeText: 'Welcome to Faculty Dashboard',
       subtitle: 'Manage your classes and students',
-    );
-  }
-}
-
-class StudentDashboard extends StatelessWidget {
-  const StudentDashboard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return _buildDashboard(
-      context,
-      title: 'Student Dashboard',
-      color: Colors.orange.shade400,
-      icon: Icons.person,
-      welcomeText: 'Welcome to Student Dashboard',
-      subtitle: 'Track your achievements and progress',
     );
   }
 }

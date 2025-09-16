@@ -1,51 +1,55 @@
-// pubspec.yaml dependencies:
-/*
-dependencies:
-  flutter:
-    sdk: flutter
-  supabase_flutter: ^2.3.4
-  fl_chart: ^0.65.0
-  shared_preferences: ^2.2.2
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^3.0.0
-*/
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
+  // Initialize Supabase - Replace with your actual credentials
   await Supabase.initialize(
-  final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'];
-  final supabaseAnonKey = dotenv.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+    url: 'NEXT_PUBLIC_SUPABASE_URL', // Replace with your Supabase URL
+    anonKey: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', // Replace with your Supabase anon key
   );
 
-  runApp(MyApp());
-}.
+  runApp(const MyApp());
+}
 
 final supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Admin Dashboard',
+      title: 'Smart Student Hub - Admin',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.grey[50],
-        cardTheme: CardTheme(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          elevation: 1,
+          iconTheme: IconThemeData(color: Colors.black87),
+          titleTextStyle: TextStyle(
+            color: Colors.black87,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       home: AuthWrapper(),
+      routes: {
+        '/dashboard': (context) => AdminDashboard(),
+        '/departments': (context) => DepartmentsPage(),
+        '/faculty': (context) => FacultyPage(),
+        '/students': (context) => StudentsPage(),
+        '/activities': (context) => ActivitiesPage(),
+        '/portfolios': (context) => PortfoliosPage(),
+        '/reports': (context) => ReportsPage(),
+        '/settings': (context) => SettingsPage(),
+      },
     );
   }
 }
@@ -57,6 +61,7 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   User? _user;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -69,6 +74,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final session = supabase.auth.currentSession;
     setState(() {
       _user = session?.user;
+      _isLoading = false;
     });
   }
 
@@ -82,6 +88,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8F9FA),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading...',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return _user != null ? AdminDashboard() : LoginScreen();
   }
 }
@@ -110,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (response.user != null) {
-        // User will be automatically navigated via AuthWrapper
+        // Navigation handled by AuthWrapper
       }
     } catch (error) {
       setState(() {
@@ -126,56 +152,122 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: Card(
-          margin: EdgeInsets.all(32),
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Admin Login',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
+      backgroundColor: const Color(0xFFF8F9FA),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Card(
+              elevation: 8,
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade600,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.admin_panel_settings,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Smart Student Hub',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Admin Dashboard',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    TextField(
+                      controller: _emailController,
+                      decoration: InputDecoration(
+                        labelText: 'Email',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      obscureText: true,
+                    ),
+                    if (_errorMessage.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red.shade600, size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _errorMessage,
+                                style: TextStyle(color: Colors.red.shade600, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _signIn,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                            : const Text('Sign In'),
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 32),
-                TextField(
-                  controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                SizedBox(height: 16),
-                TextField(
-                  controller: _passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                  ),
-                  obscureText: true,
-                ),
-                SizedBox(height: 16),
-                if (_errorMessage.isNotEmpty)
-                  Text(
-                    _errorMessage,
-                    style: TextStyle(color: Colors.red),
-                  ),
-                SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _signIn,
-                    child: _isLoading
-                        ? CircularProgressIndicator()
-                        : Text('Sign In'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -190,6 +282,9 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Data variables
   List<DepartmentData> departmentData = [];
   List<MonthlyTrendData> monthlyTrendData = [];
   List<RecentActivity> recentActivities = [];
@@ -202,6 +297,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int pendingApprovals = 0;
 
   bool _isLoading = true;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -210,164 +306,95 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       await Future.wait([
         _loadDepartments(),
-        _loadMonthlyTrends(),
-        _loadRecentActivities(),
-        _loadApprovalStats(),
         _loadOverallStats(),
       ]);
     } catch (error) {
       print('Error loading data: $error');
-      // Fallback to sample data if backend fails
-      _loadSampleData();
+      _loadSampleData(); // Fallback to sample data
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _refreshData() async {
+    setState(() => _isRefreshing = true);
+    await _loadData();
+    setState(() => _isRefreshing = false);
+    _showSnackBar('Data refreshed successfully', Colors.green);
   }
 
   Future<void> _loadDepartments() async {
     try {
       final response = await supabase
           .from('departments')
-          .select('name, student_count, faculty_count')
-          .order('name');
+          .select('name');
 
-      departmentData = response
-          .map<DepartmentData>((item) => DepartmentData(
-        name: item['name'],
-        students: item['student_count'] ?? 0,
-        faculty: item['faculty_count'] ?? 0,
-      ))
-          .toList();
+      if (response != null && response is List) {
+        departmentData = response
+            .map<DepartmentData>((item) => DepartmentData(
+          name: item['name'] ?? 'Unknown',
+          students: 0, // Default values since we don't have these fields
+          faculty: 0,
+        ))
+            .toList();
+      }
     } catch (error) {
       print('Error loading departments: $error');
     }
   }
 
-  Future<void> _loadMonthlyTrends() async {
-    try {
-      final response = await supabase
-          .from('monthly_trends')
-          .select('month, activities, approvals')
-          .order('created_at');
-
-      monthlyTrendData = response
-          .map<MonthlyTrendData>((item) => MonthlyTrendData(
-        month: item['month'],
-        activities: item['activities'] ?? 0,
-        approvals: item['approvals'] ?? 0,
-      ))
-          .toList();
-    } catch (error) {
-      print('Error loading monthly trends: $error');
-    }
-  }
-
-  Future<void> _loadRecentActivities() async {
-    try {
-      final response = await supabase
-          .from('activities')
-          .select('''
-            id,
-            students (name),
-            activity_name,
-            departments (name),
-            status,
-            created_at
-          ''')
-          .order('created_at', ascending: false)
-          .limit(5);
-
-      recentActivities = response
-          .map<RecentActivity>((item) => RecentActivity(
-        id: item['id'],
-        student: item['students']?['name'] ?? 'Unknown',
-        activity: item['activity_name'],
-        department: item['departments']?['name'] ?? 'Unknown',
-        status: _parseActivityStatus(item['status']),
-        date: _formatDate(item['created_at']),
-      ))
-          .toList();
-    } catch (error) {
-      print('Error loading recent activities: $error');
-    }
-  }
-
-  Future<void> _loadApprovalStats() async {
-    try {
-      final response = await supabase
-          .from('activities')
-          .select('status')
-          .not('status', 'is', null);
-
-      Map<String, int> statusCount = {};
-      for (var item in response) {
-        String status = item['status'];
-        statusCount[status] = (statusCount[status] ?? 0) + 1;
-      }
-
-      activityApprovalData = [
-        ActivityApprovalData(
-          name: "Approved",
-          value: statusCount['approved'] ?? 0,
-          color: Colors.green,
-        ),
-        ActivityApprovalData(
-          name: "Pending",
-          value: statusCount['pending'] ?? 0,
-          color: Colors.orange,
-        ),
-        ActivityApprovalData(
-          name: "Rejected",
-          value: statusCount['rejected'] ?? 0,
-          color: Colors.red,
-        ),
-      ];
-    } catch (error) {
-      print('Error loading approval stats: $error');
-    }
-  }
-
   Future<void> _loadOverallStats() async {
     try {
-      final departmentsCount = await supabase
+      // Get departments count - using simple select and counting in Dart
+      final departmentsResponse = await supabase
           .from('departments')
-          .select('id', const FetchOptions(count: CountOption.exact));
+          .select();
 
-      final facultyCount = await supabase
-          .from('faculty')
-          .select('id', const FetchOptions(count: CountOption.exact));
-
-      final studentsCount = await supabase
-          .from('students')
-          .select('id', const FetchOptions(count: CountOption.exact));
-
-      final pendingCount = await supabase
-          .from('activities')
-          .select('id', const FetchOptions(count: CountOption.exact))
-          .eq('status', 'pending');
+      // Get profiles count by role
+      final profilesResponse = await supabase
+          .from('profiles')
+          .select();
 
       setState(() {
-        totalDepartments = departmentsCount.count ?? 0;
-        totalFaculty = facultyCount.count ?? 0;
-        totalStudents = studentsCount.count ?? 0;
-        pendingApprovals = pendingCount.count ?? 0;
+        totalDepartments = (departmentsResponse as List?)?.length ?? 0;
+        totalFaculty = 0; // Will be calculated from profiles
+        totalStudents = 0; // Will be calculated from profiles
+        pendingApprovals = 0; // Default value
       });
+
+      // Calculate role-based counts if we have profile data
+      if (profilesResponse != null && profilesResponse is List) {
+        final profiles = profilesResponse as List;
+        int facultyCount = 0;
+        int studentCount = 0;
+
+        for (var profile in profiles) {
+          final role = profile['role'] as String?;
+          if (role == 'faculty' || role == 'hod') {
+            facultyCount++;
+          } else if (role == 'student') {
+            studentCount++;
+          }
+        }
+
+        setState(() {
+          totalFaculty = facultyCount;
+          totalStudents = studentCount;
+        });
+      }
+
     } catch (error) {
       print('Error loading overall stats: $error');
     }
   }
 
   void _loadSampleData() {
-    // Fallback sample data
+    // Sample data for demonstration
     departmentData = [
       DepartmentData(name: "Computer Science", students: 145, faculty: 12),
       DepartmentData(name: "Electronics", students: 98, faculty: 8),
@@ -410,28 +437,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
         status: ActivityStatus.pending,
         date: "2024-01-13",
       ),
-      RecentActivity(
-        id: 4,
-        student: "David Wilson",
-        activity: "Conference Presentation",
-        department: "Civil",
-        status: ActivityStatus.rejected,
-        date: "2024-01-12",
-      ),
-      RecentActivity(
-        id: 5,
-        student: "Eva Brown",
-        activity: "Startup Founder",
-        department: "Business",
-        status: ActivityStatus.approved,
-        date: "2024-01-11",
-      ),
     ];
 
     activityApprovalData = [
-      ActivityApprovalData(name: "Approved", value: 65, color: Colors.green),
-      ActivityApprovalData(name: "Pending", value: 23, color: Colors.orange),
-      ActivityApprovalData(name: "Rejected", value: 12, color: Colors.red),
+      ActivityApprovalData(name: "Completed", value: 65, color: Colors.green.shade600),
+      ActivityApprovalData(name: "In Progress", value: 25, color: Colors.orange.shade600),
+      ActivityApprovalData(name: "Pending", value: 10, color: Colors.red.shade600),
     ];
 
     totalDepartments = 5;
@@ -440,51 +451,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
     pendingApprovals = 23;
   }
 
-  Future<void> _approveActivity(int activityId) async {
-    try {
-      await supabase
-          .from('activities')
-          .update({'status': 'approved'})
-          .eq('id', activityId);
-      _loadData(); // Refresh data
-    } catch (error) {
-      print('Error approving activity: $error');
-    }
-  }
-
-  Future<void> _rejectActivity(int activityId) async {
-    try {
-      await supabase
-          .from('activities')
-          .update({'status': 'rejected'})
-          .eq('id', activityId);
-      _loadData(); // Refresh data
-    } catch (error) {
-      print('Error rejecting activity: $error');
-    }
+  void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   Future<void> _signOut() async {
-    await supabase.auth.signOut();
-  }
-
-  ActivityStatus _parseActivityStatus(String? status) {
-    switch (status) {
-      case 'approved':
-        return ActivityStatus.approved;
-      case 'rejected':
-        return ActivityStatus.rejected;
-      default:
-        return ActivityStatus.pending;
-    }
-  }
-
-  String _formatDate(String dateString) {
     try {
-      final date = DateTime.parse(dateString);
-      return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-    } catch (e) {
-      return dateString;
+      await supabase.auth.signOut();
+    } catch (error) {
+      _showSnackBar('Error signing out', Colors.red);
     }
   }
 
@@ -492,47 +474,380 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Admin Dashboard'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _loadData,
-          ),
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: _signOut,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(24.0),
+        backgroundColor: const Color(0xFFF8F9FA),
+        body: Center(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Header
-              _buildHeader(),
-              SizedBox(height: 24),
-
-              // Stats Cards
-              _buildStatsCards(),
-              SizedBox(height: 24),
-
-              // Analytics Chart and Recent Uploads Row
-              _buildAnalyticsAndRecentUploads(context),
-              SizedBox(height: 24),
-
-              // Portfolio Overview and Reports Row
-              _buildPortfolioAndReports(),
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading dashboard...',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
             ],
           ),
         ),
+      );
+    }
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: const Color(0xFFF8F9FA),
+      drawer: _buildDrawer(),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(60),
+        child: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 1,
+          leading: IconButton(
+            icon: const Icon(Icons.menu, color: Colors.black87),
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade600,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.dashboard, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Smart Student Hub',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: _isRefreshing
+                  ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+                  : const Icon(Icons.refresh, color: Colors.black87),
+              onPressed: _isRefreshing ? null : _refreshData,
+            ),
+            PopupMenuButton<String>(
+              icon: CircleAvatar(
+                backgroundColor: Colors.blue.shade600,
+                radius: 16,
+                child: const Text(
+                  'JD',
+                  style: TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+              onSelected: (value) {
+                if (value == 'logout') {
+                  _showLogoutDialog();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person, size: 18),
+                      SizedBox(width: 8),
+                      Text('Profile'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout, size: 18),
+                      SizedBox(width: 8),
+                      Text('Sign Out'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(),
+              const SizedBox(height: 20),
+              _buildStatsCards(),
+              const SizedBox(height: 20),
+              _buildChartsRow(),
+              const SizedBox(height: 20),
+              _buildBottomRow(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: Colors.white,
+      child: Column(
+        children: [
+          Container(
+            height: 180,
+            decoration: BoxDecoration(
+              color: Colors.blue.shade600,
+            ),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.admin_panel_settings,
+                        size: 32,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Smart Student Hub',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Text(
+                      'Admin Panel',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _buildDrawerItem(
+                  icon: Icons.dashboard,
+                  title: 'Dashboard',
+                  onTap: () => Navigator.pop(context),
+                  isSelected: true,
+                ),
+                _buildDrawerItem(
+                  icon: Icons.business,
+                  title: 'Departments',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/departments');
+                  },
+                ),
+                _buildDrawerItem(
+                  icon: Icons.people,
+                  title: 'Faculty/HOD',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/faculty');
+                  },
+                ),
+                _buildDrawerItem(
+                  icon: Icons.school,
+                  title: 'Students',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/students');
+                  },
+                ),
+                _buildDrawerItem(
+                  icon: Icons.local_activity,
+                  title: 'Activities',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/activities');
+                  },
+                ),
+                _buildDrawerItem(
+                  icon: Icons.folder,
+                  title: 'Portfolios',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/portfolios');
+                  },
+                ),
+                _buildDrawerItem(
+                  icon: Icons.analytics,
+                  title: 'Reports',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/reports');
+                  },
+                ),
+                _buildDrawerItem(
+                  icon: Icons.settings,
+                  title: 'Settings',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/settings');
+                  },
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _buildDrawerItem(
+                  icon: Icons.help,
+                  title: 'Need Help?',
+                  subtitle: 'Check our documentation',
+                  onTap: () => _showHelpDialog(),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showLogoutDialog();
+                    },
+                    icon: const Icon(Icons.logout, size: 16),
+                    label: const Text('Sign Out'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDrawerItem({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    required VoidCallback onTap,
+    bool isSelected = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isSelected ? Colors.blue.shade50 : null,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color: isSelected ? Colors.blue.shade600 : Colors.grey[700],
+          size: 20,
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? Colors.blue.shade600 : Colors.grey[800],
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: subtitle != null
+            ? Text(
+          subtitle,
+          style: TextStyle(
+            color: Colors.grey[500],
+            fontSize: 11,
+          ),
+        )
+            : null,
+        onTap: onTap,
+        dense: true,
+      ),
+    );
+  }
+
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.help, color: Colors.blue),
+            SizedBox(width: 8),
+            Text('Help & Support'),
+          ],
+        ),
+        content: const Text('For technical support and documentation, please contact our support team.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.logout, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Sign Out'),
+          ],
+        ),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _signOut();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Sign Out'),
+          ),
+        ],
       ),
     );
   }
@@ -541,19 +856,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
+        const Text(
           'Admin Dashboard',
           style: TextStyle(
-            fontSize: 32,
+            fontSize: 24,
             fontWeight: FontWeight.bold,
-            color: Colors.grey[900],
+            color: Colors.black87,
           ),
         ),
-        SizedBox(height: 4),
         Text(
           'Overview of Smart Student Hub platform',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 14,
             color: Colors.grey[600],
           ),
         ),
@@ -562,192 +876,98 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildStatsCards() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        int crossAxisCount = constraints.maxWidth < 600 ? 1 :
-        constraints.maxWidth < 900 ? 2 : 4;
-
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 2.5,
-          children: [
-            StatCard(
-              title: "Total Departments",
-              value: totalDepartments.toString(),
-              change: "+1 this month",
-              changeType: ChangeType.positive,
-              icon: Icons.business,
-            ),
-            StatCard(
-              title: "Total Faculty",
-              value: totalFaculty.toString(),
-              change: "+3 this month",
-              changeType: ChangeType.positive,
-              icon: Icons.people,
-            ),
-            StatCard(
-              title: "Total Students",
-              value: totalStudents.toString(),
-              change: "+24 this month",
-              changeType: ChangeType.positive,
-              icon: Icons.school,
-            ),
-            StatCard(
-              title: "Pending Approvals",
-              value: pendingApprovals.toString(),
-              change: "-5 from yesterday",
-              changeType: ChangeType.positive,
-              icon: Icons.access_time,
-            ),
-          ],
-        );
-      },
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 1.8,
+      children: [
+        _buildStatCard(
+          title: "Total Departments",
+          value: totalDepartments.toString(),
+          change: "+1 this month",
+          icon: Icons.business,
+          color: Colors.blue.shade600,
+        ),
+        _buildStatCard(
+          title: "Total Faculty",
+          value: totalFaculty.toString(),
+          change: "+3 this month",
+          icon: Icons.people,
+          color: Colors.green.shade600,
+        ),
+        _buildStatCard(
+          title: "Total Students",
+          value: totalStudents.toString(),
+          change: "+24 this month",
+          icon: Icons.school,
+          color: Colors.purple.shade600,
+        ),
+        _buildStatCard(
+          title: "Pending Approvals",
+          value: pendingApprovals.toString(),
+          change: "-5 from yesterday",
+          icon: Icons.access_time,
+          color: Colors.orange.shade600,
+        ),
+      ],
     );
   }
 
-  Widget _buildAnalyticsAndRecentUploads(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 1024) {
-          return Column(
-            children: [
-              _buildAnalyticsChart(),
-              SizedBox(height: 24),
-              _buildRecentUploads(),
-            ],
-          );
-        } else {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _buildAnalyticsChart()),
-              SizedBox(width: 24),
-              Expanded(child: _buildRecentUploads()),
-            ],
-          );
-        }
-      },
-    );
-  }
-
-  Widget _buildAnalyticsChart() {
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required String change,
+    required IconData icon,
+    required Color color,
+  }) {
+    bool isPositiveChange = change.startsWith('+') || change.contains('from yesterday');
     return Card(
+      elevation: 2,
       child: Padding(
-        padding: EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Activities Uploaded vs Approved',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Monthly trends of activity submissions and approvals',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            SizedBox(height: 20),
-            Container(
-              height: 300,
-              child: LineChart(
-                LineChartData(
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: true,
-                    getDrawingHorizontalLine: (value) {
-                      return FlLine(
-                        color: Colors.grey[300]!,
-                        strokeWidth: 1,
-                        dashArray: [3, 3],
-                      );
-                    },
-                    getDrawingVerticalLine: (value) {
-                      return FlLine(
-                        color: Colors.grey[300]!,
-                        strokeWidth: 1,
-                        dashArray: [3, 3],
-                      );
-                    },
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: color, size: 24),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isPositiveChange ? Colors.green.shade50 : Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  titlesData: FlTitlesData(
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 40,
-                        getTitlesWidget: (value, meta) {
-                          return Text(
-                            value.toInt().toString(),
-                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                          );
-                        },
-                      ),
+                  child: Text(
+                    change,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isPositiveChange ? Colors.green.shade600 : Colors.orange.shade600,
+                      fontWeight: FontWeight.w500,
                     ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 30,
-                        getTitlesWidget: (value, meta) {
-                          if (value.toInt() < monthlyTrendData.length) {
-                            return Text(
-                              monthlyTrendData[value.toInt()].month,
-                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                            );
-                          }
-                          return Text('');
-                        },
-                      ),
-                    ),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: monthlyTrendData.asMap().entries.map((entry) {
-                        return FlSpot(entry.key.toDouble(), entry.value.activities.toDouble());
-                      }).toList(),
-                      isCurved: false,
-                      color: Colors.blue,
-                      barWidth: 2,
-                      dotData: FlDotData(
-                        show: true,
-                        getDotPainter: (spot, percent, barData, index) {
-                          return FlDotCirclePainter(
-                            radius: 4,
-                            color: Colors.blue,
-                          );
-                        },
-                      ),
-                    ),
-                    LineChartBarData(
-                      spots: monthlyTrendData.asMap().entries.map((entry) {
-                        return FlSpot(entry.key.toDouble(), entry.value.approvals.toDouble());
-                      }).toList(),
-                      isCurved: false,
-                      color: Colors.green,
-                      barWidth: 2,
-                      dotData: FlDotData(
-                        show: true,
-                        getDotPainter: (spot, percent, barData, index) {
-                          return FlDotCirclePainter(
-                            radius: 4,
-                            color: Colors.green,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
                 ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -756,105 +976,404 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildRecentUploads() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Recent Uploads',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Latest activity submissions with approve/reject actions',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            SizedBox(height: 20),
-            Column(
-              children: recentActivities.map((activity) {
-                return Container(
-                  margin: EdgeInsets.only(bottom: 12),
-                  padding: EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
+  Widget _buildChartsRow() {
+    // Load sample data if empty
+    if (monthlyTrendData.isEmpty) {
+      monthlyTrendData = [
+        MonthlyTrendData(month: "Jan", activities: 45, approvals: 38),
+        MonthlyTrendData(month: "Feb", activities: 52, approvals: 45),
+        MonthlyTrendData(month: "Mar", activities: 48, approvals: 41),
+        MonthlyTrendData(month: "Apr", activities: 61, approvals: 55),
+        MonthlyTrendData(month: "May", activities: 58, approvals: 52),
+        MonthlyTrendData(month: "Jun", activities: 67, approvals: 61),
+      ];
+    }
+
+    return Column(
+      children: [
+        // Activities Overview Chart
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Activities Overview',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        _buildChartTab('Week', true),
+                        _buildChartTab('Month', false),
+                        _buildChartTab('Year', false),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Uploaded vs approved activities',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              activity.student,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              activity.activity,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              '${activity.department} • ${activity.date}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 200,
+                  child: LineChart(
+                    LineChartData(
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: 20,
+                        getDrawingHorizontalLine: (value) => FlLine(
+                          color: Colors.grey[300]!,
+                          strokeWidth: 1,
                         ),
                       ),
-                      SizedBox(width: 12),
-                      Row(
-                        children: [
-                          _buildStatusBadge(activity.status),
-                          if (activity.status == ActivityStatus.pending) ...[
-                            SizedBox(width: 8),
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: Icon(Icons.check_circle_outline, color: Colors.green),
-                                  iconSize: 20,
-                                  padding: EdgeInsets.all(4),
-                                  constraints: BoxConstraints(),
-                                  onPressed: () => _approveActivity(activity.id),
-                                ),
-                                SizedBox(width: 4),
-                                IconButton(
-                                  icon: Icon(Icons.cancel_outlined, color: Colors.red),
-                                  iconSize: 20,
-                                  padding: EdgeInsets.all(4),
-                                  constraints: BoxConstraints(),
-                                  onPressed: () => _rejectActivity(activity.id),
-                                ),
-                              ],
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            interval: 20,
+                            getTitlesWidget: (value, meta) => Text(
+                              value.toInt().toString(),
+                              style: TextStyle(color: Colors.grey[600], fontSize: 10),
                             ),
-                          ],
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 25,
+                            getTitlesWidget: (value, meta) {
+                              if (value.toInt() < monthlyTrendData.length) {
+                                return Text(
+                                  monthlyTrendData[value.toInt()].month,
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 10),
+                                );
+                              }
+                              return const Text('');
+                            },
+                          ),
+                        ),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: monthlyTrendData.asMap().entries.map((entry) {
+                            return FlSpot(entry.key.toDouble(), entry.value.approvals.toDouble());
+                          }).toList(),
+                          isCurved: true,
+                          color: Colors.blue.shade600,
+                          barWidth: 2,
+                          dotData: const FlDotData(show: false),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: Colors.blue.shade100,
+                          ),
+                        ),
+                        LineChartBarData(
+                          spots: monthlyTrendData.asMap().entries.map((entry) {
+                            return FlSpot(entry.key.toDouble(), entry.value.activities.toDouble());
+                          }).toList(),
+                          isCurved: true,
+                          color: Colors.green.shade600,
+                          barWidth: 2,
+                          dotData: const FlDotData(show: false),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildLegendItem('Approved', Colors.blue.shade600),
+                    const SizedBox(width: 20),
+                    _buildLegendItem('Uploaded', Colors.green.shade600),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChartTab(String label, bool isSelected) {
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isSelected ? Colors.blue.shade600 : Colors.grey[200],
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: isSelected ? Colors.white : Colors.grey[700],
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomRow() {
+    // Load sample data if empty
+    if (recentActivities.isEmpty) {
+      recentActivities = [
+        RecentActivity(
+          id: 1,
+          student: "Alice Johnson",
+          activity: "Research Paper Publication",
+          department: "Computer Science",
+          status: ActivityStatus.pending,
+          date: "2024-01-15",
+        ),
+        RecentActivity(
+          id: 2,
+          student: "Bob Smith",
+          activity: "Hackathon Winner",
+          department: "Electronics",
+          status: ActivityStatus.approved,
+          date: "2024-01-14",
+        ),
+        RecentActivity(
+          id: 3,
+          student: "Carol Davis",
+          activity: "Industry Internship",
+          department: "Mechanical",
+          status: ActivityStatus.pending,
+          date: "2024-01-13",
+        ),
+      ];
+    }
+
+    if (activityApprovalData.isEmpty) {
+      activityApprovalData = [
+        ActivityApprovalData(name: "Completed", value: 65, color: Colors.green.shade600),
+        ActivityApprovalData(name: "In Progress", value: 25, color: Colors.orange.shade600),
+        ActivityApprovalData(name: "Pending", value: 10, color: Colors.red.shade600),
+      ];
+    }
+
+    return Column(
+      children: [
+        // Recent Uploads
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Recent Uploads',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Latest activity submissions',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...recentActivities.map((activity) => _buildActivityItem(activity)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Student Portfolios and Reports Row
+        Row(
+          children: [
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Student Portfolios',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pushNamed(context, '/portfolios'),
+                            child: const Text('View All', style: TextStyle(fontSize: 12)),
+                          ),
                         ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Recent submissions and top performers',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildPortfolioItem('Alice Johnson', 'Computer Science', '95% complete', 0.95),
+                      _buildPortfolioItem('Bob Smith', 'Electronics', '90% complete', 0.90),
+                      _buildPortfolioItem('Carol Davis', 'Mechanical', '88% complete', 0.88),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Reports & Analytics',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pushNamed(context, '/reports'),
+                            child: const Text('Download Report', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Portfolio completion status',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 120,
+                        child: PieChart(
+                          PieChartData(
+                            sections: activityApprovalData.map((data) {
+                              final total = activityApprovalData.fold<int>(0, (sum, item) => sum + item.value);
+                              final percentage = total > 0 ? (data.value / total * 100).round() : 0;
+                              return PieChartSectionData(
+                                value: data.value.toDouble(),
+                                title: '$percentage%',
+                                color: data.color,
+                                radius: 40,
+                                titleStyle: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              );
+                            }).toList(),
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 30,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: activityApprovalData
+                            .map((data) => _buildLegendItem(data.name, data.color))
+                            .toList(),
                       ),
                     ],
                   ),
-                );
-              }).toList(),
+                ),
+              ),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildActivityItem(RecentActivity activity) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: Colors.grey[300],
+            child: Text(
+              activity.student.isNotEmpty ? activity.student[0] : '',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  activity.student,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  activity.activity,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  '${activity.department} • ${activity.date}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildStatusBadge(activity.status),
+        ],
       ),
     );
   }
@@ -866,24 +1385,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     switch (status) {
       case ActivityStatus.approved:
-        backgroundColor = Colors.green[100]!;
-        textColor = Colors.green[800]!;
+        backgroundColor = Colors.green.shade100;
+        textColor = Colors.green.shade700;
         text = 'approved';
         break;
       case ActivityStatus.rejected:
-        backgroundColor = Colors.red[100]!;
-        textColor = Colors.red[800]!;
+        backgroundColor = Colors.red.shade100;
+        textColor = Colors.red.shade700;
         text = 'rejected';
         break;
       case ActivityStatus.pending:
-        backgroundColor = Colors.orange[100]!;
-        textColor = Colors.orange[800]!;
+        backgroundColor = Colors.orange.shade100;
+        textColor = Colors.orange.shade700;
         text = 'pending';
         break;
     }
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
@@ -892,274 +1411,190 @@ class _AdminDashboardState extends State<AdminDashboard> {
         text,
         style: TextStyle(
           color: textColor,
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: FontWeight.w500,
         ),
       ),
     );
   }
 
-  Widget _buildPortfolioAndReports() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 1024) {
-          return Column(
-            children: [
-              _buildPortfolioOverview(),
-              SizedBox(height: 24),
-              _buildReportsAnalytics(),
-            ],
-          );
-        } else {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _buildPortfolioOverview()),
-              SizedBox(width: 24),
-              Expanded(child: _buildReportsAnalytics()),
-            ],
-          );
-        }
-      },
-    );
-  }
-
-  Widget _buildPortfolioOverview() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Portfolio Overview',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+  Widget _buildPortfolioItem(String name, String department, String completion, double progress) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: Colors.grey[300],
+            child: Text(
+              name.isNotEmpty ? name[0] : '',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
               ),
             ),
-            SizedBox(height: 4),
-            Text(
-              'Department-wise student and faculty distribution',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            SizedBox(height: 20),
-            Container(
-              height: 300,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: departmentData.isNotEmpty
-                      ? departmentData.map((d) => d.students).reduce((a, b) => a > b ? a : b).toDouble() + 20
-                      : 160,
-                  barTouchData: BarTouchData(enabled: false),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (double value, TitleMeta meta) {
-                          if (value.toInt() < departmentData.length) {
-                            String name = departmentData[value.toInt()].name;
-                            String shortName = name.length > 8 ? name.substring(0, 8) : name;
-                            return Text(
-                              shortName,
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 10,
-                              ),
-                            );
-                          }
-                          return Text('');
-                        },
-                      ),
-                    ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 40,
-                        getTitlesWidget: (value, meta) {
-                          return Text(
-                            value.toInt().toString(),
-                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                          );
-                        },
-                      ),
-                    ),
-                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
-                  borderData: FlBorderData(show: false),
-                  barGroups: departmentData.asMap().entries.map((entry) {
-                    return BarChartGroupData(
-                      x: entry.key,
-                      barRods: [
-                        BarChartRodData(
-                          toY: entry.value.students.toDouble(),
-                          color: Colors.blue,
-                          width: 16,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                ),
+                Text(
+                  department,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                completion,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReportsAnalytics() {
-    final totalActivities = activityApprovalData.fold(0, (sum, item) => sum + item.value);
-
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Reports & Analytics',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Activity approval statistics and insights',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            SizedBox(height: 20),
-            Container(
-              height: 300,
-              child: totalActivities > 0 ? PieChart(
-                PieChartData(
-                  sections: activityApprovalData.map((data) {
-                    final percentage = (data.value / totalActivities * 100).round();
-                    return PieChartSectionData(
-                      value: data.value.toDouble(),
-                      title: '$percentage%',
-                      color: data.color,
-                      radius: 100,
-                      titleStyle: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    );
-                  }).toList(),
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 40,
+              Container(
+                width: 60,
+                height: 4,
+                margin: const EdgeInsets.only(top: 2),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              ) : Center(child: Text('No data available')),
-            ),
-            SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: activityApprovalData.map((data) =>
-                  _buildLegendItem(data.name, data.color)
-              ).toList(),
-            ),
-          ],
-        ),
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: progress,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: progress > 0.9 ? Colors.green.shade600 : Colors.blue.shade600,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildLegendItem(String label, Color color) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 12,
-          height: 12,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        SizedBox(width: 4),
+        const SizedBox(width: 4),
         Text(
           label,
-          style: TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: 10),
         ),
       ],
     );
   }
 }
 
-class StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final String change;
-  final ChangeType changeType;
-  final IconData icon;
-
-  const StatCard({
-    Key? key,
-    required this.title,
-    required this.value,
-    required this.change,
-    required this.changeType,
-    required this.icon,
-  }) : super(key: key);
-
+// Placeholder pages for navigation
+class DepartmentsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Icon(
-                  icon,
-                  color: Colors.grey[400],
-                  size: 20,
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[900],
-              ),
-            ),
-            SizedBox(height: 4),
-            Text(
-              change,
-              style: TextStyle(
-                fontSize: 12,
-                color: changeType == ChangeType.positive ? Colors.green : Colors.red,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Departments')),
+      body: const Center(
+        child: Text('Departments page is under development.\nCurrently showing the Admin departments section.'),
+      ),
+    );
+  }
+}
+
+class FacultyPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Faculty/HOD')),
+      body: const Center(
+        child: Text('Faculty page is under development.\nCurrently showing the Admin faculty section.'),
+      ),
+    );
+  }
+}
+
+class StudentsPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Students')),
+      body: const Center(
+        child: Text('Students page is under development.\nCurrently showing the Admin students section.'),
+      ),
+    );
+  }
+}
+
+class ActivitiesPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Activities')),
+      body: const Center(
+        child: Text('Activities page is under development.\nCurrently showing the Admin activities section.'),
+      ),
+    );
+  }
+}
+
+class PortfoliosPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Portfolios')),
+      body: const Center(
+        child: Text('Portfolios page is under development.\nCurrently showing the Admin portfolios section.'),
+      ),
+    );
+  }
+}
+
+class ReportsPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Reports')),
+      body: const Center(
+        child: Text('Reports page is under development.\nCurrently showing the Admin reports section.'),
+      ),
+    );
+  }
+}
+
+class SettingsPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings')),
+      body: const Center(
+        child: Text('Settings page is under development.\nCurrently showing the Admin settings section.'),
       ),
     );
   }
@@ -1221,139 +1656,3 @@ class ActivityApprovalData {
 }
 
 enum ActivityStatus { approved, pending, rejected }
-enum ChangeType { positive, negative }
-
-// Supabase Database Schema SQL (Run these in your Supabase SQL Editor)
-/*
--- Create departments table
-CREATE TABLE departments (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  student_count INTEGER DEFAULT 0,
-  faculty_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create students table
-CREATE TABLE students (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) UNIQUE NOT NULL,
-  department_id INTEGER REFERENCES departments(id),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create faculty table
-CREATE TABLE faculty (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) UNIQUE NOT NULL,
-  department_id INTEGER REFERENCES departments(id),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create activities table
-CREATE TABLE activities (
-  id SERIAL PRIMARY KEY,
-  student_id INTEGER REFERENCES students(id),
-  activity_name VARCHAR(200) NOT NULL,
-  description TEXT,
-  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create monthly_trends table
-CREATE TABLE monthly_trends (
-  id SERIAL PRIMARY KEY,
-  month VARCHAR(10) NOT NULL,
-  activities INTEGER DEFAULT 0,
-  approvals INTEGER DEFAULT 0,
-  year INTEGER DEFAULT EXTRACT(YEAR FROM NOW()),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Insert sample data
-
--- Sample departments
-INSERT INTO departments (name, student_count, faculty_count) VALUES
-('Computer Science', 145, 12),
-('Electronics', 98, 8),
-('Mechanical', 112, 10),
-('Civil', 87, 7),
-('Business', 134, 9);
-
--- Sample students
-INSERT INTO students (name, email, department_id) VALUES
-('Alice Johnson', 'alice@example.com', 1),
-('Bob Smith', 'bob@example.com', 2),
-('Carol Davis', 'carol@example.com', 3),
-('David Wilson', 'david@example.com', 4),
-('Eva Brown', 'eva@example.com', 5);
-
--- Sample faculty
-INSERT INTO faculty (name, email, department_id) VALUES
-('Dr. John Doe', 'john@example.com', 1),
-('Dr. Jane Smith', 'jane@example.com', 2),
-('Dr. Mike Johnson', 'mike@example.com', 3);
-
--- Sample activities
-INSERT INTO activities (student_id, activity_name, description, status) VALUES
-(1, 'Research Paper Publication', 'Published research on AI', 'pending'),
-(2, 'Hackathon Winner', 'Won first place in tech hackathon', 'approved'),
-(3, 'Industry Internship', 'Completed internship at major company', 'pending'),
-(4, 'Conference Presentation', 'Presented paper at international conference', 'rejected'),
-(5, 'Startup Founder', 'Founded tech startup', 'approved');
-
--- Sample monthly trends
-INSERT INTO monthly_trends (month, activities, approvals, year) VALUES
-('Jan', 45, 38, 2024),
-('Feb', 52, 45, 2024),
-('Mar', 48, 41, 2024),
-('Apr', 61, 55, 2024),
-('May', 58, 52, 2024),
-('Jun', 67, 61, 2024);
-
--- Enable Row Level Security (RLS)
-ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE students ENABLE ROW LEVEL SECURITY;
-ALTER TABLE faculty ENABLE ROW LEVEL SECURITY;
-ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE monthly_trends ENABLE ROW LEVEL SECURITY;
-
--- Create policies for authenticated users (admins)
-CREATE POLICY "Enable all operations for authenticated users" ON departments FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Enable all operations for authenticated users" ON students FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Enable all operations for authenticated users" ON faculty FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Enable all operations for authenticated users" ON activities FOR ALL USING (auth.role() = 'authenticated');
-CREATE POLICY "Enable all operations for authenticated users" ON monthly_trends FOR ALL USING (auth.role() = 'authenticated');
-
--- Create functions to update counts automatically
-CREATE OR REPLACE FUNCTION update_department_counts()
-RETURNS TRIGGER AS $
-BEGIN
-  -- Update student count
-  UPDATE departments
-  SET student_count = (
-    SELECT COUNT(*) FROM students WHERE department_id = departments.id
-  );
-
-  -- Update faculty count
-  UPDATE departments
-  SET faculty_count = (
-    SELECT COUNT(*) FROM faculty WHERE department_id = departments.id
-  );
-
-  RETURN NULL;
-END;
-$ LANGUAGE plpgsql;
-
--- Create triggers
-CREATE TRIGGER update_student_count
-  AFTER INSERT OR UPDATE OR DELETE ON students
-  FOR EACH STATEMENT EXECUTE FUNCTION update_department_counts();
-
-CREATE TRIGGER update_faculty_count
-  AFTER INSERT OR UPDATE OR DELETE ON faculty
-  FOR EACH STATEMENT EXECUTE FUNCTION update_department_counts();
-*/
