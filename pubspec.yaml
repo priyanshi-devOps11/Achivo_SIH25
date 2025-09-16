@@ -29,6 +29,7 @@ dependencies:
   # Shared preferences for local storage
   shared_preferences: ^2.2.3
   supabase_flutter: ^2.3.4
+  fl_chart: ^0.65.0
   flutter_dotenv: ^5.1.0
 
 dev_dependencies:
@@ -45,3 +46,4 @@ flutter:
 
   assets:
     - assets/.env.local
+    - assets/.env.example

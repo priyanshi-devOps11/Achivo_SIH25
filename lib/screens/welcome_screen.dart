@@ -14,87 +14,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     with TickerProviderStateMixin {
   // Page control
   bool _showWelcomeForm = false;
-
-  // ✅ Save form data to Supabase
-  Future<void> _saveUserDataToSupabase() async {
-    try {
-      final supabase = Supabase.instance.client;
-      final user = supabase.auth.currentUser;
-
-      if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("No user logged in")),
-        );
-        return;
-      }
-
-      final updates = {
-        'id': user.id,
-        'country': selectedCountryName,
-        'state': selectedStateName,
-        'institute': selectedInstituteName,
-        'role': selectedRole?.toLowerCase(),
-        'country_id': int.tryParse(selectedCountry ?? ''),
-        'state_id': int.tryParse(selectedState ?? ''),
-        'institute_id': int.tryParse(selectedInstitute ?? ''),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-
-      final response = await supabase.from('profiles').upsert(updates);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Profile updated successfully!")),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error saving profile: $e")),
-        );
-      }
-    }
-  }
-
-  // ✅ Continue button logic
-  void handleContinue() async {
-    if (isFormComplete) {
-      await _saveUserDataToSupabase();
-
-      // Navigate to role-specific auth page
-      String route;
-      switch (selectedRole!.toLowerCase()) {
-        case 'admin':
-          route = '/auth-admin';
-          break;
-        case 'hod':
-          route = '/auth-hod';
-          break;
-        case 'faculty':
-          route = '/auth-faculty';
-          break;
-        case 'student':
-          route = '/auth-student';
-          break;
-        default:
-          route = '/auth-student';
-      }
-
-      if (mounted) {
-        Navigator.pushNamed(context, route, arguments: {
-          'country': selectedCountryName,
-          'state': selectedStateName,
-          'institute': selectedInstituteName,
-          'role': selectedRole,
-        });
-      }
-    }
-  }
+  bool _isInitialized = false;
 
   // Form data
-  String? selectedCountry; // This will store the ID
-  String? selectedState; // This will store the ID
-  String? selectedInstitute; // This will store the ID
+  String? selectedCountry;
+  String? selectedState;
+  String? selectedInstitute;
   String? selectedRole;
 
   // Store names for display and saving
@@ -126,11 +51,54 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   // Loading states
   bool isLoadingStates = false;
   bool isLoadingInstitutes = false;
+  bool isLoadingCountries = false;
 
-  // Supabase data fetching functions
+  // Get Supabase client safely
+  SupabaseClient get supabase => Supabase.instance.client;
+
+  // Safe context operations
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: isError ? 5 : 3),
+          ),
+        );
+      }
+    });
+  }
+
+  // Safe navigation
+  void _navigateToRoute(String route, {Map<String, dynamic>? arguments}) {
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.pushNamed(context, route, arguments: arguments);
+      }
+    });
+  }
+
+  // Enhanced data fetching with better error handling
   Future<void> _fetchCountries() async {
+    if (!mounted) return;
+
     try {
-      final supabase = Supabase.instance.client;
+      if (!Supabase.instance.isInitialized) {
+        _showSnackBar("Database not initialized. Please restart the app.", isError: true);
+        return;
+      }
+
+      setState(() {
+        isLoadingCountries = true;
+      });
+
       final response = await supabase
           .from('countries')
           .select('id, name')
@@ -139,19 +107,28 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       if (mounted) {
         setState(() {
           countries = List<Map<String, dynamic>>.from(response as List);
+          isLoadingCountries = false;
         });
       }
     } catch (e) {
       print('Error fetching countries: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error fetching countries: $e")),
-        );
+        setState(() {
+          isLoadingCountries = false;
+        });
+
+        if (e.toString().contains('relation "countries" does not exist')) {
+          _showSnackBar("Database tables not set up. Please check your database schema.", isError: true);
+        } else {
+          _showSnackBar("Error loading countries. Please check your internet connection.", isError: true);
+        }
       }
     }
   }
 
   Future<void> _fetchStates(String countryId) async {
+    if (!mounted) return;
+
     try {
       setState(() {
         isLoadingStates = true;
@@ -163,7 +140,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         selectedInstituteName = null;
       });
 
-      final supabase = Supabase.instance.client;
       final response = await supabase
           .from('states')
           .select('id, name')
@@ -182,14 +158,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         setState(() {
           isLoadingStates = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error fetching states: $e")),
-        );
+        _showSnackBar("Error loading states: ${e.toString()}", isError: true);
       }
     }
   }
 
   Future<void> _fetchInstitutes(String stateId) async {
+    if (!mounted) return;
+
     try {
       setState(() {
         isLoadingInstitutes = true;
@@ -198,7 +174,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         selectedInstituteName = null;
       });
 
-      final supabase = Supabase.instance.client;
       final response = await supabase
           .from('institutes')
           .select('id, name')
@@ -217,10 +192,109 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         setState(() {
           isLoadingInstitutes = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error fetching institutes: $e")),
-        );
+        _showSnackBar("Error loading institutes: ${e.toString()}", isError: true);
       }
+    }
+  }
+
+  // Enhanced save function
+  Future<void> _saveUserDataToSupabase() async {
+    try {
+      final user = supabase.auth.currentUser;
+
+      if (user == null) {
+        _showSnackBar("No user logged in", isError: true);
+        return;
+      }
+
+      final updates = {
+        'id': user.id,
+        'country': selectedCountryName,
+        'state': selectedStateName,
+        'institute': selectedInstituteName,
+        'role': selectedRole?.toLowerCase(),
+        'country_id': int.tryParse(selectedCountry ?? ''),
+        'state_id': int.tryParse(selectedState ?? ''),
+        'institute_id': int.tryParse(selectedInstitute ?? ''),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      await supabase.from('profiles').upsert(updates);
+      _showSnackBar("Profile updated successfully!");
+    } catch (e) {
+      print('Error saving profile: $e');
+      _showSnackBar("Error saving profile: ${e.toString()}", isError: true);
+      rethrow; // Re-throw to handle in calling function
+    }
+  }
+
+  // Enhanced continue handler
+  void handleContinue() async {
+    if (!isFormComplete) {
+      _showSnackBar("Please complete all fields", isError: true);
+      return;
+    }
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Colors.purple.shade500),
+                const SizedBox(height: 16),
+                const Text('Saving your information...'),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await _saveUserDataToSupabase();
+
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+
+      // Navigate to role-specific auth page
+      String route;
+      switch (selectedRole!.toLowerCase()) {
+        case 'admin':
+          route = '/auth-admin';
+          break;
+        case 'hod':
+          route = '/auth-hod';
+          break;
+        case 'faculty':
+          route = '/auth-faculty';
+          break;
+        case 'student':
+          route = '/auth-student';
+          break;
+        default:
+          route = '/auth-student';
+      }
+
+      _navigateToRoute(route, arguments: {
+        'country': selectedCountryName,
+        'state': selectedStateName,
+        'institute': selectedInstituteName,
+        'role': selectedRole,
+      });
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+      _showSnackBar("Error during continue process: ${e.toString()}", isError: true);
     }
   }
 
@@ -228,6 +302,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   void initState() {
     super.initState();
 
+    // Initialize animation controllers
     _backgroundController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
@@ -253,6 +328,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       vsync: this,
     );
 
+    // Initialize animations
     _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut),
     );
@@ -276,15 +352,26 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     ).animate(CurvedAnimation(
         parent: _transitionController, curve: Curves.easeInOut));
 
+    // Start animations
     _backgroundController.forward();
     _contentController.forward();
     _iconsController.forward();
-
-    // Start floating animation and repeat
     _floatingController.repeat(reverse: true);
 
-    // Fetch countries on init
-    _fetchCountries();
+    _isInitialized = true;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_isInitialized && countries.isEmpty && !isLoadingCountries) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && Supabase.instance.isInitialized) {
+          _fetchCountries();
+        }
+      });
+    }
   }
 
   @override
@@ -298,6 +385,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 
   void _navigateToWelcomeForm() {
+    if (countries.isEmpty && !isLoadingCountries) {
+      _showSnackBar("Please wait while we load the data...", isError: true);
+      _fetchCountries();
+      return;
+    }
+
     setState(() {
       _showWelcomeForm = true;
     });
@@ -471,9 +564,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 child: Text(
                                   'Achivo',
                                   style: TextStyle(
-                                    fontSize:
-                                    MediaQuery.of(context).size.width *
-                                        0.18,
+                                    fontSize: MediaQuery.of(context).size.width * 0.18,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                     letterSpacing: -2,
@@ -531,9 +622,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               borderRadius: BorderRadius.circular(30),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.purple.shade300.withOpacity(
-                                    0.6,
-                                  ),
+                                  color: Colors.purple.shade300.withOpacity(0.6),
                                   blurRadius: 20,
                                   offset: const Offset(0, 8),
                                   spreadRadius: 2,
@@ -636,9 +725,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     child: IconButton(
                       onPressed: () {
                         _transitionController.reverse().then((_) {
-                          setState(() {
-                            _showWelcomeForm = false;
-                          });
+                          if (mounted) {
+                            setState(() {
+                              _showWelcomeForm = false;
+                            });
+                          }
                         });
                       },
                       icon: const Icon(Icons.arrow_back, size: 28),
@@ -754,7 +845,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           child: DropdownButtonFormField<String>(
             value: selectedCountry,
             onChanged: (value) {
-              if (value != null) {
+              if (value != null && countries.isNotEmpty) {
                 final country = countries.firstWhere((c) => c['id'].toString() == value);
                 setState(() {
                   selectedCountry = value;
@@ -770,7 +861,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               }
             },
             decoration: InputDecoration(
-              hintText: 'Select country',
+              hintText: isLoadingCountries ? 'Loading countries...' : 'Select country',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: Colors.white.withOpacity(0.8),
@@ -790,6 +881,19 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 horizontal: 16,
                 vertical: 16,
               ),
+              suffixIcon: isLoadingCountries
+                  ? Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade300),
+                  ),
+                ),
+              )
+                  : null,
             ),
             items: countries.map((country) {
               return DropdownMenuItem(
@@ -1054,8 +1158,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       child: ElevatedButton(
         onPressed: isFormComplete ? handleContinue : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor:
-          isFormComplete ? Colors.purple.shade500 : Colors.grey.shade400,
+          backgroundColor: isFormComplete ? Colors.purple.shade500 : Colors.grey.shade400,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
           shape: RoundedRectangleBorder(
