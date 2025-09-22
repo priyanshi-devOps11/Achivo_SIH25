@@ -1,9 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 
-// Initialize Supabase client
-final supabase = Supabase.instance.client;
+// Global Supabase client accessor
+SupabaseClient get supabase => Supabase.instance.client;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    // Load environment variables
+    await dotenv.load(fileName: "assets/.env.local");
+
+    final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'] ?? 'https://your-project.supabase.co';
+    final supabaseAnonKey = dotenv.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ?? 'your-anon-key';
+
+    print('🔄 Initializing Supabase...');
+
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+      debug: true,
+      authOptions: const FlutterAuthClientOptions(
+        authFlowType: AuthFlowType.pkce,
+      ),
+    );
+
+    print('✅ Supabase initialized successfully');
+
+  } catch (e) {
+    print('❌ Error initializing Supabase: $e');
+    // Continue with app - will use dummy data
+  }
+
+  runApp(const FacultyPortalApp());
+}
+
+class FacultyPortalApp extends StatelessWidget {
+  const FacultyPortalApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Faculty Portal',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        primaryColor: const Color(0xFF3B82F6),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3B82F6),
+          brightness: Brightness.light,
+        ),
+        useMaterial3: true,
+      ),
+      home: const FacultyDashboard(),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
 
 // Data Models
 class Student {
@@ -33,16 +87,18 @@ class Student {
 
   factory Student.fromJson(Map<String, dynamic> json) {
     return Student(
-      id: json['id'],
-      name: json['name'],
-      rollNumber: json['roll_number'],
-      year: json['year'],
-      branch: json['branch'],
-      email: json['email'],
-      phone: json['phone'],
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? '',
+      rollNumber: json['roll_number'] ?? '',
+      year: json['year'] ?? '',
+      branch: json['branch'] ?? '',
+      email: json['email'] ?? '',
+      phone: json['phone'] ?? '',
       parentName: json['parent_name'],
       parentPhone: json['parent_phone'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at']) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 
@@ -77,10 +133,12 @@ class AttendanceRecord {
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     return AttendanceRecord(
-      id: json['id'],
-      studentId: json['student_id'],
-      date: DateTime.parse(json['date']),
-      present: json['present'],
+      id: json['id']?.toString() ?? '',
+      studentId: json['student_id']?.toString() ?? '',
+      date: json['date'] != null
+          ? DateTime.tryParse(json['date']) ?? DateTime.now()
+          : DateTime.now(),
+      present: json['present'] ?? false,
       subject: json['subject'],
     );
   }
@@ -116,13 +174,15 @@ class Mark {
 
   factory Mark.fromJson(Map<String, dynamic> json) {
     return Mark(
-      id: json['id'],
-      studentId: json['student_id'],
-      subjectId: json['subject_id'],
-      marks: json['marks'],
-      maxMarks: json['max_marks'],
-      examType: json['exam_type'],
-      createdAt: DateTime.parse(json['created_at']),
+      id: json['id']?.toString() ?? '',
+      studentId: json['student_id']?.toString() ?? '',
+      subjectId: json['subject_id']?.toString() ?? '',
+      marks: json['marks'] ?? 0,
+      maxMarks: json['max_marks'] ?? 100,
+      examType: json['exam_type'] ?? 'midterm',
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at']) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 
@@ -154,39 +214,20 @@ class Subject {
 
   factory Subject.fromJson(Map<String, dynamic> json) {
     return Subject(
-      id: json['id'],
-      name: json['name'],
-      maxMarks: json['max_marks'],
-      branch: json['branch'],
-      year: json['year'],
-    );
-  }
-}
-
-// Main Faculty Dashboard App
-class FacultyDashboardApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Faculty Dashboard',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        primaryColor: const Color(0xFF3B82F6),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF3B82F6),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-      ),
-      home: FacultyDashboard(),
-      debugShowCheckedModeBanner: false,
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? '',
+      maxMarks: json['max_marks'] ?? 100,
+      branch: json['branch'] ?? '',
+      year: json['year'] ?? '',
     );
   }
 }
 
 class FacultyDashboard extends StatefulWidget {
+  const FacultyDashboard({super.key});
+
   @override
-  _FacultyDashboardState createState() => _FacultyDashboardState();
+  State<FacultyDashboard> createState() => _FacultyDashboardState();
 }
 
 class _FacultyDashboardState extends State<FacultyDashboard> {
@@ -206,52 +247,63 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   }
 
   Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
     try {
-      await Future.wait([
-        _loadStudents(),
-        _loadSubjects(),
-        _loadAttendance(),
-        _loadMarks(),
-      ]);
+      if (Supabase.instance.isInitialized) {
+        await _loadFromSupabase();
+      } else {
+        print('❌ Supabase not initialized. Cannot load data.');
+      }
     } catch (e) {
-      print('Error loading data: $e');
+      print('❌ Error loading from Supabase: $e');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadStudents() async {
-    final response = await supabase.from('students').select();
-    setState(() {
-      _students =
-          (response as List).map((json) => Student.fromJson(json)).toList();
-    });
-  }
+  Future<void> _loadFromSupabase() async {
+    try {
+      // Load Students
+      final studentsResponse = await supabase
+          .from('students')
+          .select()
+          .order('name', ascending: true);
+      _students = (studentsResponse as List)
+          .map((json) => Student.fromJson(json))
+          .toList();
 
-  Future<void> _loadSubjects() async {
-    final response = await supabase.from('subjects').select();
-    setState(() {
-      _subjects =
-          (response as List).map((json) => Subject.fromJson(json)).toList();
-    });
-  }
+      // Load Subjects
+      final subjectsResponse = await supabase
+          .from('subjects')
+          .select()
+          .order('name', ascending: true);
+      _subjects = (subjectsResponse as List)
+          .map((json) => Subject.fromJson(json))
+          .toList();
 
-  Future<void> _loadAttendance() async {
-    final response = await supabase.from('attendance').select();
-    setState(() {
-      _attendanceRecords = (response as List)
+      // Load Attendance
+      final attendanceResponse = await supabase
+          .from('attendance')
+          .select()
+          .order('date', ascending: false);
+      _attendanceRecords = (attendanceResponse as List)
           .map((json) => AttendanceRecord.fromJson(json))
           .toList();
-    });
-  }
 
-  Future<void> _loadMarks() async {
-    final response = await supabase.from('marks').select();
-    setState(() {
-      _marks = (response as List).map((json) => Mark.fromJson(json)).toList();
-    });
+      // Load Marks
+      final marksResponse = await supabase
+          .from('marks')
+          .select()
+          .order('created_at', ascending: false);
+      _marks = (marksResponse as List)
+          .map((json) => Mark.fromJson(json))
+          .toList();
+
+      print('✅ Data loaded from Supabase successfully');
+    } catch (e) {
+      print('Error loading from Supabase: $e');
+      rethrow;
+    }
   }
 
   @override
@@ -262,25 +314,25 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
         title: Row(
           children: [
             Container(
-              padding: EdgeInsets.all(8),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(Icons.school, color: Colors.white, size: 20),
+              child: const Icon(Icons.school, color: Colors.white, size: 20),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             ShaderMask(
-              shaderCallback: (bounds) => LinearGradient(
+              shaderCallback: (bounds) => const LinearGradient(
                 colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ).createShader(bounds),
-              child: Text(
+              child: const Text(
                 'Faculty Portal',
                 style: TextStyle(
                   fontSize: 20,
@@ -295,19 +347,19 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
         foregroundColor: Colors.black87,
         elevation: 1,
         leading: IconButton(
-          icon: Icon(Icons.menu),
+          icon: const Icon(Icons.menu),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
       ),
       drawer: _buildDrawer(),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator())
           : _buildBody(),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddStudentDialog(),
-        icon: Icon(Icons.person_add),
-        label: Text('Add Student'),
-        backgroundColor: Color(0xFF3B82F6),
+        icon: const Icon(Icons.person_add),
+        label: const Text('Add Student'),
+        backgroundColor: const Color(0xFF3B82F6),
       ),
     );
   }
@@ -326,7 +378,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           Container(
             height: 120,
             width: double.infinity,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
                 begin: Alignment.topLeft,
@@ -335,19 +387,19 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ),
             child: SafeArea(
               child: Padding(
-                padding: EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
                     Container(
-                      padding: EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.school, color: Colors.white, size: 24),
+                      child: const Icon(Icons.school, color: Colors.white, size: 24),
                     ),
-                    SizedBox(width: 12),
-                    Text(
+                    const SizedBox(width: 12),
+                    const Text(
                       'Faculty Portal',
                       style: TextStyle(
                         color: Colors.white,
@@ -362,13 +414,13 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           ),
           Expanded(
             child: ListView(
-              padding: EdgeInsets.all(8),
+              padding: const EdgeInsets.all(8),
               children: menuItems.map((item) {
                 final isSelected = _selectedIndex == item['index'];
                 return Container(
-                  margin: EdgeInsets.symmetric(vertical: 2),
+                  margin: const EdgeInsets.symmetric(vertical: 2),
                   decoration: BoxDecoration(
-                    color: isSelected ? Color(0xFF3B82F6) : null,
+                    color: isSelected ? const Color(0xFF3B82F6) : null,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: ListTile(
@@ -380,8 +432,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                       item['title'] as String,
                       style: TextStyle(
                         color: isSelected ? Colors.white : Colors.grey[800],
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                     onTap: () {
@@ -419,30 +470,29 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     final today = DateTime.now();
     final todayAttendance = _attendanceRecords
         .where((record) =>
-            record.date.day == today.day &&
-            record.date.month == today.month &&
-            record.date.year == today.year)
+    record.date.day == today.day &&
+        record.date.month == today.month &&
+        record.date.year == today.year)
         .toList();
 
-    final presentToday =
-        todayAttendance.where((record) => record.present).length;
+    final presentToday = todayAttendance.where((record) => record.present).length;
     final attendanceRate = todayAttendance.isNotEmpty
         ? (presentToday / todayAttendance.length * 100).round()
         : 0;
 
     final recentActivities = [
-      'Attendance marked for CS101 - 2 hours ago',
-      'Grades updated for Database Systems - 4 hours ago',
-      'New student enrolled: Sarah Wilson - 1 day ago',
-      'Assignment submitted by 45 students - 2 days ago',
+      'Attendance marked for ${_subjects.isNotEmpty ? _subjects.first.name : "N/A"} - 2 hours ago',
+      'Grades updated for ${_subjects.length > 1 ? _subjects[1].name : "N/A"} - 4 hours ago',
+      'New student enrolled: ${_students.isNotEmpty ? _students.first.name : "N/A"} - 1 day ago',
+      'Assignment submitted by ${_students.length} students - 2 days ago',
     ];
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Faculty Dashboard',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
@@ -450,13 +500,13 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             DateFormat('EEEE, MMMM d, y').format(DateTime.now()),
             style: TextStyle(color: Colors.grey[600], fontSize: 16),
           ),
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           // Stats Grid
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
+            physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
             childAspectRatio: 1.5,
@@ -464,72 +514,71 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               _buildStatsCard(
                 'Total Students',
                 '${_students.length}',
-                '+12 this month',
+                '${_students.length > 0 ? '+${(_students.length * 0.1).round()}' : '0'} this month',
                 Icons.people,
-                Color(0xFF3B82F6),
+                const Color(0xFF3B82F6),
               ),
               _buildStatsCard(
                 "Today's Attendance",
                 '$attendanceRate%',
-                '+5% from yesterday',
+                'from ${_students.length} students',
                 Icons.calendar_today,
                 Colors.green,
               ),
               _buildStatsCard(
                 'Active Courses',
                 '${_subjects.length}',
-                '2 new this semester',
+                'from all branches',
                 Icons.book,
                 Colors.purple,
               ),
               _buildStatsCard(
                 'Average Grade',
-                '85.4%',
-                '+2.1% this term',
+                '${_calculateClassAverage()}%',
+                'from ${_marks.length} marks',
                 Icons.trending_up,
                 Colors.orange,
               ),
             ],
           ),
 
-          SizedBox(height: 32),
+          const SizedBox(height: 32),
 
           // Recent Activities
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
                       Icon(Icons.access_time, size: 20),
                       SizedBox(width: 8),
                       Text(
                         'Recent Activities',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ...recentActivities.map((activity) => Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: Color(0xFF3B82F6),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(child: Text(activity)),
-                          ],
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
-                      )),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(activity)),
+                      ],
+                    ),
+                  )),
                 ],
               ),
             ),
@@ -539,12 +588,11 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     );
   }
 
-  Widget _buildStatsCard(
-      String title, String value, String change, IconData icon, Color color) {
+  Widget _buildStatsCard(String title, String value, String change, IconData icon, Color color) {
     return Card(
       elevation: 2,
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -561,12 +609,12 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                 Icon(icon, size: 20, color: color),
               ],
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               value,
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               change,
               style: TextStyle(fontSize: 12, color: Colors.grey[500]),
@@ -581,8 +629,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     final today = DateTime.now();
     final todayDate = DateFormat('yyyy-MM-dd').format(today);
     final todayAttendance = _attendanceRecords
-        .where((record) =>
-            DateFormat('yyyy-MM-dd').format(record.date) == todayDate)
+        .where((record) => DateFormat('yyyy-MM-dd').format(record.date) == todayDate)
         .toList();
 
     final Map<String, bool> attendanceStatus = {};
@@ -590,19 +637,18 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
       attendanceStatus[record.studentId] = record.present;
     }
 
-    final presentCount =
-        attendanceStatus.values.where((present) => present).length;
+    final presentCount = attendanceStatus.values.where((present) => present).length;
     final absentCount = _students.length - presentCount;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -611,20 +657,20 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                   ),
                   Text(
                     'Track and manage daily attendance',
-                    style: TextStyle(color: Colors.grey[600]),
+                    style: TextStyle(color: Colors.grey),
                   ),
                 ],
               ),
               Container(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(color: Colors.grey.shade300),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.calendar_today, size: 16),
-                    SizedBox(width: 8),
+                    const Icon(Icons.calendar_today, size: 16),
+                    const SizedBox(width: 8),
                     Text(DateFormat('dd-MM-yyyy').format(today)),
                   ],
                 ),
@@ -632,7 +678,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ],
           ),
 
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           // Attendance Stats
           Row(
@@ -645,7 +691,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                   Colors.blue,
                 ),
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               Expanded(
                 child: _buildAttendanceStatCard(
                   'Present',
@@ -654,7 +700,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                   Colors.green,
                 ),
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               Expanded(
                 child: _buildAttendanceStatCard(
                   'Absent',
@@ -666,33 +712,33 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ],
           ),
 
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           // Attendance List
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Attendance Record - ${DateFormat('dd-MM-yyyy').format(today)}',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ListView.builder(
                     shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: _students.length,
                     itemBuilder: (context, index) {
                       final student = _students[index];
                       final isPresent = attendanceStatus[student.id] ?? false;
 
                       return Container(
-                        margin: EdgeInsets.symmetric(vertical: 8),
-                        padding: EdgeInsets.all(16),
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[200]!),
+                          border: Border.all(color: Colors.grey.shade200),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -703,8 +749,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                 children: [
                                   Text(
                                     student.name,
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w600),
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
                                   ),
                                   Text(
                                     'Roll: ${student.rollNumber} | ${student.branch}',
@@ -717,8 +762,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                             Row(
                               children: [
                                 ElevatedButton(
-                                  onPressed: () =>
-                                      _markAttendance(student.id, true),
+                                  onPressed: () => _markAttendance(student.id, true),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: isPresent
                                         ? Colors.green
@@ -726,33 +770,30 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                     foregroundColor: isPresent
                                         ? Colors.white
                                         : Colors.grey[600],
-                                    padding: EdgeInsets.symmetric(
+                                    padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 8),
-                                    minimumSize: Size(0, 32),
+                                    minimumSize: const Size(0, 32),
                                   ),
-                                  child: Text('Present',
+                                  child: const Text('Present',
                                       style: TextStyle(fontSize: 12)),
                                 ),
-                                SizedBox(width: 8),
+                                const SizedBox(width: 8),
                                 ElevatedButton(
-                                  onPressed: () =>
-                                      _markAttendance(student.id, false),
+                                  onPressed: () => _markAttendance(student.id, false),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: !isPresent &&
-                                            attendanceStatus
-                                                .containsKey(student.id)
+                                        attendanceStatus.containsKey(student.id)
                                         ? Colors.red
                                         : Colors.grey[200],
                                     foregroundColor: !isPresent &&
-                                            attendanceStatus
-                                                .containsKey(student.id)
+                                        attendanceStatus.containsKey(student.id)
                                         ? Colors.white
                                         : Colors.grey[600],
-                                    padding: EdgeInsets.symmetric(
+                                    padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 8),
-                                    minimumSize: Size(0, 32),
+                                    minimumSize: const Size(0, 32),
                                   ),
-                                  child: Text('Absent',
+                                  child: const Text('Absent',
                                       style: TextStyle(fontSize: 12)),
                                 ),
                               ],
@@ -771,18 +812,17 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     );
   }
 
-  Widget _buildAttendanceStatCard(
-      String title, String value, IconData icon, Color color) {
+  Widget _buildAttendanceStatCard(String title, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Column(
           children: [
             Icon(icon, color: color, size: 24),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               value,
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             Text(
               title,
@@ -797,14 +837,14 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   Widget _buildAttendanceHistory() {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -813,37 +853,37 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                   ),
                   Text(
                     'View and analyze historical attendance patterns',
-                    style: TextStyle(color: Colors.grey[600]),
+                    style: TextStyle(color: Colors.grey),
                   ),
                 ],
               ),
               ElevatedButton.icon(
                 onPressed: () => _exportAttendance(),
-                icon: Icon(Icons.download, size: 16),
-                label: Text('Export'),
+                icon: const Icon(Icons.download, size: 16),
+                label: const Text('Export'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
-                  foregroundColor: Colors.grey[700],
-                  side: BorderSide(color: Colors.grey[300]!),
+                  foregroundColor: Colors.grey.shade700,
+                  side: BorderSide(color: Colors.grey.shade300),
                 ),
               ),
             ],
           ),
 
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           // Summary Stats
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
+            physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
             childAspectRatio: 2,
             children: [
               _buildHistoryStatCard(
                 'Total Classes',
-                '${_attendanceRecords.length}',
+                '${_getUniqueClassDays()}',
                 Icons.calendar_today,
                 Colors.blue,
               ),
@@ -856,30 +896,28 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ],
           ),
 
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           // Student-wise Attendance Summary
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Student-wise Summary',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ListView.builder(
                     shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: _students.length,
                     itemBuilder: (context, index) {
                       final student = _students[index];
                       final studentAttendance = _attendanceRecords
-                          .where(
-                            (record) => record.studentId == student.id,
-                          )
+                          .where((record) => record.studentId == student.id)
                           .toList();
 
                       final totalClasses = studentAttendance.length;
@@ -891,10 +929,10 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                           : 0;
 
                       return Container(
-                        margin: EdgeInsets.symmetric(vertical: 8),
-                        padding: EdgeInsets.all(16),
+                        margin: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[200]!),
+                          border: Border.all(color: Colors.grey.shade200),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -905,8 +943,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                 children: [
                                   Text(
                                     student.name,
-                                    style:
-                                        TextStyle(fontWeight: FontWeight.w600),
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
                                   ),
                                   Text(
                                     '${student.rollNumber} | ${student.branch}',
@@ -920,19 +957,19 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                               children: [
                                 Text(
                                   'Present: $presentClasses',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                       color: Colors.green, fontSize: 12),
                                 ),
                                 Text(
                                   'Absent: ${totalClasses - presentClasses}',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                       color: Colors.red, fontSize: 12),
                                 ),
                               ],
                             ),
-                            SizedBox(width: 16),
+                            const SizedBox(width: 16),
                             Container(
-                              padding: EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: _getAttendanceRateColor(attendanceRate),
@@ -940,7 +977,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                               ),
                               child: Text(
                                 '$attendanceRate%',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
@@ -961,22 +998,21 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     );
   }
 
-  Widget _buildHistoryStatCard(
-      String title, String value, IconData icon, Color color) {
+  Widget _buildHistoryStatCard(String title, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Icon(icon, color: color, size: 24),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   value,
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   title,
@@ -992,14 +1028,14 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   Widget _buildMarksheet() {
     return SingleChildScrollView(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
@@ -1008,18 +1044,16 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                   ),
                   Text(
                     'Manage student marks and grades',
-                    style: TextStyle(color: Colors.grey[600]),
+                    style: TextStyle(color: Colors.grey),
                   ),
                 ],
               ),
               DropdownButton<String>(
                 value: 'midterm',
-                items: [
-                  DropdownMenuItem(
-                      value: 'midterm', child: Text('Midterm Exam')),
+                items: const [
+                  DropdownMenuItem(value: 'midterm', child: Text('Midterm Exam')),
                   DropdownMenuItem(value: 'final', child: Text('Final Exam')),
-                  DropdownMenuItem(
-                      value: 'assignment', child: Text('Assignment')),
+                  DropdownMenuItem(value: 'assignment', child: Text('Assignment')),
                   DropdownMenuItem(value: 'quiz', child: Text('Quiz')),
                 ],
                 onChanged: (value) {
@@ -1029,13 +1063,13 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ],
           ),
 
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           // Marksheet Stats
           GridView.count(
             crossAxisCount: 4,
             shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
+            physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
             childAspectRatio: 1.5,
@@ -1067,46 +1101,45 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ],
           ),
 
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
 
           // Marksheet Table
           Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Marksheet - Midterm',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
                       columns: [
-                        DataColumn(label: Text('Student')),
+                        const DataColumn(label: Text('Student')),
                         ..._subjects.map((subject) => DataColumn(
-                              label: Column(
-                                children: [
-                                  Text(subject.name),
-                                  Text('/${subject.maxMarks}',
-                                      style: TextStyle(
-                                          fontSize: 10, color: Colors.grey)),
-                                ],
-                              ),
-                            )),
-                        DataColumn(label: Text('Average')),
-                        DataColumn(label: Text('Grade')),
+                          label: Column(
+                            children: [
+                              Text(subject.name),
+                              Text('/${subject.maxMarks}',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: Colors.grey)),
+                            ],
+                          ),
+                        )),
+                        const DataColumn(label: Text('Average')),
+                        const DataColumn(label: Text('Grade')),
                       ],
                       rows: _students.map((student) {
                         final studentMarks = _marks
                             .where((mark) =>
-                                mark.studentId == student.id &&
-                                mark.examType == 'midterm')
+                        mark.studentId == student.id &&
+                            mark.examType == 'midterm')
                             .toList();
-                        final average =
-                            _calculateStudentAverage(student.id, 'midterm');
+                        final average = _calculateStudentAverage(student.id, 'midterm');
                         final grade = _getGrade(average);
 
                         return DataRow(
@@ -1118,14 +1151,15 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                 children: [
                                   Text(student.name),
                                   Text(student.rollNumber,
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                           fontSize: 10, color: Colors.grey)),
                                 ],
                               ),
                             ),
                             ..._subjects.map((subject) {
-                              final mark = studentMarks.firstWhere(
-                                (m) => m.subjectId == subject.id,
+                              final mark = studentMarks.isNotEmpty
+                                  ? studentMarks.firstWhere(
+                                    (m) => m.subjectId == subject.id,
                                 orElse: () => Mark(
                                   id: '',
                                   studentId: student.id,
@@ -1135,14 +1169,22 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                   examType: 'midterm',
                                   createdAt: DateTime.now(),
                                 ),
+                              )
+                                  : Mark(
+                                id: '',
+                                studentId: student.id,
+                                subjectId: subject.id,
+                                marks: 0,
+                                maxMarks: subject.maxMarks,
+                                examType: 'midterm',
+                                createdAt: DateTime.now(),
                               );
 
                               return DataCell(
                                 GestureDetector(
-                                  onTap: () => _showEditMarkDialog(
-                                      student, subject, mark),
+                                  onTap: () => _showEditMarkDialog(student, subject, mark),
                                   child: Container(
-                                    padding: EdgeInsets.all(8),
+                                    padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(4),
                                       color: Colors.grey[50],
@@ -1152,17 +1194,13 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                         Text(
                                           '${mark.marks}/${subject.maxMarks}',
                                           style: TextStyle(
-                                            color: _getMarkColor(
-                                                mark.marks, subject.maxMarks),
+                                            color: _getMarkColor(mark.marks, subject.maxMarks),
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                         Text(
-                                          _getGrade((mark.marks /
-                                                  subject.maxMarks *
-                                                  100)
-                                              .round()),
-                                          style: TextStyle(fontSize: 10),
+                                          _getGrade((mark.marks / subject.maxMarks * 100).round()),
+                                          style: const TextStyle(fontSize: 10),
                                         ),
                                       ],
                                     ),
@@ -1181,7 +1219,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                             ),
                             DataCell(
                               Container(
-                                padding: EdgeInsets.symmetric(
+                                padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: _getGradeColor(grade),
@@ -1189,7 +1227,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                 ),
                                 child: Text(
                                   grade,
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -1211,19 +1249,18 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     );
   }
 
-  Widget _buildMarksheetStatCard(
-      String title, String value, IconData icon, Color color) {
+  Widget _buildMarksheetStatCard(String title, String value, IconData icon, Color color) {
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(12),
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, color: color, size: 20),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
               value,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Text(
               title,
@@ -1238,18 +1275,18 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   // Dialog for adding new student
   void _showAddStudentDialog() {
-    final _formKey = GlobalKey<FormState>();
-    final _nameController = TextEditingController();
-    final _rollNumberController = TextEditingController();
-    final _emailController = TextEditingController();
-    final _phoneController = TextEditingController();
-    final _parentNameController = TextEditingController();
-    final _parentPhoneController = TextEditingController();
-    String _selectedYear = '1st Year';
-    String _selectedBranch = 'Computer Science';
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController();
+    final rollNumberController = TextEditingController();
+    final emailController = TextEditingController();
+    final phoneController = TextEditingController();
+    final parentNameController = TextEditingController();
+    final parentPhoneController = TextEditingController();
+    String selectedYear = '1st Year';
+    String selectedBranch = 'Computer Science';
 
-    final years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-    final branches = [
+    const years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+    const branches = [
       'Computer Science',
       'Information Technology',
       'Electronics',
@@ -1264,7 +1301,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Row(
+              title: const Row(
                 children: [
                   Icon(Icons.person_add, color: Color(0xFF3B82F6)),
                   SizedBox(width: 8),
@@ -1274,14 +1311,14 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               content: Container(
                 width: double.maxFinite,
                 child: Form(
-                  key: _formKey,
+                  key: formKey,
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         TextFormField(
-                          controller: _nameController,
-                          decoration: InputDecoration(
+                          controller: nameController,
+                          decoration: const InputDecoration(
                             labelText: 'Full Name *',
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.person),
@@ -1293,10 +1330,10 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                             return null;
                           },
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         TextFormField(
-                          controller: _rollNumberController,
-                          decoration: InputDecoration(
+                          controller: rollNumberController,
+                          decoration: const InputDecoration(
                             labelText: 'Roll Number *',
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.numbers),
@@ -1308,13 +1345,13 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                             return null;
                           },
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         Row(
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: _selectedYear,
-                                decoration: InputDecoration(
+                                value: selectedYear,
+                                decoration: const InputDecoration(
                                   labelText: 'Year *',
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.school),
@@ -1327,16 +1364,16 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                 }).toList(),
                                 onChanged: (value) {
                                   setState(() {
-                                    _selectedYear = value!;
+                                    selectedYear = value!;
                                   });
                                 },
                               ),
                             ),
-                            SizedBox(width: 16),
+                            const SizedBox(width: 16),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: _selectedBranch,
-                                decoration: InputDecoration(
+                                value: selectedBranch,
+                                decoration: const InputDecoration(
                                   labelText: 'Branch *',
                                   border: OutlineInputBorder(),
                                   prefixIcon: Icon(Icons.account_tree),
@@ -1349,17 +1386,17 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                                 }).toList(),
                                 onChanged: (value) {
                                   setState(() {
-                                    _selectedBranch = value!;
+                                    selectedBranch = value!;
                                   });
                                 },
                               ),
                             ),
                           ],
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         TextFormField(
-                          controller: _emailController,
-                          decoration: InputDecoration(
+                          controller: emailController,
+                          decoration: const InputDecoration(
                             labelText: 'Email Address *',
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.email),
@@ -1369,17 +1406,16 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                             if (value == null || value.isEmpty) {
                               return 'Email is required';
                             }
-                            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                                .hasMatch(value)) {
+                            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
                               return 'Invalid email format';
                             }
                             return null;
                           },
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         TextFormField(
-                          controller: _phoneController,
-                          decoration: InputDecoration(
+                          controller: phoneController,
+                          decoration: const InputDecoration(
                             labelText: 'Phone Number *',
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.phone),
@@ -1395,19 +1431,19 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                             return null;
                           },
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         TextFormField(
-                          controller: _parentNameController,
-                          decoration: InputDecoration(
+                          controller: parentNameController,
+                          decoration: const InputDecoration(
                             labelText: 'Parent/Guardian Name',
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.family_restroom),
                           ),
                         ),
-                        SizedBox(height: 16),
+                        const SizedBox(height: 16),
                         TextFormField(
-                          controller: _parentPhoneController,
-                          decoration: InputDecoration(
+                          controller: parentPhoneController,
+                          decoration: const InputDecoration(
                             labelText: 'Parent/Guardian Phone',
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.contact_phone),
@@ -1422,24 +1458,24 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: Text('Cancel'),
+                  child: const Text('Cancel'),
                 ),
                 ElevatedButton(
                   onPressed: () => _addStudent(
-                    _formKey,
-                    _nameController.text,
-                    _rollNumberController.text,
-                    _selectedYear,
-                    _selectedBranch,
-                    _emailController.text,
-                    _phoneController.text,
-                    _parentNameController.text,
-                    _parentPhoneController.text,
+                    formKey,
+                    nameController.text,
+                    rollNumberController.text,
+                    selectedYear,
+                    selectedBranch,
+                    emailController.text,
+                    phoneController.text,
+                    parentNameController.text,
+                    parentPhoneController.text,
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF3B82F6),
+                    backgroundColor: const Color(0xFF3B82F6),
                   ),
-                  child: Row(
+                  child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.save, size: 16),
@@ -1458,26 +1494,25 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   // Edit mark dialog
   void _showEditMarkDialog(Student student, Subject subject, Mark currentMark) {
-    final _markController =
-        TextEditingController(text: currentMark.marks.toString());
+    final markController = TextEditingController(text: currentMark.marks.toString());
 
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Edit Mark'),
+          title: const Text('Edit Mark'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Student: ${student.name}'),
               Text('Subject: ${subject.name}'),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               TextFormField(
-                controller: _markController,
+                controller: markController,
                 decoration: InputDecoration(
                   labelText: 'Marks (out of ${subject.maxMarks})',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
               ),
@@ -1486,15 +1521,15 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text('Cancel'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                final newMarks = int.tryParse(_markController.text) ?? 0;
+                final newMarks = int.tryParse(markController.text) ?? 0;
                 _updateMark(student.id, subject.id, newMarks, subject.maxMarks);
                 Navigator.of(context).pop();
               },
-              child: Text('Save'),
+              child: const Text('Save'),
             ),
           ],
         );
@@ -1504,46 +1539,38 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   // Database operations
   Future<void> _addStudent(
-    GlobalKey<FormState> formKey,
-    String name,
-    String rollNumber,
-    String year,
-    String branch,
-    String email,
-    String phone,
-    String parentName,
-    String parentPhone,
-  ) async {
+      GlobalKey<FormState> formKey,
+      String name,
+      String rollNumber,
+      String year,
+      String branch,
+      String email,
+      String phone,
+      String parentName,
+      String parentPhone,
+      ) async {
     if (formKey.currentState!.validate()) {
       try {
-        final newStudent = {
-          'name': name,
-          'roll_number': rollNumber,
-          'year': year,
-          'branch': branch,
-          'email': email,
-          'phone': phone,
-          'parent_name': parentName.isEmpty ? null : parentName,
-          'parent_phone': parentPhone.isEmpty ? null : parentPhone,
-        };
+        final newStudent = Student(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          name: name,
+          rollNumber: rollNumber,
+          year: year,
+          branch: branch,
+          email: email,
+          phone: phone,
+          parentName: parentName.isEmpty ? null : parentName,
+          parentPhone: parentPhone.isEmpty ? null : parentPhone,
+          createdAt: DateTime.now(),
+        );
 
-        await supabase.from('students').insert(newStudent);
-        await _loadStudents();
+        await supabase.from('students').insert(newStudent.toJson());
+        await _loadFromSupabase();
+
         Navigator.of(context).pop();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Student added successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSnackBar('Student added successfully!', Colors.green);
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error adding student: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showSnackBar('Error adding student: $e', Colors.red);
       }
     }
   }
@@ -1551,104 +1578,50 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   Future<void> _markAttendance(String studentId, bool present) async {
     try {
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final attendanceId = '${studentId}_${DateTime.now().millisecondsSinceEpoch}';
 
-      // Check if attendance already exists for today
-      final existing = await supabase
-          .from('attendance')
-          .select()
-          .eq('student_id', studentId)
-          .eq('date', today)
-          .single();
+      await supabase.from('attendance').upsert({
+        'student_id': studentId,
+        'date': today,
+        'present': present,
+        'subject': 'General',
+      });
+      await _loadFromSupabase();
 
-      if (existing != null) {
-        // Update existing record
-        await supabase
-            .from('attendance')
-            .update({'present': present})
-            .eq('student_id', studentId)
-            .eq('date', today);
-      } else {
-        // Insert new record
-        await supabase.from('attendance').insert({
-          'student_id': studentId,
-          'date': today,
-          'present': present,
-          'subject': 'General',
-        });
-      }
-
-      await _loadAttendance();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Attendance marked successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _showSnackBar('Attendance marked successfully!', Colors.green);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error marking attendance: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showSnackBar('Error marking attendance: $e', Colors.red);
     }
   }
 
-  Future<void> _updateMark(
-      String studentId, String subjectId, int marks, int maxMarks) async {
+  Future<void> _updateMark(String studentId, String subjectId, int marks, int maxMarks) async {
     try {
-      // Check if mark already exists
-      final existing = await supabase
-          .from('marks')
-          .select()
-          .eq('student_id', studentId)
-          .eq('subject_id', subjectId)
-          .eq('exam_type', 'midterm')
-          .maybeSingle();
+      await supabase.from('marks').upsert({
+        'student_id': studentId,
+        'subject_id': subjectId,
+        'marks': marks,
+        'max_marks': maxMarks,
+        'exam_type': 'midterm',
+      });
+      await _loadFromSupabase();
 
-      if (existing != null) {
-        // Update existing mark
-        await supabase
-            .from('marks')
-            .update({'marks': marks})
-            .eq('student_id', studentId)
-            .eq('subject_id', subjectId)
-            .eq('exam_type', 'midterm');
-      } else {
-        // Insert new mark
-        await supabase.from('marks').insert({
-          'student_id': studentId,
-          'subject_id': subjectId,
-          'marks': marks,
-          'max_marks': maxMarks,
-          'exam_type': 'midterm',
-        });
-      }
-
-      await _loadMarks();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Mark updated successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      _showSnackBar('Mark updated successfully!', Colors.green);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating mark: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showSnackBar('Error updating mark: $e', Colors.red);
     }
   }
 
   // Helper methods
+  int _getUniqueClassDays() {
+    final uniqueDates = _attendanceRecords
+        .map((record) => DateFormat('yyyy-MM-dd').format(record.date))
+        .toSet();
+    return uniqueDates.length;
+  }
+
   int _calculateOverallAttendanceRate() {
     if (_attendanceRecords.isEmpty) return 0;
-    final presentCount =
-        _attendanceRecords.where((record) => record.present).length;
+    final presentCount = _attendanceRecords.where((record) => record.present).length;
     return (presentCount / _attendanceRecords.length * 100).round();
   }
 
@@ -1656,7 +1629,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     if (rate >= 90) return Colors.green;
     if (rate >= 80) return Colors.blue;
     if (rate >= 70) return Colors.orange;
-    if (rate >= 60) return Colors.yellow[700]!;
+    if (rate >= 60) return Colors.yellow.shade700;
     return Colors.red;
   }
 
@@ -1666,6 +1639,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     for (var student in _students) {
       totalAverage += _calculateStudentAverage(student.id, 'midterm');
     }
+    if (_students.isEmpty) return 0;
     return (totalAverage / _students.length).round();
   }
 
@@ -1681,12 +1655,12 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   int _calculateStudentAverage(String studentId, String examType) {
     final studentMarks = _marks
-        .where(
-          (mark) => mark.studentId == studentId && mark.examType == examType,
-        )
+        .where((mark) => mark.studentId == studentId && mark.examType == examType)
         .toList();
 
-    if (studentMarks.isEmpty) return 0;
+    if (studentMarks.isEmpty) {
+      return 0;
+    }
 
     int total = 0;
     for (var mark in studentMarks) {
@@ -1710,7 +1684,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     if (percentage >= 90) return Colors.green;
     if (percentage >= 80) return Colors.blue;
     if (percentage >= 70) return Colors.orange;
-    if (percentage >= 60) return Colors.yellow[700]!;
+    if (percentage >= 60) return Colors.yellow.shade700;
     return Colors.red;
   }
 
@@ -1730,24 +1704,16 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   }
 
   void _exportAttendance() {
+    _showSnackBar('Attendance export feature coming soon!', Colors.blue);
+  }
+
+  void _showSnackBar(String message, Color backgroundColor) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Attendance export feature coming soon!'),
-        backgroundColor: Colors.blue,
+        content: Text(message),
+        backgroundColor: backgroundColor,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
-}
-
-// Main function to run the app
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await Supabase.initialize(
-    url: 'NEXT_PUBLIC_SUPABASE_URL', // Replace with your Supabase URL
-    anonKey:
-        'NEXT_PUBLIC_SUPABASE_ANON_KEY', // Replace with your Supabase anon key
-  );
-
-  runApp(FacultyDashboardApp());
 }

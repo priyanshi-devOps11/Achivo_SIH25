@@ -266,7 +266,7 @@ class SupabaseService {
   }
 }
 
-// Main Dashboard Widget
+// Replace your entire StudentDashboard class with this fixed version
 class StudentDashboard extends StatefulWidget {
   @override
   _StudentDashboardState createState() => _StudentDashboardState();
@@ -297,6 +297,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
       backgroundColor: const Color(0xFFF8FAFC),
       drawer: _buildDrawer(context),
       appBar: _buildAppBar(),
+      // Remove all SafeArea and padding wrappers from body
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _buildBody(),
@@ -419,36 +420,12 @@ class _StudentDashboardState extends State<StudentDashboard> {
                 ],
               ),
             ),
-            _buildDrawerItem(
-              icon: Icons.dashboard,
-              title: 'Overview',
-              index: 0,
-            ),
-            _buildDrawerItem(
-              icon: Icons.book,
-              title: 'Academic Performance',
-              index: 1,
-            ),
-            _buildDrawerItem(
-              icon: Icons.calendar_today,
-              title: 'Attendance',
-              index: 2,
-            ),
-            _buildDrawerItem(
-              icon: Icons.emoji_events,
-              title: 'Credit Activities',
-              index: 3,
-            ),
-            _buildDrawerItem(
-              icon: Icons.groups,
-              title: 'Extra-Curricular',
-              index: 4,
-            ),
-            _buildDrawerItem(
-              icon: Icons.work,
-              title: 'Internships & Seminars',
-              index: 5,
-            ),
+            _buildDrawerItem(icon: Icons.dashboard, title: 'Overview', index: 0),
+            _buildDrawerItem(icon: Icons.book, title: 'Academic Performance', index: 1),
+            _buildDrawerItem(icon: Icons.calendar_today, title: 'Attendance', index: 2),
+            _buildDrawerItem(icon: Icons.emoji_events, title: 'Credit Activities', index: 3),
+            _buildDrawerItem(icon: Icons.groups, title: 'Extra-Curricular', index: 4),
+            _buildDrawerItem(icon: Icons.work, title: 'Internships & Seminars', index: 5),
           ],
         ),
       ),
@@ -487,6 +464,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
+  // This is the key fix - clean body without extra wrappers
   Widget _buildBody() {
     switch (_selectedIndex) {
       case 0:
@@ -519,7 +497,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 }
 
-// Overview Page
+// Replace your OverviewPage class with this completely fixed version
 class OverviewPage extends StatelessWidget {
   final Student? student;
 
@@ -537,6 +515,7 @@ class OverviewPage extends StatelessWidget {
           _buildStatsGrid(),
           const SizedBox(height: 24),
           _buildQuickActions(),
+          const SizedBox(height: 100), // Extra space for safe scrolling
         ],
       ),
     );
@@ -577,41 +556,56 @@ class OverviewPage extends StatelessWidget {
   }
 
   Widget _buildStatsGrid() {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.2,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
+    return Column(
       children: [
-        _buildStatCard(
-          title: 'Current GPA',
-          value: student?.currentGpa.toString() ?? '0.0',
-          subtitle: '+0.1 from last semester',
-          color: Colors.purple,
-          icon: Icons.book,
+        // First row of cards
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                title: 'Current GPA',
+                value: student?.currentGpa.toString() ?? '0.0',
+                subtitle: '+0.1 from last semester',
+                color: Colors.purple,
+                icon: Icons.book,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildStatCard(
+                title: 'Attendance',
+                value: '${student?.attendancePercentage.toInt() ?? 0}%',
+                subtitle: 'Above average',
+                color: Colors.blue,
+                icon: Icons.calendar_today,
+              ),
+            ),
+          ],
         ),
-        _buildStatCard(
-          title: 'Attendance',
-          value: '${student?.attendancePercentage.toInt() ?? 0}%',
-          subtitle: 'Above average',
-          color: Colors.blue,
-          icon: Icons.calendar_today,
-        ),
-        _buildStatCard(
-          title: 'Credits',
-          value: '${student?.creditsCompleted ?? 0}/${student?.totalCredits ?? 0}',
-          subtitle: '${((student?.creditsCompleted ?? 0) / (student?.totalCredits ?? 1) * 100).toInt()}% completed',
-          color: Colors.green,
-          icon: Icons.emoji_events,
-        ),
-        _buildStatCard(
-          title: 'Active Clubs',
-          value: '3',
-          subtitle: '1 leadership role',
-          color: Colors.orange,
-          icon: Icons.groups,
+        const SizedBox(height: 16),
+        // Second row of cards
+        Row(
+          children: [
+            Expanded(
+              child: _buildStatCard(
+                title: 'Credits',
+                value: '${student?.creditsCompleted ?? 0}/${student?.totalCredits ?? 0}',
+                subtitle: '${((student?.creditsCompleted ?? 0) / (student?.totalCredits ?? 1) * 100).toInt()}% completed',
+                color: Colors.green,
+                icon: Icons.emoji_events,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _buildStatCard(
+                title: 'Active Clubs',
+                value: '3',
+                subtitle: '1 leadership role',
+                color: Colors.orange,
+                icon: Icons.groups,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -625,7 +619,8 @@ class OverviewPage extends StatelessWidget {
     required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      height: 140, // Fixed height to prevent overflow
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -640,6 +635,7 @@ class OverviewPage extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
@@ -651,34 +647,39 @@ class OverviewPage extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
-              const Spacer(),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: Colors.grey[500],
-              fontSize: 12,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ],
       ),
@@ -687,7 +688,7 @@ class OverviewPage extends StatelessWidget {
 
   Widget _buildQuickActions() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -709,19 +710,33 @@ class OverviewPage extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 20),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.5,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
+          const SizedBox(height: 16),
+          // Replace GridView with Column and Rows
+          Column(
             children: [
-              _buildActionCard('View Grades', Icons.book, Colors.purple),
-              _buildActionCard('Mark Attendance', Icons.calendar_today, Colors.blue),
-              _buildActionCard('Join Event', Icons.groups, Colors.green),
-              _buildActionCard('Apply Internship', Icons.work, Colors.cyan),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionCard('View Grades', Icons.book, Colors.purple),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionCard('Mark Attendance', Icons.calendar_today, Colors.blue),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionCard('Join Event', Icons.groups, Colors.green),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionCard('Apply Internship', Icons.work, Colors.cyan),
+                  ),
+                ],
+              ),
             ],
           ),
         ],
@@ -731,7 +746,8 @@ class OverviewPage extends StatelessWidget {
 
   Widget _buildActionCard(String title, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      height: 80, // Fixed height
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.withOpacity(0.2)),
         borderRadius: BorderRadius.circular(12),
@@ -739,15 +755,17 @@ class OverviewPage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 6),
           Text(
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: 12,
+              fontSize: 11,
             ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

@@ -228,7 +228,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     }
   }
 
-  // Enhanced continue handler
+  // Enhanced continue handler with better error handling
   void handleContinue() async {
     if (!isFormComplete) {
       _showSnackBar("Please complete all fields", isError: true);
@@ -259,7 +259,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         ),
       );
 
-      await _saveUserDataToSupabase();
+      // First, save the basic profile without complex relationships
+      await _saveBasicUserProfile();
 
       // Close loading dialog
       if (mounted) Navigator.of(context).pop();
@@ -295,6 +296,39 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         Navigator.of(context).pop();
       }
       _showSnackBar("Error during continue process: ${e.toString()}", isError: true);
+    }
+  }
+
+  // Simplified save function that avoids RLS recursion
+  Future<void> _saveBasicUserProfile() async {
+    try {
+      final user = supabase.auth.currentUser;
+
+      if (user == null) {
+        _showSnackBar("No user logged in", isError: true);
+        return;
+      }
+
+      // Simple profile data without complex foreign key relationships initially
+      final updates = {
+        'id': user.id,
+        'country': selectedCountryName,
+        'state': selectedStateName,
+        'institute': selectedInstituteName,
+        'role': selectedRole?.toLowerCase(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      // Use upsert with conflict handling
+      await supabase
+          .from('profiles')
+          .upsert(updates, onConflict: 'id');
+
+      _showSnackBar("Profile updated successfully!");
+    } catch (e) {
+      print('Error saving profile: $e');
+      _showSnackBar("Error saving profile: ${e.toString()}", isError: true);
+      rethrow;
     }
   }
 

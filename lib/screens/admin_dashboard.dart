@@ -738,15 +738,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Column(
         children: [
           Container(
-            height: 180,
-            decoration: BoxDecoration(
-              color: Colors.blue.shade600,
-            ),
+            color: Colors.blue.shade600,
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, // Added
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
@@ -1051,7 +1049,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 1.8,
+      childAspectRatio: 1.2, // Adjusted childAspectRatio
       children: [
         _buildStatCard(
           title: "Total Departments",
@@ -1110,48 +1108,60 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: color, size: 24),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isPositiveChange ? Colors.green.shade50 : Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    change,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: isPositiveChange ? Colors.green.shade600 : Colors.orange.shade600,
-                      fontWeight: FontWeight.w500,
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isPositiveChange ? Colors.green.shade50 : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      change,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: isPositiveChange ? Colors.green.shade600 : Colors.orange.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ],
         ),
@@ -1358,6 +1368,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         const SizedBox(height: 16),
         // System Management Row
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start, // Align cards at the top
           children: [
             Expanded(
               child: Card(
@@ -1458,8 +1469,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ),
                       const SizedBox(height: 12),
                       if (systemOverviewData.isNotEmpty)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        Wrap(
+                          alignment: WrapAlignment.spaceEvenly,
                           children: systemOverviewData
                               .map((data) => _buildLegendItem(data.name, data.color))
                               .toList(),
@@ -1503,6 +1514,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   activity.activity,
@@ -1510,6 +1522,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     fontSize: 11,
                     color: Colors.grey[600],
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   '${activity.department} • ${activity.date}',
@@ -1517,6 +1530,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     fontSize: 10,
                     color: Colors.grey[500],
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -1581,6 +1595,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
@@ -1596,23 +1611,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildLegendItem(String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
+    return Padding(
+      padding: const EdgeInsets.all(2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10),
-        ),
-      ],
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10),
+          ),
+        ],
+      ),
     );
   }
 }

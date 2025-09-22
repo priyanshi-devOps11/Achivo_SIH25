@@ -8,7 +8,7 @@ import 'package:achivo/screens/auth_admin_page.dart';
 import 'package:achivo/screens/auth_hod_page.dart';
 import 'package:achivo/screens/auth_faculty_page.dart';
 import 'package:achivo/screens/auth_student_page.dart';
-import 'package:achivo/screens/student_dashboard.dart';
+import 'package:achivo/screens/student_dashboard.dart' hide AuthStudentPage;
 // Import the admin dashboard from your admin_dashboard.dart file
 import 'package:achivo/screens/admin_dashboard.dart';
 

@@ -225,11 +225,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                               decoration: BoxDecoration(
                                 gradient: !_isLogin
                                     ? const LinearGradient(
-                                        colors: [
-                                          Color(0xFF8B5CF6), // purple-500
-                                          Color(0xFF3B82F6), // blue-500
-                                        ],
-                                      )
+                                  colors: [
+                                    Color(0xFF8B5CF6), // purple-500
+                                    Color(0xFF3B82F6), // blue-500
+                                  ],
+                                )
                                     : null,
                                 borderRadius: BorderRadius.circular(21),
                               ),
@@ -259,11 +259,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                               decoration: BoxDecoration(
                                 gradient: _isLogin
                                     ? const LinearGradient(
-                                        colors: [
-                                          Color(0xFF8B5CF6), // purple-500
-                                          Color(0xFF3B82F6), // blue-500
-                                        ],
-                                      )
+                                  colors: [
+                                    Color(0xFF8B5CF6), // purple-500
+                                    Color(0xFF3B82F6), // blue-500
+                                  ],
+                                )
                                     : null,
                                 borderRadius: BorderRadius.circular(21),
                               ),
@@ -369,7 +369,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                             controller: _studentIdController,
                             label: 'Student ID',
                             placeholder:
-                                'Enter Student ID (provided by admission)',
+                            'Enter Student ID (provided by admission)',
                             icon: Icons.badge_outlined,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
@@ -532,34 +532,34 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                             ),
                             child: _isLoading
                                 ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
                                 : Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        _isLogin
-                                            ? 'Sign In as Student'
-                                            : 'Create Student Account',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Icon(
-                                        Icons.school_outlined,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                    ],
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _isLogin
+                                      ? 'Sign In as Student'
+                                      : 'Create Student Account',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
                                   ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.school_outlined,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -767,24 +767,24 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               hintText: 'Enter your email',
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
               prefixIcon:
-                  Icon(Icons.mail_outline, color: Colors.grey[500], size: 20),
+              Icon(Icons.mail_outline, color: Colors.grey[500], size: 20),
               suffixIcon: !_isLogin && !_isOtpVerified
                   ? TextButton(
-                      onPressed: _isOtpSent ? null : _sendOTP,
-                      child: Text(
-                        _isOtpSent ? 'Sent' : 'Send OTP',
-                        style: TextStyle(
-                          color: _isOtpSent
-                              ? Colors.green
-                              : const Color(0xFF8B5CF6),
-                          fontSize: 12,
-                        ),
-                      ),
-                    )
+                onPressed: _isOtpSent ? null : _sendOTP,
+                child: Text(
+                  _isOtpSent ? 'Sent' : 'Send OTP',
+                  style: TextStyle(
+                    color: _isOtpSent
+                        ? Colors.green
+                        : const Color(0xFF8B5CF6),
+                    fontSize: 12,
+                  ),
+                ),
+              )
                   : _isOtpVerified
-                      ? const Icon(Icons.verified,
-                          color: Colors.green, size: 20)
-                      : null,
+                  ? const Icon(Icons.verified,
+                  color: Colors.green, size: 20)
+                  : null,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 20,
@@ -818,7 +818,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                 hintText: 'Enter OTP',
                 hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
                 prefixIcon:
-                    Icon(Icons.security, color: Colors.grey[500], size: 20),
+                Icon(Icons.security, color: Colors.grey[500], size: 20),
                 suffixIcon: TextButton(
                   onPressed: _verifyOTP,
                   child: const Text(
