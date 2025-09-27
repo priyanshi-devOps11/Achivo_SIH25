@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 
 class WelcomeScreen extends StatefulWidget {
-  final VoidCallback onNext;
-
-  const WelcomeScreen({Key? key, required this.onNext}) : super(key: key);
+  const WelcomeScreen({Key? key, required Null Function() onNext}) : super(key: key);
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
@@ -22,19 +21,21 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   String? selectedInstitute;
   String? selectedRole;
 
-  // Store names for display and saving
+  // Store names and IDs for display and saving
   String? selectedCountryName;
   String? selectedStateName;
   String? selectedInstituteName;
 
-  // Animation controllers
+  int? selectedCountryId;
+  int? selectedStateId;
+  int? selectedInstituteId;
+
+  // Animation controllers (omitted for brevity, assume they are initialized)
   late AnimationController _backgroundController;
   late AnimationController _contentController;
   late AnimationController _floatingController;
   late AnimationController _iconsController;
   late AnimationController _transitionController;
-
-  // Animations
   late Animation<double> _backgroundAnimation;
   late Animation<double> _contentAnimation;
   late Animation<double> _floatingAnimation;
@@ -53,340 +54,24 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   bool isLoadingInstitutes = false;
   bool isLoadingCountries = false;
 
-  // Get Supabase client safely
   SupabaseClient get supabase => Supabase.instance.client;
-
-  // Safe context operations
-  void _showSnackBar(String message, {bool isError = false}) {
-    if (!mounted) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: isError ? 5 : 3),
-          ),
-        );
-      }
-    });
-  }
-
-  // Safe navigation
-  void _navigateToRoute(String route, {Map<String, dynamic>? arguments}) {
-    if (!mounted) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        Navigator.pushNamed(context, route, arguments: arguments);
-      }
-    });
-  }
-
-  // Enhanced data fetching with better error handling
-  Future<void> _fetchCountries() async {
-    if (!mounted) return;
-
-    try {
-      if (!Supabase.instance.isInitialized) {
-        _showSnackBar("Database not initialized. Please restart the app.", isError: true);
-        return;
-      }
-
-      setState(() {
-        isLoadingCountries = true;
-      });
-
-      final response = await supabase
-          .from('countries')
-          .select('id, name')
-          .order('name');
-
-      if (mounted) {
-        setState(() {
-          countries = List<Map<String, dynamic>>.from(response as List);
-          isLoadingCountries = false;
-        });
-      }
-    } catch (e) {
-      print('Error fetching countries: $e');
-      if (mounted) {
-        setState(() {
-          isLoadingCountries = false;
-        });
-
-        if (e.toString().contains('relation "countries" does not exist')) {
-          _showSnackBar("Database tables not set up. Please check your database schema.", isError: true);
-        } else {
-          _showSnackBar("Error loading countries. Please check your internet connection.", isError: true);
-        }
-      }
-    }
-  }
-
-  Future<void> _fetchStates(String countryId) async {
-    if (!mounted) return;
-
-    try {
-      setState(() {
-        isLoadingStates = true;
-        states.clear();
-        selectedState = null;
-        selectedStateName = null;
-        institutes.clear();
-        selectedInstitute = null;
-        selectedInstituteName = null;
-      });
-
-      final response = await supabase
-          .from('states')
-          .select('id, name')
-          .eq('country_id', int.parse(countryId))
-          .order('name');
-
-      if (mounted) {
-        setState(() {
-          states = List<Map<String, dynamic>>.from(response as List);
-          isLoadingStates = false;
-        });
-      }
-    } catch (e) {
-      print('Error fetching states: $e');
-      if (mounted) {
-        setState(() {
-          isLoadingStates = false;
-        });
-        _showSnackBar("Error loading states: ${e.toString()}", isError: true);
-      }
-    }
-  }
-
-  Future<void> _fetchInstitutes(String stateId) async {
-    if (!mounted) return;
-
-    try {
-      setState(() {
-        isLoadingInstitutes = true;
-        institutes.clear();
-        selectedInstitute = null;
-        selectedInstituteName = null;
-      });
-
-      final response = await supabase
-          .from('institutes')
-          .select('id, name')
-          .eq('state_id', int.parse(stateId))
-          .order('name');
-
-      if (mounted) {
-        setState(() {
-          institutes = List<Map<String, dynamic>>.from(response as List);
-          isLoadingInstitutes = false;
-        });
-      }
-    } catch (e) {
-      print('Error fetching institutes: $e');
-      if (mounted) {
-        setState(() {
-          isLoadingInstitutes = false;
-        });
-        _showSnackBar("Error loading institutes: ${e.toString()}", isError: true);
-      }
-    }
-  }
-
-  // Enhanced save function
-  Future<void> _saveUserDataToSupabase() async {
-    try {
-      final user = supabase.auth.currentUser;
-
-      if (user == null) {
-        _showSnackBar("No user logged in", isError: true);
-        return;
-      }
-
-      final updates = {
-        'id': user.id,
-        'country': selectedCountryName,
-        'state': selectedStateName,
-        'institute': selectedInstituteName,
-        'role': selectedRole?.toLowerCase(),
-        'country_id': int.tryParse(selectedCountry ?? ''),
-        'state_id': int.tryParse(selectedState ?? ''),
-        'institute_id': int.tryParse(selectedInstitute ?? ''),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-
-      await supabase.from('profiles').upsert(updates);
-      _showSnackBar("Profile updated successfully!");
-    } catch (e) {
-      print('Error saving profile: $e');
-      _showSnackBar("Error saving profile: ${e.toString()}", isError: true);
-      rethrow; // Re-throw to handle in calling function
-    }
-  }
-
-  // Enhanced continue handler with better error handling
-  void handleContinue() async {
-    if (!isFormComplete) {
-      _showSnackBar("Please complete all fields", isError: true);
-      return;
-    }
-
-    try {
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: Colors.purple.shade500),
-                const SizedBox(height: 16),
-                const Text('Saving your information...'),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      // First, save the basic profile without complex relationships
-      await _saveBasicUserProfile();
-
-      // Close loading dialog
-      if (mounted) Navigator.of(context).pop();
-
-      // Navigate to role-specific auth page
-      String route;
-      switch (selectedRole!.toLowerCase()) {
-        case 'admin':
-          route = '/auth-admin';
-          break;
-        case 'hod':
-          route = '/auth-hod';
-          break;
-        case 'faculty':
-          route = '/auth-faculty';
-          break;
-        case 'student':
-          route = '/auth-student';
-          break;
-        default:
-          route = '/auth-student';
-      }
-
-      _navigateToRoute(route, arguments: {
-        'country': selectedCountryName,
-        'state': selectedStateName,
-        'institute': selectedInstituteName,
-        'role': selectedRole,
-      });
-    } catch (e) {
-      // Close loading dialog if still open
-      if (mounted && Navigator.canPop(context)) {
-        Navigator.of(context).pop();
-      }
-      _showSnackBar("Error during continue process: ${e.toString()}", isError: true);
-    }
-  }
-
-  // Simplified save function that avoids RLS recursion
-  Future<void> _saveBasicUserProfile() async {
-    try {
-      final user = supabase.auth.currentUser;
-
-      if (user == null) {
-        _showSnackBar("No user logged in", isError: true);
-        return;
-      }
-
-      // Simple profile data without complex foreign key relationships initially
-      final updates = {
-        'id': user.id,
-        'country': selectedCountryName,
-        'state': selectedStateName,
-        'institute': selectedInstituteName,
-        'role': selectedRole?.toLowerCase(),
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-
-      // Use upsert with conflict handling
-      await supabase
-          .from('profiles')
-          .upsert(updates, onConflict: 'id');
-
-      _showSnackBar("Profile updated successfully!");
-    } catch (e) {
-      print('Error saving profile: $e');
-      _showSnackBar("Error saving profile: ${e.toString()}", isError: true);
-      rethrow;
-    }
-  }
 
   @override
   void initState() {
     super.initState();
+    // Initialize all controllers and animations here (as in your original code)
+    _backgroundController = AnimationController(duration: const Duration(seconds: 2), vsync: this);
+    _contentController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
+    _floatingController = AnimationController(duration: const Duration(seconds: 2), vsync: this);
+    _iconsController = AnimationController(duration: const Duration(seconds: 3), vsync: this);
+    _transitionController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
 
-    // Initialize animation controllers
-    _backgroundController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    );
+    _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
+    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
+    _floatingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _floatingController, curve: Curves.easeInOut));
+    _iconsAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _iconsController, curve: Curves.easeOut));
+    _slideAnimation = Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(CurvedAnimation(parent: _transitionController, curve: Curves.easeInOut));
 
-    _contentController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
-
-    _floatingController = AnimationController(
-      duration: const Duration(seconds: 2),
-      vsync: this,
-    );
-
-    _iconsController = AnimationController(
-      duration: const Duration(seconds: 3),
-      vsync: this,
-    );
-
-    _transitionController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    // Initialize animations
-    _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut),
-    );
-
-    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
-    );
-
-    _floatingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _floatingController, curve: Curves.easeInOut),
-    );
-
-    _iconsAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _iconsController, curve: Curves.easeOut));
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(1.0, 0.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-        parent: _transitionController, curve: Curves.easeInOut));
-
-    // Start animations
     _backgroundController.forward();
     _contentController.forward();
     _iconsController.forward();
@@ -398,7 +83,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-
     if (_isInitialized && countries.isEmpty && !isLoadingCountries) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && Supabase.instance.isInitialized) {
@@ -418,16 +102,148 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: isError ? 5 : 3),
+          ),
+        );
+      }
+    });
+  }
+
+  void _navigateToRoute(String route, {Map<String, dynamic>? arguments}) {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.pushNamed(context, route, arguments: arguments);
+      }
+    });
+  }
+
+  Future<void> _fetchCountries() async {
+    if (!mounted) return;
+    try {
+      setState(() { isLoadingCountries = true; });
+      final response = await supabase.from('countries').select('id, name').order('name');
+      if (mounted) {
+        setState(() {
+          countries = List<Map<String, dynamic>>.from(response as List);
+          isLoadingCountries = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching countries: $e');
+      if (mounted) {
+        setState(() { isLoadingCountries = false; });
+        _showSnackBar("Error loading countries. Please check your database schema.", isError: true);
+      }
+    }
+  }
+
+  Future<void> _fetchStates(String countryId) async {
+    if (!mounted) return;
+    try {
+      setState(() {
+        isLoadingStates = true;
+        states.clear();
+        selectedState = null; selectedStateName = null; selectedStateId = null;
+        institutes.clear();
+        selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
+      });
+
+      final response = await supabase.from('states').select('id, name').eq('country_id', int.parse(countryId)).order('name');
+
+      if (mounted) {
+        setState(() {
+          states = List<Map<String, dynamic>>.from(response as List);
+          isLoadingStates = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching states: $e');
+      if (mounted) {
+        setState(() { isLoadingStates = false; });
+        _showSnackBar("Error loading states: ${e.toString()}", isError: true);
+      }
+    }
+  }
+
+  Future<void> _fetchInstitutes(String stateId) async {
+    if (!mounted) return;
+    try {
+      setState(() {
+        isLoadingInstitutes = true;
+        institutes.clear();
+        selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
+      });
+
+      final response = await supabase.from('institutes').select('id, name').eq('state_id', int.parse(stateId)).order('name');
+
+      if (mounted) {
+        setState(() {
+          institutes = List<Map<String, dynamic>>.from(response as List);
+          isLoadingInstitutes = false;
+        });
+      }
+    } catch (e) {
+      print('Error fetching institutes: $e');
+      if (mounted) {
+        setState(() { isLoadingInstitutes = false; });
+        _showSnackBar("Error loading institutes: ${e.toString()}", isError: true);
+      }
+    }
+  }
+
+  // FIXED: Removed all database saving functions. Now just navigates.
+  void handleContinue() async {
+    if (!isFormComplete) {
+      _showSnackBar("Please complete all fields", isError: true);
+      return;
+    }
+
+    String route;
+    switch (selectedRole!.toLowerCase()) {
+      case 'admin':
+        route = '/auth-admin';
+        break;
+      case 'hod':
+        route = '/auth-hod';
+        break;
+      case 'faculty':
+        route = '/auth-faculty';
+        break;
+      case 'student':
+        route = '/auth-student';
+        break;
+      default:
+        route = '/auth-student';
+    }
+
+    _navigateToRoute(route, arguments: {
+      'country_name': selectedCountryName,
+      'state_name': selectedStateName,
+      'institute_name': selectedInstituteName,
+      'role': selectedRole,
+      'country_id': selectedCountryId,
+      'state_id': selectedStateId,
+      'institute_id': selectedInstituteId,
+    });
+  }
+
   void _navigateToWelcomeForm() {
     if (countries.isEmpty && !isLoadingCountries) {
       _showSnackBar("Please wait while we load the data...", isError: true);
       _fetchCountries();
       return;
     }
-
-    setState(() {
-      _showWelcomeForm = true;
-    });
+    setState(() { _showWelcomeForm = true; });
     _transitionController.forward();
   }
 
@@ -443,10 +259,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // Welcome Screen (always present as background)
           _buildWelcomeScreen(),
-
-          // Welcome Form (slides in from right)
           if (_showWelcomeForm)
             SlideTransition(
               position: _slideAnimation,
@@ -456,6 +269,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       ),
     );
   }
+
+  // Helper widgets (_buildWelcomeScreen, _buildWelcomeForm, _buildCountryDropdown, etc.)
+  // are structurally correct from your previous submission. 
+  // Omitting them here for brevity but assuming they are present in your file.
 
   Widget _buildWelcomeScreen() {
     return AnimatedBuilder(
@@ -704,6 +521,35 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   ),
                 ),
               ),
+              // Loading indicator for database connection on initial load
+              if (isLoadingCountries)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.red.shade700,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Please wait while we load the data...',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -884,10 +730,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 setState(() {
                   selectedCountry = value;
                   selectedCountryName = country['name'];
-                  selectedState = null;
-                  selectedStateName = null;
-                  selectedInstitute = null;
-                  selectedInstituteName = null;
+                  selectedCountryId = country['id'];
+                  selectedState = null; selectedStateName = null; selectedStateId = null;
+                  selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
                   states.clear();
                   institutes.clear();
                 });
@@ -974,8 +819,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 setState(() {
                   selectedState = value;
                   selectedStateName = state['name'];
-                  selectedInstitute = null;
-                  selectedInstituteName = null;
+                  selectedStateId = state['id'];
+                  selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
                   institutes.clear();
                 });
                 _fetchInstitutes(value);
@@ -1068,6 +913,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 setState(() {
                   selectedInstitute = value;
                   selectedInstituteName = institute['name'];
+                  selectedInstituteId = institute['id'];
                 });
               }
             }

@@ -29,6 +29,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   int _otpCountdown = 0;
   late AnimationController _otpTimerController;
 
+  // Store data from WelcomeScreen
+  Map<String, dynamic> _profileData = {};
+  bool _isDataLoaded = false;
+
+
   // Supabase client
   final SupabaseClient supabase = Supabase.instance.client;
 
@@ -60,37 +65,31 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   void initState() {
     super.initState();
 
-    _backgroundController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    );
+    _backgroundController = AnimationController(duration: const Duration(milliseconds: 2000), vsync: this);
+    _contentController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
+    _otpTimerController = AnimationController(duration: const Duration(seconds: 60), vsync: this);
 
-    _contentController = AnimationController(
-      duration: const Duration(milliseconds: 1200),
-      vsync: this,
-    );
+    _backgroundAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
+    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
 
-    _otpTimerController = AnimationController(
-      duration: const Duration(seconds: 60),
-      vsync: this,
-    );
-
-    _backgroundAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut),
-    );
-
-    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _contentController, curve: Curves.easeOut),
-    );
-
-    // Generate initial captcha
     _generateCaptcha();
-
-    // Start animations
     _backgroundController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
       _contentController.forward();
     });
+  }
+
+  // Get arguments from WelcomeScreen
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isDataLoaded) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null) {
+        _profileData = args;
+        _isDataLoaded = true;
+      }
+    }
   }
 
   @override
@@ -129,7 +128,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     _otpTimerController.reset();
     _otpTimerController.forward();
 
-    // Update countdown every second
     _otpTimerController.addListener(() {
       if (_otpTimerController.isAnimating) {
         setState(() {
@@ -139,47 +137,56 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
   }
 
+  // Uses Supabase's built-in signInWithOtp for student email verification
   Future<void> _sendOTP() async {
-    if (_emailController.text.isNotEmpty && _emailController.text.endsWith('@gmail.com')) {
+    if (_emailController.text.isEmpty || !_formKey.currentState!.validate()) {
+      _showErrorMessage('Please enter a valid email first.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await supabase
+          .from('students')
+          .select('email')
+          .eq('email', _emailController.text.trim())
+          .maybeSingle();
+
+      if (response != null && !_isLogin) {
+        _showErrorMessage('Email already registered. Please use login instead.');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Send OTP using Supabase Auth
+      await supabase.auth.signInWithOtp(
+        email: _emailController.text.trim(),
+        // Note: You must enable "Email OTP Signups" in Supabase Auth settings
+      );
+
       setState(() {
-        _isLoading = true;
+        _isLoading = false;
+        _isOtpSent = true;
       });
 
-      try {
-        // Check if user already exists
-        final response = await supabase
-            .from('students')
-            .select('email')
-            .eq('email', _emailController.text.trim())
-            .maybeSingle();
+      _startOtpTimer();
+      _showSuccessMessage('OTP sent successfully to your email');
 
-        if (response != null && !_isLogin) {
-          _showErrorMessage('Email already registered. Please use login instead.');
-          setState(() {
-            _isLoading = false;
-          });
-          return;
-        }
-
-        // Send OTP using Supabase Auth
-        await supabase.auth.signInWithOtp(
-          email: _emailController.text.trim(),
-        );
-
-        setState(() {
-          _isLoading = false;
-          _isOtpSent = true;
-        });
-
-        _startOtpTimer();
-
-        _showSuccessMessage('OTP sent successfully to your email');
-      } catch (error) {
-        setState(() {
-          _isLoading = false;
-        });
-        _showErrorMessage('Failed to send OTP: ${error.toString()}');
-      }
+    } on AuthException catch (error) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorMessage('Failed to send OTP: ${error.message}');
+    } catch (error) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorMessage('Failed to send OTP: ${error.toString()}');
     }
   }
 
@@ -190,39 +197,47 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   Future<void> _verifyOTP() async {
-    if (_otpController.text.isNotEmpty && _otpController.text.length == 6) {
-      setState(() {
-        _isLoading = true;
-      });
+    if (_otpController.text.isEmpty || _otpController.text.length != 6) {
+      _showErrorMessage('Please enter the 6-digit OTP.');
+      return;
+    }
 
-      try {
-        // Verify OTP with Supabase
-        final response = await supabase.auth.verifyOTP(
-          email: _emailController.text.trim(),
-          token: _otpController.text.trim(),
-          type: OtpType.email,
-        );
+    setState(() {
+      _isLoading = true;
+    });
 
-        if (response.user != null) {
-          setState(() {
-            _isLoading = false;
-            _isOtpVerified = true;
-          });
+    try {
+      // Verify OTP with Supabase
+      final response = await supabase.auth.verifyOTP(
+        email: _emailController.text.trim(),
+        token: _otpController.text.trim(),
+        type: OtpType.email,
+      );
 
-          _showSuccessMessage('Email verified successfully!');
-        }
-      } catch (error) {
+      if (response.user != null) {
         setState(() {
           _isLoading = false;
+          _isOtpVerified = true;
+          _otpTimerController.stop();
         });
-        _showErrorMessage('Invalid OTP. Please try again.');
+
+        _showSuccessMessage('Email verified successfully!');
       }
+    } on AuthException catch (error) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorMessage('Invalid OTP: ${error.message}');
+    } catch (error) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorMessage('OTP verification failed: ${error.toString()}');
     }
   }
 
   bool _isPasswordValid(String password) {
-    // Check for at least 8 characters, one uppercase, one lowercase, one digit, one special character
-    RegExp passwordRegex = RegExp(r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[@$!%?&])[A-Za-z\d@$!%?&]{8,}$');
+    RegExp passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
     return passwordRegex.hasMatch(password);
   }
 
@@ -244,17 +259,15 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           await _handleRegistration();
         }
       } catch (error) {
-        _showErrorMessage(error.toString());
+        _showErrorMessage(error is Exception ? error.toString().replaceFirst('Exception: ', '') : 'An unexpected error occurred.');
       } finally {
         setState(() {
           _isLoading = false;
         });
-        // Generate new captcha for next attempt
         _generateCaptcha();
         _captchaController.clear();
       }
     } else {
-      // Generate new captcha on failed attempt
       _generateCaptcha();
       _captchaController.clear();
     }
@@ -262,10 +275,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   Future<void> _handleLogin() async {
     try {
-      // First check if student exists in database
       final studentResponse = await supabase
           .from('students')
-          .select('*')
+          .select('email')
           .eq('roll_number', _rollNoController.text.trim())
           .maybeSingle();
 
@@ -273,7 +285,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         throw Exception('Student not found. Please check your roll number.');
       }
 
-      // Sign in with email and password
       final authResponse = await supabase.auth.signInWithPassword(
         email: studentResponse['email'],
         password: _passwordController.text.trim(),
@@ -281,26 +292,37 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       if (authResponse.user != null) {
         _showSuccessMessage('Login successful!');
-        // Navigate to student dashboard
         Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
+    } on AuthException catch (e) {
+      throw Exception('Login failed: Invalid credentials or account not confirmed.');
     } catch (error) {
       throw Exception('Login failed: ${error.toString()}');
     }
   }
 
   Future<void> _handleRegistration() async {
+    if (_profileData['institute_id'] == null) {
+      throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
+    }
+
     try {
-      // Sign up with email and password
+      final currentTime = DateTime.now().toIso8601String();
+      final departmentName = selectedDepartment;
+      final instituteId = _profileData['institute_id'] as int;
+
+      // 1. Sign up with email and password
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        // Insert student data into students table
+        final userId = authResponse.user!.id;
+
+        // 2. Insert student data into students table
         await supabase.from('students').insert({
-          'user_id': authResponse.user!.id,
+          'user_id': userId,
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
           'email': _emailController.text.trim(),
@@ -308,15 +330,36 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           'gender': selectedGender,
           'phone': _phoneController.text.trim(),
           'student_id': _studentIdController.text.trim(),
-          'department': selectedDepartment,
+          'department': departmentName,
           'roll_number': _rollNoController.text.trim(),
-          'created_at': DateTime.now().toIso8601String(),
+          'created_at': currentTime,
+        });
+
+        // 3. Create profile in the main 'profiles' table (Crucial step)
+        await supabase.from('profiles').insert({
+          'id': userId,
+          'role': 'student',
+          'email': _emailController.text.trim(),
+          'first_name': _firstNameController.text.trim(),
+          'last_name': _lastNameController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'gender': selectedGender,
+          'department': departmentName,
+          'country': _profileData['country_name'],
+          'state': _profileData['state_name'],
+          'institute': _profileData['institute_name'],
+          'country_id': _profileData['country_id'],
+          'state_id': _profileData['state_id'],
+          'institute_id': instituteId,
+          'email_verified': true,
+          'created_at': currentTime,
         });
 
         _showSuccessMessage('Account created successfully!');
-        // Navigate to student dashboard
         Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
+    } on AuthException catch (e) {
+      throw Exception('Registration failed: ${e.message}');
     } catch (error) {
       throw Exception('Registration failed: ${error.toString()}');
     }
@@ -351,9 +394,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFF3E8FF), // Light purple at top
-              Color(0xFFE0E7FF), // Light indigo
-              Color(0xFFDBEAFE), // Light blue at bottom
+              Color(0xFFF3E8FF),
+              Color(0xFFE0E7FF),
+              Color(0xFFDBEAFE),
             ],
           ),
         ),
@@ -421,8 +464,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                                 gradient: !_isLogin
                                     ? const LinearGradient(
                                   colors: [
-                                    Color(0xFF8B5CF6), // purple-500
-                                    Color(0xFF3B82F6), // blue-500
+                                    Color(0xFF8B5CF6),
+                                    Color(0xFF3B82F6),
                                   ],
                                 )
                                     : null,
@@ -456,8 +499,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                                 gradient: _isLogin
                                     ? const LinearGradient(
                                   colors: [
-                                    Color(0xFF8B5CF6), // purple-500
-                                    Color(0xFF3B82F6), // blue-500
+                                    Color(0xFF8B5CF6),
+                                    Color(0xFF3B82F6),
                                   ],
                                 )
                                     : null,
@@ -488,7 +531,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                     key: _formKey,
                     child: Column(
                       children: [
-                        // First Name and Last Name fields (only for registration)
+                        // Registration fields
                         if (!_isLogin) ...[
                           Row(
                             children: [
@@ -744,8 +787,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [
-                                Color(0xFF8B5CF6), // purple-500
-                                Color(0xFF3B82F6), // blue-500
+                                Color(0xFF8B5CF6),
+                                Color(0xFF3B82F6),
                               ],
                             ),
                             borderRadius: BorderRadius.circular(28),
@@ -851,7 +894,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
-      // Get email from roll number
       final response = await supabase
           .from('students')
           .select('email')
@@ -864,6 +906,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       } else {
         _showErrorMessage('No account found with this roll number');
       }
+    } on AuthException catch (e) {
+      _showErrorMessage('Failed to send reset link: ${e.message}');
     } catch (error) {
       _showErrorMessage('Failed to send reset link: ${error.toString()}');
     } finally {
@@ -1027,6 +1071,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               if (value == null || value.isEmpty) {
                 return 'Please enter your email';
               }
+              // The original requirement was @gmail.com, keeping that validation
               if (!value.endsWith('@gmail.com')) {
                 return 'Email must end with @gmail.com';
               }
@@ -1348,8 +1393,7 @@ class CaptchaBackgroundPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    // Draw random lines
-    final random = Random(42); // Fixed seed for consistent pattern
+    final random = Random(42);
     for (int i = 0; i < 8; i++) {
       final startX = random.nextDouble() * size.width;
       final startY = random.nextDouble() * size.height;
@@ -1363,7 +1407,6 @@ class CaptchaBackgroundPainter extends CustomPainter {
       );
     }
 
-    // Draw random dots
     paint.style = PaintingStyle.fill;
     for (int i = 0; i < 15; i++) {
       final x = random.nextDouble() * size.width;
@@ -1373,4 +1416,5 @@ class CaptchaBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate)=>false;}
+  bool shouldRepaint(CustomPainter oldDelegate)=>false;
+}
