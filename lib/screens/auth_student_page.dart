@@ -24,10 +24,16 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
   String? selectedGender;
-  String? selectedDepartment;
+  String? selectedDepartment; // Stores department NAME
   String _captchaText = '';
   int _otpCountdown = 0;
   late AnimationController _otpTimerController;
+
+  // --- State for dynamic department loading ---
+  List<String> _departmentNames = []; // List for Dropdown names
+  Map<String, int> _departmentIdMap = {}; // Map: Name -> ID
+  bool _departmentsLoaded = false; // New state to track loading status
+  // --- End of Fix ---
 
   // Store data from WelcomeScreen
   Map<String, dynamic> _profileData = {};
@@ -51,15 +57,17 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   final _captchaController = TextEditingController();
 
   final List<String> genders = ['Male', 'Female', 'Other'];
-  final List<String> departments = [
-    'Computer Science',
-    'Information Technology',
-    'Electronics & Communication',
-    'Electrical & Instrumentation',
-    'Agricultural Engineering',
-    'Chemical Engineering',
-    'Mechanical Engineering'
-  ];
+
+  // NOTE: Hardcoded department list removed. Now loaded dynamically.
+  // final List<String> departments = [
+  //   'Computer Science',
+  //   'Information Technology',
+  //   'Electronics & Communication',
+  //   'Electrical & Instrumentation',
+  //   'Agricultural Engineering',
+  //   'Chemical Engineering',
+  //   'Mechanical Engineering'
+  // ];
 
   @override
   void initState() {
@@ -73,6 +81,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
 
     _generateCaptcha();
+    _fetchDepartments(); // Add initial department data load
     _backgroundController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
       _contentController.forward();
@@ -110,6 +119,45 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     _captchaController.dispose();
     super.dispose();
   }
+
+  // --- Updated: Fetch departments from DB ---
+  Future<void> _fetchDepartments() async {
+    try {
+      final response = await supabase
+          .from('departments')
+          .select('id, name')
+          .order('name', ascending: true); // Order by name for cleaner UI
+
+      if (response is List) {
+        final List<String> names = [];
+        final Map<String, int> idMap = {};
+
+        for (var dept in response) {
+          final name = dept['name'] as String;
+          final id = dept['id'] as int;
+          names.add(name);
+          idMap[name] = id;
+        }
+
+        setState(() {
+          _departmentNames = names;
+          _departmentIdMap = idMap;
+          _departmentsLoaded = true; // Mark as loaded
+        });
+      } else {
+        setState(() {
+          _departmentsLoaded = true; // Mark as loaded even if empty response
+        });
+      }
+    } catch (e) {
+      _showErrorMessage('Error loading departments. Please check your network.');
+      print('Department fetch error: $e');
+      setState(() {
+        _departmentsLoaded = true; // Important: mark as loaded on error
+      });
+    }
+  }
+  // --- End of Update: Fetch departments from DB ---
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -306,9 +354,21 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
     }
 
+    // --- Start of Fix: Get Department ID from Map ---
+    final departmentName = selectedDepartment;
+    if (departmentName == null) {
+      throw Exception('Please select a department.');
+    }
+
+    final departmentId = _departmentIdMap[departmentName];
+    if (departmentId == null) {
+      // This should ideally not happen if departments were loaded correctly
+      throw Exception('Department ID not found for selected department.');
+    }
+    // --- End of Fix: Get Department ID from Map ---
+
     try {
       final currentTime = DateTime.now().toIso8601String();
-      final departmentName = selectedDepartment;
       final instituteId = _profileData['institute_id'] as int;
 
       // 1. Sign up with email and password
@@ -330,7 +390,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           'gender': selectedGender,
           'phone': _phoneController.text.trim(),
           'student_id': _studentIdController.text.trim(),
-          'department': departmentName,
+          'department_id': departmentId, // <-- FIXED: Use department_id (int)
           'roll_number': _rollNoController.text.trim(),
           'created_at': currentTime,
         });
@@ -344,10 +404,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           'last_name': _lastNameController.text.trim(),
           'phone': _phoneController.text.trim(),
           'gender': selectedGender,
-          'department': departmentName,
-          'country': _profileData['country_name'],
-          'state': _profileData['state_name'],
-          'institute': _profileData['institute_name'],
+          'department_id': departmentId, // <-- FIXED: Use department_id (int)
+          // Removed redundant 'department' field: departmentName,
           'country_id': _profileData['country_id'],
           'state_id': _profileData['state_id'],
           'institute_id': instituteId,
@@ -639,22 +697,41 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                           ),
                           const SizedBox(height: 20),
 
-                          // Department field
-                          _buildDropdownField(
-                            label: 'Department',
-                            value: selectedDepartment,
-                            items: departments,
-                            onChanged: (value) =>
-                                setState(() => selectedDepartment = value),
-                            hint: 'Select department',
-                            icon: Icons.business_outlined,
-                            validator: (value) {
-                              if (value == null) {
-                                return 'Please select your department';
-                              }
-                              return null;
-                            },
-                          ),
+                          // Department field (Conditional rendering)
+                          if (!_departmentsLoaded)
+                            _buildInputField(
+                              controller: TextEditingController(text: 'Loading departments...'),
+                              label: 'Department',
+                              placeholder: 'Loading...',
+                              icon: Icons.business_outlined,
+                              enabled: false,
+                              validator: (_) => null,
+                            )
+                          else if (_departmentNames.isEmpty)
+                            _buildInputField(
+                              controller: TextEditingController(text: 'No departments found (Check DB)'),
+                              label: 'Department',
+                              placeholder: 'Check database connection or seeding',
+                              icon: Icons.error_outline,
+                              enabled: false,
+                              validator: (_) => 'Department list is empty.',
+                            )
+                          else
+                            _buildDropdownField(
+                              label: 'Department',
+                              value: selectedDepartment,
+                              items: _departmentNames,
+                              onChanged: (value) =>
+                                  setState(() => selectedDepartment = value),
+                              hint: 'Select department',
+                              icon: Icons.business_outlined,
+                              validator: (value) {
+                                if (value == null) {
+                                  return 'Please select your department';
+                                }
+                                return null;
+                              },
+                            ),
                           const SizedBox(height: 20),
 
                           // Roll Number field
@@ -926,6 +1003,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     TextInputType? keyboardType,
     String? Function(String?)? validator,
     Widget? suffixIcon,
+    bool enabled = true, // Added 'enabled' parameter
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -958,6 +1036,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             obscureText: obscureText,
             keyboardType: keyboardType,
             validator: validator,
+            enabled: enabled, // Applied 'enabled'
             style: TextStyle(color: Colors.grey[800], fontSize: 16),
             decoration: InputDecoration(
               hintText: placeholder,
