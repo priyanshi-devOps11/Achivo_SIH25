@@ -295,6 +295,9 @@ class SupabaseService {
     }
   }
 
+
+
+
   // Password Reset
   static Future<bool> resetPassword(String email) async {
     try {
