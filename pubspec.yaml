@@ -47,10 +47,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Assets (add your images/fonts here later if needed)
-  # assets:
-  #   - assets/images/
-
   assets:
     - assets/.env.local
     - assets/.env.example
