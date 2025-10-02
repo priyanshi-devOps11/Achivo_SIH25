@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-// Import your screens
+// Import your screens - CORRECTED: Removed all 'hide' clauses to prevent conflicts
 import 'package:achivo/screens/welcome_screen.dart';
 import 'package:achivo/screens/auth_admin_page.dart';
 import 'package:achivo/screens/auth_hod_page.dart';
 import 'package:achivo/screens/auth_faculty_page.dart';
 import 'package:achivo/screens/auth_student_page.dart';
-import 'package:achivo/screens/student_dashboard.dart' hide AuthStudentPage;
+import 'package:achivo/screens/student_dashboard.dart';
 // Import the admin dashboard from your admin_dashboard.dart file
 import 'package:achivo/screens/admin_dashboard.dart';
+
+// NOTE: You must also ensure that AuthAdminPage, AuthHodPage, AuthFacultyPage,
+// AdminDashboard, and StudentDashboard are proper Flutter Widgets (Stateless/Stateful)
+// in their respective files, as these are not defined in main.dart.
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,7 +53,8 @@ void main() async {
     // Test connection
     final client = Supabase.instance.client;
     try {
-      final response = await client.from('departments').select('count').count();
+      // Simple test query to ensure database connection is established
+      await client.from('departments').select('count').count();
       print('✅ Database connection test successful');
     } catch (e) {
       print('⚠️ Database connection test failed: $e');
@@ -100,7 +105,7 @@ class MyApp extends StatelessWidget {
         '/faculty-dashboard': (context) => const FacultyDashboardMain(),
         '/student-dashboard': (context) => StudentDashboard(),
 
-        // Additional routes for admin dashboard sub-pages
+        // Additional routes for admin dashboard sub-pages (Placeholder functions defined below)
         '/admin/departments': (context) => _buildPlaceholderPage('Department Management', 'Create, edit, and manage institutional departments'),
         '/admin/faculty': (context) => _buildPlaceholderPage('Faculty Management', 'Manage faculty profiles, roles, and assignments'),
         '/admin/students': (context) => _buildPlaceholderPage('Student Management', 'View and manage student registrations and profiles'),
@@ -276,6 +281,12 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// REMOVED THE DUMMY CLASS:
+// class AuthStudentPage {
+//   const AuthStudentPage();
+// }
+
+
 class AppInitializer extends StatefulWidget {
   const AppInitializer({super.key});
 
@@ -299,14 +310,12 @@ class _AppInitializerState extends State<AppInitializer> {
       // Wait for initialization to complete
       await Future.delayed(const Duration(milliseconds: 1000));
 
+      // The `main` function should have initialized Supabase, check its status here.
       if (!Supabase.instance.isInitialized) {
         throw Exception('Supabase initialization failed - check your .env.local file and network connection');
       }
 
-      // Test basic connectivity
       final client = Supabase.instance.client;
-
-      // Simple auth check (doesn't require authentication)
       final session = client.auth.currentSession;
 
       setState(() {
@@ -343,10 +352,13 @@ class _AppInitializerState extends State<AppInitializer> {
                 Navigator.pushReplacementNamed(context, '/student-dashboard');
                 break;
               default:
+              // Logged in but unknown role, sign out and go to welcome
+                await client.auth.signOut();
                 Navigator.pushReplacementNamed(context, '/welcome');
             }
           } catch (e) {
-            // If profile doesn't exist or error, go to welcome
+            // If profile doesn't exist or error, sign out and go to welcome
+            await client.auth.signOut();
             Navigator.pushReplacementNamed(context, '/welcome');
           }
         } else {
@@ -650,6 +662,308 @@ class ApprovalRequest {
   }
 }
 
+
+// --- Dedicated List Views for HOD Dashboard Tabs (Refactored) ---
+
+class FacultyListView extends StatelessWidget {
+  final List<Faculty> faculty;
+  final String searchTerm;
+  final String filterDesignation;
+
+  const FacultyListView({
+    super.key,
+    required this.faculty,
+    required this.searchTerm,
+    required this.filterDesignation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Apply filters and search
+    final filteredFaculty = faculty.where((member) {
+      final matchesSearch = searchTerm.isEmpty ||
+          member.name.toLowerCase().contains(searchTerm.toLowerCase()) ||
+          member.email.toLowerCase().contains(searchTerm.toLowerCase());
+
+      final matchesDesignation = filterDesignation == 'all' ||
+          member.designation == filterDesignation;
+
+      return matchesSearch && matchesDesignation;
+    }).toList();
+
+    if (filteredFaculty.isEmpty) {
+      return Center(
+        child: Text(
+          'No faculty found matching the criteria.',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: filteredFaculty.length,
+      itemBuilder: (context, index) {
+        final member = filteredFaculty[index];
+        return Card(
+          elevation: 2,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.blue.shade100,
+              child: Text(
+                member.name.substring(0, 1),
+                style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold),
+              ),
+            ),
+            title: Text(
+              member.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              '${member.designation} - ${member.email}',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: member.status == 'Active' ? Colors.green.shade500 : Colors.red.shade400,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                member.status,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+            onTap: () {
+              // TODO: Implement navigation to Faculty Detail Screen
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Viewing ${member.name} details')),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class StudentListView extends StatelessWidget {
+  final List<Student> students;
+  final String searchTerm;
+
+  const StudentListView({
+    super.key,
+    required this.students,
+    required this.searchTerm,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Apply search filter
+    final filteredStudents = students.where((student) {
+      return searchTerm.isEmpty ||
+          student.name.toLowerCase().contains(searchTerm.toLowerCase()) ||
+          student.rollNumber.toLowerCase().contains(searchTerm.toLowerCase()) ||
+          student.email.toLowerCase().contains(searchTerm.toLowerCase());
+    }).toList();
+
+    if (filteredStudents.isEmpty) {
+      return Center(
+        child: Text(
+          'No students found matching the criteria.',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: filteredStudents.length,
+      itemBuilder: (context, index) {
+        final student = filteredStudents[index];
+        return Card(
+          elevation: 2,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.purple.shade100,
+              child: Text(
+                student.name.substring(0, 1),
+                style: TextStyle(color: Colors.purple.shade700, fontWeight: FontWeight.bold),
+              ),
+            ),
+            title: Text(
+              student.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            subtitle: Text(
+              '${student.rollNumber} - ${student.year}',
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+            trailing: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: student.status == 'Active' ? Colors.green.shade500 : Colors.red.shade400,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                student.status,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ),
+            onTap: () {
+              // TODO: Implement navigation to Student Detail Screen
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Viewing ${student.name} details')),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class ApprovalRequestListView extends StatelessWidget {
+  final List<ApprovalRequest> approvalRequests;
+  final String searchTerm;
+  final String filterStatus;
+  final Future<void> Function(String, String) updateStatusCallback;
+
+  const ApprovalRequestListView({
+    super.key,
+    required this.approvalRequests,
+    required this.searchTerm,
+    required this.filterStatus,
+    required this.updateStatusCallback,
+  });
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Pending':
+        return Colors.orange.shade600;
+      case 'Approved':
+        return Colors.green.shade600;
+      case 'Rejected':
+        return Colors.red.shade600;
+      default:
+        return Colors.grey.shade600;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Apply filters and search
+    final filteredRequests = approvalRequests.where((request) {
+      final matchesSearch = searchTerm.isEmpty ||
+          request.title.toLowerCase().contains(searchTerm.toLowerCase()) ||
+          request.studentName.toLowerCase().contains(searchTerm.toLowerCase());
+
+      final matchesStatus = filterStatus == 'all' ||
+          request.status == filterStatus;
+
+      return matchesSearch && matchesStatus;
+    }).toList();
+
+    if (filteredRequests.isEmpty) {
+      return Center(
+        child: Text(
+          'No approval requests found matching the criteria.',
+          style: TextStyle(color: Colors.grey[600]),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: filteredRequests.length,
+      itemBuilder: (context, index) {
+        final request = filteredRequests[index];
+        return Card(
+          elevation: 3,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        request.title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(request.status),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        request.status,
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('Student: ${request.studentName}', style: TextStyle(color: Colors.grey.shade700)),
+                Text('Type: ${request.type} • Submitted: ${request.submittedDate}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                const SizedBox(height: 8),
+                Text(
+                  request.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                if (request.status == 'Pending') ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => updateStatusCallback(request.id, 'Approved'),
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Approve'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade500,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => updateStatusCallback(request.id, 'Rejected'),
+                          icon: const Icon(Icons.close, size: 18),
+                          label: const Text('Reject'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade500,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 // HOD Dashboard Implementation
 class HODDashboardMain extends StatefulWidget {
   const HODDashboardMain({super.key});
@@ -679,6 +993,17 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadData();
+
+    // Clear search/filters when tab changes
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() {
+          searchTerm = '';
+          filterStatus = 'all';
+          filterDesignation = 'all';
+        });
+      }
+    });
   }
 
   @override
@@ -786,6 +1111,19 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         status: 'Active',
         qualification: 'Ph.D in Information Technology',
       ),
+      Faculty(
+        id: '3',
+        name: 'Ms. Emily Davis',
+        email: 'emily.davis@university.edu',
+        phone: '+1 (555) 345-6789',
+        department: 'Computer Science',
+        designation: 'Assistant Professor',
+        experience: 3,
+        subjects: ['Mobile Computing', 'UX/UI Design'],
+        joiningDate: '2021-06-01',
+        status: 'Active',
+        qualification: 'M.S. in Computer Science',
+      ),
     ];
   }
 
@@ -805,6 +1143,20 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         status: 'Active',
         admissionDate: '2021-08-15',
       ),
+      Student(
+        id: '2',
+        name: 'Brian Foster',
+        email: 'brian.foster@student.edu',
+        phone: '+1 (555) 444-5555',
+        rollNumber: 'CS2022010',
+        year: '2nd Year',
+        semester: '4th Semester',
+        cgpa: 9.1,
+        address: '456 Campus Drive, Dorm 5',
+        parentContact: '+1 (555) 444-6666',
+        status: 'Active',
+        admissionDate: '2022-08-15',
+      ),
     ];
   }
 
@@ -816,11 +1168,23 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         studentName: 'Alex Thompson',
         type: 'Leave Application',
         title: 'Medical Leave Request',
-        description: 'Requesting 2 weeks medical leave due to surgery.',
+        description: 'Requesting 2 weeks medical leave due to surgery. Attached medical certificate.',
         submittedDate: '2024-09-05',
         status: 'Pending',
         urgency: 'High',
         documents: ['medical_certificate.pdf'],
+      ),
+      ApprovalRequest(
+        id: '2',
+        studentId: '2',
+        studentName: 'Brian Foster',
+        type: 'Event Participation',
+        title: 'Hackathon Approval',
+        description: 'Requesting approval to participate in the National Coding Hackathon from Oct 10-12.',
+        submittedDate: '2024-09-01',
+        status: 'Approved',
+        urgency: 'Medium',
+        documents: ['invitation.pdf'],
       ),
     ];
   }
@@ -844,6 +1208,91 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _updateApprovalStatus(String requestId, String newStatus) async {
+    try {
+      await supabase.from('approval_requests').update({
+        'status': newStatus,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', requestId);
+
+      setState(() {
+        final index = approvalRequests.indexWhere((r) => r.id == requestId);
+        if (index != -1) {
+          approvalRequests[index].status = newStatus;
+        }
+      });
+
+      _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully');
+    } catch (e) {
+      // If Supabase update fails, still update locally for demo
+      setState(() {
+        final index = approvalRequests.indexWhere((r) => r.id == requestId);
+        if (index != -1) {
+          approvalRequests[index].status = newStatus;
+        }
+      });
+      _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully (local update)');
+      print('Error updating approval status: $e');
+    }
+  }
+
+  // Helper to build search/filter UI
+  Widget _buildSearchAndFilterRow(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              onChanged: (value) {
+                setState(() {
+                  searchTerm = value;
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Search by name or ID...',
+                prefixIcon: const Icon(Icons.search, color: Color(0xFF1976D2)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Filter Button - Will show a dialog for current tab's filters
+          IconButton(
+            icon: const Icon(Icons.filter_list, color: Color(0xFF1976D2)),
+            onPressed: () => _showFilterOptions(context),
+            tooltip: 'Filter Options',
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFilterOptions(BuildContext context) {
+    String currentTab = ['Faculty', 'Students', 'Approvals'][_tabController.index];
+
+    // Simple placeholder for the dialog logic
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Filter $currentTab'),
+        content: Text('Implement specific filtering options for the $currentTab tab here. Current Search Term: $searchTerm'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -879,199 +1328,75 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         title: const Text('HOD Dashboard'),
-        backgroundColor: Colors.blue,
+        backgroundColor: Colors.blue.shade700,
         foregroundColor: Colors.white,
+        elevation: 4,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: Icon(
+              Icons.refresh,
+              color: isRefreshing ? Colors.yellow.shade200 : Colors.white,
+            ),
             onPressed: _refreshData,
           ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => _handleSignOut(context),
+            tooltip: 'Sign Out',
           ),
         ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.blue.shade200,
+          indicatorColor: Colors.white,
+          onTap: (_) {
+            setState(() {
+              // Clear search term when changing tabs for better UX
+              searchTerm = '';
+            });
+          },
+          tabs: const [
+            Tab(icon: Icon(Icons.people), text: 'Faculty'),
+            Tab(icon: Icon(Icons.school), text: 'Students'),
+            Tab(icon: Icon(Icons.assignment), text: 'Approvals'),
+          ],
+        ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          // Faculty Tab - Simple implementation
-          ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: faculty.length,
-            itemBuilder: (context, index) {
-              final member = faculty[index];
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    child: Text(member.name.substring(0, 1)),
-                  ),
-                  title: Text(member.name),
-                  subtitle: Text('${member.designation} - ${member.email}'),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: member.status == 'Active' ? Colors.green : Colors.red,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      member.status,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
+          // Search and Filter Row
+          _buildSearchAndFilterRow(context),
+
+          // TabBarView
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Faculty Tab
+                FacultyListView(
+                  faculty: faculty,
+                  searchTerm: searchTerm,
+                  filterDesignation: filterDesignation,
                 ),
-              );
-            },
-          ),
-          // Students Tab - Simple implementation
-          ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: students.length,
-            itemBuilder: (context, index) {
-              final student = students[index];
-              return Card(
-                child: ListTile(
-                  leading: CircleAvatar(
-                    child: Text(student.name.substring(0, 1)),
-                  ),
-                  title: Text(student.name),
-                  subtitle: Text('${student.rollNumber} - ${student.email}'),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: student.status == 'Active' ? Colors.green : Colors.red,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      student.status,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
+                // Students Tab
+                StudentListView(
+                  students: students,
+                  searchTerm: searchTerm,
                 ),
-              );
-            },
-          ),
-          // Approvals Tab - Simple implementation
-          ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: approvalRequests.length,
-            itemBuilder: (context, index) {
-              final request = approvalRequests[index];
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              request.title,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: request.status == 'Pending'
-                                  ? Colors.orange
-                                  : request.status == 'Approved'
-                                  ? Colors.green
-                                  : Colors.red,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              request.status,
-                              style: const TextStyle(color: Colors.white, fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text('Student: ${request.studentName}'),
-                      Text('Type: ${request.type}'),
-                      const SizedBox(height: 8),
-                      Text(request.description),
-                      if (request.status == 'Pending') ...[
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () => _updateApprovalStatus(request.id, 'Approved'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: const Text('Approve'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () => _updateApprovalStatus(request.id, 'Rejected'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: const Text('Reject'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
+                // Approvals Tab
+                ApprovalRequestListView(
+                  approvalRequests: approvalRequests,
+                  searchTerm: searchTerm,
+                  filterStatus: filterStatus,
+                  updateStatusCallback: _updateApprovalStatus,
                 ),
-              );
-            },
+              ],
+            ),
           ),
-        ],
-      ),
-      bottomNavigationBar: TabBar(
-        controller: _tabController,
-        labelColor: Colors.blue,
-        unselectedLabelColor: Colors.grey,
-        tabs: const [
-          Tab(icon: Icon(Icons.people), text: 'Faculty'),
-          Tab(icon: Icon(Icons.school), text: 'Students'),
-          Tab(icon: Icon(Icons.assignment), text: 'Approvals'),
         ],
       ),
     );
-  }
-
-  Future<void> _updateApprovalStatus(String requestId, String newStatus) async {
-    try {
-      await supabase.from('approval_requests').update({
-        'status': newStatus,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', requestId);
-
-      setState(() {
-        final index = approvalRequests.indexWhere((r) => r.id == requestId);
-        if (index != -1) {
-          approvalRequests[index].status = newStatus;
-        }
-      });
-
-      _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully');
-    } catch (e) {
-      // If Supabase update fails, still update locally for demo
-      setState(() {
-        final index = approvalRequests.indexWhere((r) => r.id == requestId);
-        if (index != -1) {
-          approvalRequests[index].status = newStatus;
-        }
-      });
-      _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully (local update)');
-      print('Error updating approval status: $e');
-    }
   }
 }
 
