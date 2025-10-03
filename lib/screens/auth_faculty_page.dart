@@ -19,7 +19,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   late Animation<double> _contentAnimation;
 
   bool _isLoading = false;
-  bool _isLogin = true; // Changed: Start with Login
+  bool _isLogin = true;
   bool _isOtpSent = false;
   bool _isOtpVerified = false;
   bool _passwordVisible = false;
@@ -148,8 +148,20 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   Future<void> _sendOTP() async {
-    if (_emailController.text.isEmpty || !_formKey.currentState!.validate()) {
+    // Only validate email and captcha before sending OTP
+    if (_emailController.text.isEmpty) {
       _showErrorMessage('Please enter a valid email first.');
+      return;
+    }
+    // Perform manual email validation check here since _formKey.currentState!.validate() checks all fields
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(_emailController.text.trim())) {
+      _showErrorMessage('Please enter a valid email address.');
+      return;
+    }
+    if (_captchaController.text.toUpperCase() != _captchaText) {
+      _showErrorMessage('Incorrect captcha. Please re-enter.');
+      _generateCaptcha();
+      _captchaController.clear();
       return;
     }
 
@@ -227,7 +239,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           _otpTimerController.stop();
         });
 
-        _showSuccessMessage('Email verified successfully!');
+        _showSuccessMessage('Email verified successfully! You can now complete registration.');
       }
     } on AuthException catch (error) {
       setState(() {
@@ -256,6 +268,14 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       if (!_isLogin && selectedSubjects.isEmpty) {
         _showErrorMessage('Please select at least one subject');
+        return;
+      }
+
+      // Final Captcha check before submit
+      if (_captchaController.text.toUpperCase() != _captchaText) {
+        _showErrorMessage('Incorrect captcha. Please refresh and try again.');
+        _generateCaptcha();
+        _captchaController.clear();
         return;
       }
 
@@ -321,6 +341,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       final currentTime = DateTime.now().toIso8601String();
       final instituteId = _profileData['institute_id'] as int;
 
+      // 1. Sign up the user in Supabase Auth
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -329,6 +350,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       if (authResponse.user != null) {
         final userId = authResponse.user!.id;
 
+        // 2. Insert faculty details into 'faculty' table
         await supabase.from('faculty').insert({
           'user_id': userId,
           'first_name': _firstNameController.text.trim(),
@@ -342,6 +364,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'created_at': currentTime,
         });
 
+        // 3. Insert profile/role information into 'profiles' table
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'faculty',
@@ -898,6 +921,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
+  // -------------------------------------------------------------------
+  // Helper Widgets
+  // -------------------------------------------------------------------
+
   Widget _buildInputField({
     required TextEditingController controller,
     required String label,
@@ -1122,7 +1149,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       builder: (context, setDialogState) {
         return AlertDialog(
           title: const Text('Select Subjects'),
-          content: Container(
+          content: SizedBox(
             width: double.maxFinite,
             child: ListView(
               shrinkWrap: true,
@@ -1156,268 +1183,334 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
-Widget _buildEnhancedOtpField() {
-  return Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [
-          Colors.blue.shade50,
-          Colors.purple.shade50,
+  Widget _buildEnhancedOtpField() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.blue.shade50,
+            Colors.purple.shade50,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.security, color: Colors.blue.shade600),
+              const SizedBox(width: 8),
+              Text(
+                'Email Verification',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Enter the 6-digit code sent to your email',
+            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TextFormField(
+                    controller: _otpController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey[800],
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 4,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '• • • • • •',
+                      hintStyle: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 18,
+                        letterSpacing: 8,
+                      ),
+                      border: InputBorder.none,
+                      counterText: '',
+                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ElevatedButton(
+                  onPressed: _verifyOTP,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  ),
+                  child: const Text(
+                    'Verify',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _otpCountdown > 0
+                    ? 'Resend OTP in ${_otpCountdown}s'
+                    : 'Didn\'t receive code?',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                ),
+              ),
+              TextButton(
+                onPressed: _otpCountdown == 0 ? _resendOTP : null,
+                child: Text(
+                  'Resend OTP',
+                  style: TextStyle(
+                    color: _otpCountdown == 0
+                        ? const Color(0xFF8B5CF6)
+                        : Colors.grey[400],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.blue.shade200),
-    ),
-    child: Column(
+    );
+  }
+
+  Widget _buildEnhancedCaptchaField() {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.security, color: Colors.blue.shade600),
-            const SizedBox(width: 8),
-            Text(
-              'Email Verification',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.blue.shade800,
-              ),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            'Security Verification',
+            style: TextStyle(
+              color: Colors.grey[800],
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
             ),
-          ],
+          ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          'Enter the 6-digit code sent to your email',
-          style: TextStyle(color: Colors.grey[600], fontSize: 14),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blue.withOpacity(0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.purple.shade100,
+                          Colors.blue.shade100,
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
                     ),
-                  ],
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: CaptchaBackgroundPainter(),
+                          ),
+                        ),
+                        Center(
+                          child: Text(
+                            _captchaText,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[800],
+                              letterSpacing: 2,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: const Offset(1, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
+              ),
+              Expanded(
+                flex: 2,
                 child: TextFormField(
-                  controller: _otpController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey[800],
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 4,
-                  ),
+                  controller: _captchaController,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter captcha';
+                    }
+                    if (value.toUpperCase() != _captchaText) {
+                      return 'Incorrect captcha';
+                    }
+                    return null;
+                  },
+                  style: TextStyle(color: Colors.grey[800], fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: '• • • • • •',
-                    hintStyle: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 18,
-                      letterSpacing: 8,
-                    ),
+                    hintText: 'Enter captcha',
+                    hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
                     border: InputBorder.none,
-                    counterText: '',
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ElevatedButton(
-                onPressed: _verifyOTP,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                ),
-                child: const Text(
-                  'Verify',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+              Container(
+                padding: const EdgeInsets.all(8),
+                child: IconButton(
+                  onPressed: () {
+                    _generateCaptcha();
+                    _captchaController.clear();
+                  },
+                  icon: const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
+                  tooltip: 'Change Captcha',
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.purple.shade50,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              _otpCountdown > 0
-                  ? 'Resend OTP in ${_otpCountdown}s'
-                  : 'Didn\'t receive code?',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontSize: 12,
-              ),
-            ),
-            TextButton(
-              onPressed: _otpCountdown == 0 ? _resendOTP : null,
-              child: Text(
-                'Resend OTP',
+      ],
+    );
+  }
+
+  Widget _buildEmailFieldWithOTP() {
+    // Hide this complex field in login mode, as Faculty ID is used for lookup.
+    if (_isLogin) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Email Input Field
+        _buildInputField(
+          controller: _emailController,
+          label: 'Email Address',
+          placeholder: 'Enter your institutional email',
+          icon: Icons.email_outlined,
+          keyboardType: TextInputType.emailAddress,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your email';
+            }
+            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+              return 'Please enter a valid email address';
+            }
+            return null;
+          },
+          suffixIcon: !_isOtpSent && !_isOtpVerified
+              ? Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: TextButton(
+              onPressed: _isLoading ? null : _sendOTP,
+              child: _isLoading && _isOtpSent == false
+                  ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFF8B5CF6),
+                ),
+              )
+                  : const Text(
+                'Send OTP',
                 style: TextStyle(
-                  color: _otpCountdown == 0
-                      ? const Color(0xFF8B5CF6)
-                      : Colors.grey[400],
-                  fontSize: 12,
+                  color: Color(0xFF8B5CF6),
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-          ],
+          )
+              : _isOtpVerified
+              ? const Icon(Icons.check_circle, color: Colors.green)
+              : null,
         ),
+
+        // 2. OTP Verification Field
+        if (_isOtpSent && !_isOtpVerified) ...[
+          const SizedBox(height: 20),
+          _buildEnhancedOtpField(),
+        ],
+
+        if (_isOtpVerified) const SizedBox(height: 10),
       ],
-    ),
-  );
+    );
+  }
 }
 
-Widget _buildEnhancedCaptchaField() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text(
-          'Security Verification',
-          style: TextStyle(
-            color: Colors.grey[800],
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-      Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.7),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                child: Container(
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.purple.shade100,
-                        Colors.blue.shade100,
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: CaptchaBackgroundPainter(),
-                        ),
-                      ),
-                      Center(
-                        child: Text(
-                          _captchaText,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[800],
-                            letterSpacing: 2,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withOpacity(0.3),
-                                offset: const Offset(1, 1),
-                                blurRadius: 2,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: TextFormField(
-                controller: _captchaController,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter captcha';
-                  }
-                  if (value.toUpperCase() != _captchaText) {
-                    return 'Incorrect captcha';
-                  }
-                  return null;
-                },
-                style: TextStyle(color: Colors.grey[800], fontSize: 16),
-                decoration: InputDecoration(
-                  hintText: 'Enter captcha',
-                  hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(8),
-              child: IconButton(
-                onPressed: () {
-                  _generateCaptcha();
-                  _captchaController.clear();
-                },
-                icon: const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
-                tooltip: 'Change Captcha',
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.purple.shade50,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
-}
-
-  _buildEmailFieldWithOTP() {}
-}
+// ===================================================================
+// FIX: CaptchaBackgroundPainter is moved outside the State class.
+// ===================================================================
 
 // Custom painter for captcha background pattern
 class CaptchaBackgroundPainter extends CustomPainter {
@@ -1451,4 +1544,5 @@ class CaptchaBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;}
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
+}
