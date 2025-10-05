@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
+// Global Supabase client accessor (assuming it's defined in main.dart)
+SupabaseClient get supabase => Supabase.instance.client;
+
 class AuthHodPage extends StatefulWidget {
   const AuthHodPage({Key? key}) : super(key: key);
 
@@ -11,6 +14,7 @@ class AuthHodPage extends StatefulWidget {
 
 class _AuthHodPageState extends State<AuthHodPage>
     with TickerProviderStateMixin {
+
   late AnimationController _backgroundController;
   late AnimationController _contentController;
   late AnimationController _otpTimerController;
@@ -19,7 +23,7 @@ class _AuthHodPageState extends State<AuthHodPage>
   late Animation<double> _contentAnimation;
 
   bool _isLoading = false;
-  bool _isLogin = false; // Changed to false to start with register by default
+  bool _isLogin = false;
   bool _isOtpSent = false;
   bool _isOtpVerified = false;
   bool _passwordVisible = false;
@@ -37,9 +41,6 @@ class _AuthHodPageState extends State<AuthHodPage>
   // Store data from WelcomeScreen
   Map<String, dynamic> _profileData = {};
   bool _isDataLoaded = false;
-
-  // Supabase client
-  final SupabaseClient supabase = Supabase.instance.client;
 
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
@@ -267,6 +268,8 @@ class _AuthHodPageState extends State<AuthHodPage>
           _isOtpVerified = true;
           _otpTimerController.stop();
         });
+        // Sign out the temporary session created by verifyOTP
+        await supabase.auth.signOut();
 
         _showSuccessMessage('Email verified successfully!');
       }
@@ -294,6 +297,15 @@ class _AuthHodPageState extends State<AuthHodPage>
         _showErrorMessage('Please verify your email first');
         return;
       }
+
+      // Captcha validation
+      if (_captchaController.text.toUpperCase() != _captchaText) {
+        _showErrorMessage('Incorrect captcha. Please try again.');
+        _generateCaptcha();
+        _captchaController.clear();
+        return;
+      }
+
 
       setState(() {
         _isLoading = true;
@@ -332,6 +344,7 @@ class _AuthHodPageState extends State<AuthHodPage>
         throw Exception('HOD not found. Please check your HOD ID.');
       }
 
+      // Supabase handles password hashing and validation against auth.users
       final authResponse = await supabase.auth.signInWithPassword(
         email: hodResponse['email'],
         password: _passwordController.text.trim(),
@@ -339,7 +352,7 @@ class _AuthHodPageState extends State<AuthHodPage>
 
       if (authResponse.user != null) {
         _showSuccessMessage('Login successful!');
-        Navigator.pushReplacementNamed(context, '/hod-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/hod-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Login failed: Invalid credentials or account not confirmed.');
@@ -348,6 +361,7 @@ class _AuthHodPageState extends State<AuthHodPage>
     }
   }
 
+  // >>>>>>>>>>>>>> FIX APPLIED HERE: Removed password from custom tables <<<<<<<<<<<<<<
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
       throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
@@ -367,7 +381,7 @@ class _AuthHodPageState extends State<AuthHodPage>
       final currentTime = DateTime.now().toIso8601String();
       final instituteId = _profileData['institute_id'] as int;
 
-      // 1. Sign up with email and password
+      // 1. Sign up with email and password (Creates the user and password hash in auth.users)
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -376,24 +390,24 @@ class _AuthHodPageState extends State<AuthHodPage>
       if (authResponse.user != null) {
         final userId = authResponse.user!.id;
 
-        // 🚨 CRUCIAL FIX: Insert into 'profiles' FIRST to satisfy the 'hods' foreign key and 'email_verified' column issue.
+        // 2. CRUCIAL FIX: Insert into 'profiles'. DO NOT include the password field.
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'hod',
           'email': _emailController.text.trim(),
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
-          'phone': _phoneController.text.trim(),
+          'phone': _phoneController.text.trim(), // Phone field now exists in schema
           'gender': selectedGender,
           'department_id': departmentId,
           'country_id': _profileData['country_id'],
           'state_id': _profileData['state_id'],
           'institute_id': instituteId,
-          'email_verified': true, // This column is now expected by the application
+          'email_verified': true,
           'created_at': currentTime,
         });
 
-        // 2. Insert into 'hods' SECOND, referencing the now-existing 'profiles' ID.
+        // 3. Insert into 'hods' SECOND.
         await supabase.from('hods').insert({
           'user_id': userId,
           'first_name': _firstNameController.text.trim(),
@@ -408,7 +422,7 @@ class _AuthHodPageState extends State<AuthHodPage>
         });
 
         _showSuccessMessage('Account created successfully!');
-        Navigator.pushReplacementNamed(context, '/hod-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/hod-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Registration failed: ${e.message}');

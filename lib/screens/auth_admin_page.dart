@@ -236,7 +236,7 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     }
   }
 
-  // >>>>>>>>>>>>>> FIX APPLIED HERE: Two-step lookup for BIGINT ID <<<<<<<<<<<<<<
+  // Two-step lookup for BIGINT ID to fix the previous data type error
   Future<void> _handleLogin() async {
     try {
       final instituteCode = _instituteIdController.text.trim();
@@ -290,7 +290,7 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     }
   }
 
-  // >>>>>>>>>>>>>> FIX APPLIED HERE: Two-step lookup for BIGINT ID <<<<<<<<<<<<<<
+  // >>>>>>>>>>>>>> FIX APPLIED HERE: REMOVED PASSWORD FROM INSERTION MAPS <<<<<<<<<<<<<<
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
       throw Exception('Institute data missing from initial setup.');
@@ -328,7 +328,7 @@ class _AuthAdminPageState extends State<AuthAdminPage>
         throw Exception('An admin is already registered for this Institute ID.');
       }
 
-      // 3. Sign up with email and password
+      // 3. Sign up with email and password (Creates the user and password hash in auth.users)
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -337,7 +337,8 @@ class _AuthAdminPageState extends State<AuthAdminPage>
       if (authResponse.user != null) {
         final userId = authResponse.user!.id;
 
-        // 4. Insert admin data into admins table (institute_id is BIGINT)
+        // 4. Insert admin data into admins table
+        // NOTE: 'password' REMOVED to match corrected schema and prevent NOT NULL error
         await supabase.from('admins').insert({
           'user_id': userId,
           'first_name': _firstNameController.text.trim(),
@@ -348,7 +349,8 @@ class _AuthAdminPageState extends State<AuthAdminPage>
           'created_at': currentTime,
         });
 
-        // 5. Create profile in the main 'profiles' table (institute_id is BIGINT)
+        // 5. Create profile in the main 'profiles' table
+        // NOTE: 'password' REMOVED to match corrected schema and prevent NOT NULL error
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'admin',
