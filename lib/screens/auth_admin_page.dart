@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
+// Global Supabase client accessor (assuming it's defined in main.dart or imported)
+SupabaseClient get supabase => Supabase.instance.client;
+
 class AuthAdminPage extends StatefulWidget {
   const AuthAdminPage({Key? key}) : super(key: key);
 
@@ -11,7 +14,7 @@ class AuthAdminPage extends StatefulWidget {
 
 class _AuthAdminPageState extends State<AuthAdminPage>
     with TickerProviderStateMixin {
-  // ... (Animation Controllers initialization omitted for brevity)
+
   late AnimationController _backgroundController;
   late AnimationController _contentController;
   late Animation<double> _backgroundAnimation;
@@ -31,8 +34,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
   Map<String, dynamic> _profileData = {};
   bool _isDataLoaded = false;
 
-  final SupabaseClient supabase = Supabase.instance.client;
-
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
@@ -49,7 +50,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
   @override
   void initState() {
     super.initState();
-    // Initialize all controllers and animations here
     _backgroundController = AnimationController(duration: const Duration(milliseconds: 2000), vsync: this);
     _contentController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
     _otpTimerController = AnimationController(duration: const Duration(seconds: 60), vsync: this);
@@ -119,7 +119,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     });
   }
 
-  // FIX 1: Use Supabase's native OTP sending mechanism
   Future<void> _sendOTP() async {
     if (_emailController.text.isEmpty || !_formKey.currentState!.validate()) {
       _showErrorMessage('Please enter a valid email first.');
@@ -129,7 +128,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     setState(() { _isLoading = true; });
 
     try {
-      // NOTE: This sends the OTP email via Supabase's configured email provider.
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
         emailRedirectTo: Uri.parse('http://localhost:5248/#/auth-admin').toString(),
@@ -152,7 +150,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     }
   }
 
-  // FIX 2: Use Supabase's native OTP verification
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
       _showErrorMessage('Please enter the 6-digit OTP.');
@@ -162,7 +159,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     setState(() { _isLoading = true; });
 
     try {
-      // Verify OTP against the email
       final response = await supabase.auth.verifyOTP(
         email: _emailController.text.trim(),
         token: _otpController.text.trim(),
@@ -175,7 +171,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
           _isOtpVerified = true;
           _otpTimerController.stop();
         });
-        // Important: Sign out the temporary session created by verifyOTP
         await supabase.auth.signOut();
 
         _showSuccessMessage('Email verified successfully! 🎉 You can now create your account.');
@@ -194,7 +189,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
 
   Future<void> _resendOTP() async {
     if (_otpCountdown == 0) {
-      // Use the same OTP send function
       await _sendOTP();
     }
   }
@@ -208,6 +202,14 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     if (_formKey.currentState!.validate()) {
       if (!_isLogin && !_isOtpVerified) {
         _showErrorMessage('Please verify your email first 📧');
+        return;
+      }
+
+      // Captcha validation
+      if (_captchaController.text.toUpperCase() != _captchaText) {
+        _showErrorMessage('Incorrect captcha. Please try again.');
+        _generateCaptcha();
+        _captchaController.clear();
         return;
       }
 
@@ -234,73 +236,99 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     }
   }
 
+  // >>>>>>>>>>>>>> FIX APPLIED HERE: Two-step lookup for BIGINT ID <<<<<<<<<<<<<<
   Future<void> _handleLogin() async {
-    // ... (Login logic remains the same)
     try {
-      // 1. Find admin email using institute_id
-      final adminResponse = await supabase
-          .from('admins')
-          .select('email, first_name, last_name, phone')
-          .eq('institute_id', _instituteIdController.text.trim())
+      final instituteCode = _instituteIdController.text.trim();
+
+      // 1. Find the Institute ID (BIGINT) using the Institute Code (String)
+      final instituteResponse = await supabase
+          .from('institutes')
+          .select('id')
+          .eq('institute_code', instituteCode)
           .maybeSingle();
 
-      if (adminResponse == null) {
-        throw Exception('Admin not found with this Institute ID. Please check your ID or register.');
+      if (instituteResponse == null) {
+        throw Exception('Institute ID not found or invalid. Check your ID.');
       }
 
-      // 2. Sign in with email and password
+      final instituteBigIntId = instituteResponse['id'] as int;
+
+      // 2. Find the admin's profile (which contains the email) using the BIGINT ID
+      final adminProfile = await supabase
+          .from('profiles')
+          .select('email, first_name')
+          .eq('institute_id', instituteBigIntId) // Filter by the BIGINT ID
+          .eq('role', 'admin')
+          .maybeSingle();
+
+      if (adminProfile == null) {
+        throw Exception('Admin account not registered for this Institute. Please register first.');
+      }
+
+      final adminEmail = adminProfile['email'] as String;
+
+      // 3. Sign in with the retrieved email and the provided password
       final authResponse = await supabase.auth.signInWithPassword(
-        email: adminResponse['email'],
+        email: adminEmail,
         password: _passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        // 3. Update profile for consistency (optional for login)
-        await supabase.from('profiles').upsert({
-          'id': authResponse.user!.id,
-          'role': 'admin',
-          'email': adminResponse['email'],
-          'first_name': adminResponse['first_name'],
-          'updated_at': DateTime.now().toIso8601String(),
-        });
+        // 4. Update profile for consistency (optional)
+        await supabase.from('profiles').update({
+          'last_login': DateTime.now().toIso8601String(),
+        }).eq('id', authResponse.user!.id);
 
         _showSuccessMessage('Login successful! Welcome Admin.');
-        Navigator.pushReplacementNamed(context, '/admin-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/admin-dashboard');
       }
     } on AuthException catch (e) {
-      throw Exception('Login failed: Invalid credentials or account not confirmed. (${e.message})');
+      throw Exception('Login failed: Invalid credentials. (${e.message})');
     } catch (error) {
       throw Exception('Login failed: ${error.toString()}');
     }
   }
 
-  // FIX 3: Ensure registration relies on verified email state
+  // >>>>>>>>>>>>>> FIX APPLIED HERE: Two-step lookup for BIGINT ID <<<<<<<<<<<<<<
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
-      throw Exception('Institute data missing from initial setup. Please go back and complete the welcome screen.');
+      throw Exception('Institute data missing from initial setup.');
     }
-
-    // Crucial Check: Ensure the user's email is still verified and associated with a temporary/pending user state.
-    // Since we manually signed out after verifyOTP, we must ensure the user object is fresh.
-    // However, the cleanest way is to just proceed with SIGN UP which creates the user and sets the password.
-    // This assumes the RLS policy on 'profiles' allows insertion based on the session user, which is what SIGN UP handles.
 
     try {
       final currentTime = DateTime.now().toIso8601String();
-      final instituteId = _profileData['institute_id'] as int;
+      final instituteCode = _instituteIdController.text.trim();
+      final initialInstituteId = _profileData['institute_id'] as int;
 
-      // 1. Check if an admin already exists for this institute_id
+      // 1. Find the Institute ID (BIGINT) using the Institute Code (String)
+      final instituteResponse = await supabase
+          .from('institutes')
+          .select('id, state_id, country_id')
+          .eq('institute_code', instituteCode)
+          .maybeSingle();
+
+      if (instituteResponse == null) {
+        throw Exception('Institute ID not found or invalid.');
+      }
+
+      final instituteBigIntId = instituteResponse['id'] as int;
+      final stateId = instituteResponse['state_id'] as int;
+      final countryId = instituteResponse['country_id'] as int;
+
+      // 2. Check if an admin already exists for this institute_id (BIGINT)
       final existingAdmin = await supabase
-          .from('admins')
-          .select('institute_id')
-          .eq('institute_id', _instituteIdController.text.trim())
+          .from('profiles')
+          .select('id')
+          .eq('institute_id', instituteBigIntId) // Filter by the BIGINT ID
+          .eq('role', 'admin')
           .maybeSingle();
 
       if (existingAdmin != null) {
-        throw Exception('An admin is already registered for this Institute ID');
+        throw Exception('An admin is already registered for this Institute ID.');
       }
 
-      // 2. Sign up with email and password (creates user in auth.users)
+      // 3. Sign up with email and password
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -309,18 +337,18 @@ class _AuthAdminPageState extends State<AuthAdminPage>
       if (authResponse.user != null) {
         final userId = authResponse.user!.id;
 
-        // 3. Insert admin data into admins table
+        // 4. Insert admin data into admins table (institute_id is BIGINT)
         await supabase.from('admins').insert({
           'user_id': userId,
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
           'email': _emailController.text.trim(),
           'phone': _phoneController.text.trim(),
-          'institute_id': _instituteIdController.text.trim(),
+          'institute_id': instituteBigIntId, // Use the BIGINT ID
           'created_at': currentTime,
         });
 
-        // 4. Create profile in the main 'profiles' table
+        // 5. Create profile in the main 'profiles' table (institute_id is BIGINT)
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'admin',
@@ -328,18 +356,23 @@ class _AuthAdminPageState extends State<AuthAdminPage>
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
           'phone': _phoneController.text.trim(),
-          'email_verified': true, // We verified it manually earlier
+          'email_verified': true,
+
+          // Use IDs retrieved from step 1
+          'institute_id': instituteBigIntId, // Use the BIGINT ID
+          'state_id': stateId,
+          'country_id': countryId,
+
+          // Using data from initial screen state (optional, for consistency)
           'country': _profileData['country_name'],
           'state': _profileData['state_name'],
           'institute': _profileData['institute_name'],
-          'country_id': _profileData['country_id'],
-          'state_id': _profileData['state_id'],
-          'institute_id': instituteId,
+
           'created_at': currentTime,
         });
 
         _showSuccessMessage('Admin account created successfully! Redirecting...');
-        Navigator.pushReplacementNamed(context, '/admin-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/admin-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Registration failed: ${e.message}');
@@ -347,7 +380,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
       throw Exception('Registration failed: ${error.toString()}');
     }
   }
-// ... (All helper methods like _showSuccessMessage, _buildInputField, etc., remain the same)
 
   void _showSuccessMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1101,7 +1133,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
   }
 
   Widget _buildEnhancedCaptchaField() {
-    // ... (Captcha implementation remains the same)
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1168,9 +1199,7 @@ class _AuthAdminPageState extends State<AuthAdminPage>
                     if (value == null || value.isEmpty) {
                       return 'Please enter captcha';
                     }
-                    if (value.toUpperCase() != _captchaText) {
-                      return 'Incorrect captcha';
-                    }
+                    // Captcha validation is handled in _handleSubmit for better UX
                     return null;
                   },
                   style: TextStyle(color: Colors.grey[800], fontSize: 16),
