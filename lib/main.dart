@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async'; // Added for StreamSubscription
 
 // Import your screens - CORRECTED: Removed all 'hide' clauses to prevent conflicts
 import 'package:achivo/screens/welcome_screen.dart';
@@ -36,6 +37,7 @@ void main() async {
     }
 
     print('🔄 Initializing Supabase...');
+    // Only print a truncated version of the URL for security
     print('   URL: ${supabaseUrl.substring(0, 30)}...');
 
     // Initialize Supabase with proper configuration
@@ -281,11 +283,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// REMOVED THE DUMMY CLASS:
-// class AuthStudentPage {
-//   const AuthStudentPage();
-// }
-
 
 class AppInitializer extends StatefulWidget {
   const AppInitializer({super.key});
@@ -299,10 +296,43 @@ class _AppInitializerState extends State<AppInitializer> {
   String? _errorMessage;
   bool _isRetrying = false;
 
+  // New: Subscription to listen for auth events globally
+  late final StreamSubscription<AuthState> _authStateSubscription;
+
   @override
   void initState() {
     super.initState();
+    // Initialize checking and start the global listener
+    _setupAuthListener();
     _checkInitialization();
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription.cancel();
+    super.dispose();
+  }
+
+  // New function to listen for password recovery event
+  void _setupAuthListener() {
+    _authStateSubscription = supabase.auth.onAuthStateChange.listen((data) {
+      final AuthChangeEvent event = data.event;
+      final Session? session = data.session;
+
+      if (event == AuthChangeEvent.passwordRecovery && session != null && mounted) {
+        // User is authenticated via the password recovery link.
+        // STOP the normal initialization flow and force a password change.
+        setState(() {
+          _isInitialized = true;
+        });
+
+        // Ensure we pop any existing routes before showing the dialog
+        Navigator.popUntil(context, (route) => route.isFirst);
+
+        // Use a dialog to prompt for the new password immediately
+        _showPasswordUpdateDialog(session.user);
+      }
+    });
   }
 
   Future<void> _checkInitialization() async {
@@ -317,6 +347,9 @@ class _AppInitializerState extends State<AppInitializer> {
 
       final client = Supabase.instance.client;
       final session = client.auth.currentSession;
+
+      // If a recovery event has occurred, the listener handles navigation.
+      if (_isInitialized) return;
 
       setState(() {
         _isInitialized = true;
@@ -358,6 +391,7 @@ class _AppInitializerState extends State<AppInitializer> {
             }
           } catch (e) {
             // If profile doesn't exist or error, sign out and go to welcome
+            print('Profile lookup failed for user ${user.id}: $e');
             await client.auth.signOut();
             Navigator.pushReplacementNamed(context, '/welcome');
           }
@@ -375,6 +409,67 @@ class _AppInitializerState extends State<AppInitializer> {
         });
       }
     }
+  }
+
+  // Dialog to handle password update when the recovery link is clicked
+  void _showPasswordUpdateDialog(User user) {
+    final TextEditingController _newPasswordController = TextEditingController();
+    final _dialogFormKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Set New Password'),
+          content: Form(
+            key: _dialogFormKey,
+            child: TextFormField(
+              controller: _newPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Enter new password',
+              ),
+              validator: (value) {
+                if (value == null || value.length < 6) {
+                  return 'Password must be at least 6 characters.';
+                }
+                return null;
+              },
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Update Password'),
+              onPressed: () async {
+                if (_dialogFormKey.currentState!.validate()) {
+                  // Attempt to update the password
+                  try {
+                    await supabase.auth.updateUser(
+                        UserAttributes(password: _newPasswordController.text));
+
+                    // Password successfully updated, navigate to login
+                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                    await supabase.auth.signOut();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Password updated successfully! Please log in.'), backgroundColor: Colors.green));
+                      Navigator.pushReplacementNamed(context, '/welcome');
+                    }
+                  } catch (e) {
+                    // Handle failure to update password
+                    if (dialogContext.mounted) {
+                      ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text('Failed to update password: ${e.toString()}'), backgroundColor: Colors.red));
+                    }
+                  }
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   String _getReadableError(String error) {
@@ -529,7 +624,9 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 }
 
-// Data Models
+// Data Models (Included below for completeness, assuming they are required)
+// --- Data Models and Dashboards are large, including a subset for completeness ---
+
 class Faculty {
   final String id;
   final String name;
