@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
+import 'auth_hod_page.dart';
+
 // Global Supabase client accessor (assuming it's defined in main.dart)
 SupabaseClient get supabase => Supabase.instance.client;
 
@@ -28,9 +30,16 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
   String? selectedGender;
+  String? selectedDepartment; // <-- NEW: Department State
   List<String> selectedSubjects = [];
   String _captchaText = '';
   int _otpCountdown = 0;
+
+  // --- State for dynamic department loading ---
+  List<String> _departmentNames = [];
+  Map<String, int> _departmentIdMap = {};
+  bool _departmentsLoaded = false;
+  // ------------------------------------------
 
   // Store data from WelcomeScreen
   Map<String, dynamic> _profileData = {};
@@ -88,6 +97,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
 
     _generateCaptcha();
+    _fetchDepartments(); // <-- ADDED: Fetch departments on startup
     _backgroundController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
       _contentController.forward();
@@ -123,6 +133,45 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     _captchaController.dispose();
     super.dispose();
   }
+
+  // ADDED: Fetch departments from DB function
+  Future<void> _fetchDepartments() async {
+    try {
+      final response = await supabase
+          .from('departments')
+          .select('id, name')
+          .order('name', ascending: true);
+
+      if (response is List) {
+        final List<String> names = [];
+        final Map<String, int> idMap = {};
+
+        for (var dept in response) {
+          final name = dept['name'] as String;
+          final id = dept['id'] as int;
+          names.add(name);
+          idMap[name] = id;
+        }
+
+        setState(() {
+          _departmentNames = names;
+          _departmentIdMap = idMap;
+          _departmentsLoaded = true;
+        });
+      } else {
+        setState(() {
+          _departmentsLoaded = true;
+        });
+      }
+    } catch (e) {
+      _showErrorMessage('Error loading departments. Please check your network.');
+      print('Department fetch error: $e');
+      setState(() {
+        _departmentsLoaded = true;
+      });
+    }
+  }
+
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -278,6 +327,11 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         return;
       }
 
+      if (!_isLogin && selectedDepartment == null) { // <-- NEW VALIDATION
+        _showErrorMessage('Please select your department.');
+        return;
+      }
+
       // Final Captcha check before submit
       if (_captchaController.text.toUpperCase() != _captchaText) {
         _showErrorMessage('Incorrect captcha. Please refresh and try again.');
@@ -346,6 +400,13 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
     }
 
+    final departmentName = selectedDepartment;
+    final departmentId = departmentName != null ? _departmentIdMap[departmentName] : null;
+
+    if (departmentId == null) {
+      throw Exception('Department ID not found or selected department is invalid.');
+    }
+
     try {
       final currentTime = DateTime.now().toIso8601String();
       final instituteId = _profileData['institute_id'] as int;
@@ -360,7 +421,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         final userId = authResponse.user!.id;
 
         // 2. Insert profile/role information into 'profiles' table (Central identity)
-        // Ensure email_verified is true because we verified it with OTP
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'faculty',
@@ -369,6 +429,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'last_name': _lastNameController.text.trim(),
           'phone': _phoneController.text.trim(),
           'gender': selectedGender,
+          'department_id': departmentId, // <-- ADDED: Department ID for profiles
           'country_id': _profileData['country_id'],
           'state_id': _profileData['state_id'],
           'institute_id': instituteId,
@@ -377,13 +438,12 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         });
 
         // 3. Insert faculty-specific details into 'faculty' table
-        // We only insert columns that are specific to the 'faculty' table (non-redundant fields).
         await supabase.from('faculty').insert({
           'user_id': userId,
           'faculty_id': _facultyIdController.text.trim(),
           'subjects': selectedSubjects,
-          'joining_date': currentTime.substring(0, 10), // Use current date as joining date placeholder
-          // department_id, designation, etc., should be added here if available
+          'department_id': departmentId, // <-- ADDED: Department ID for faculty table
+          'joining_date': currentTime.substring(0, 10),
         });
 
         _showSuccessMessage('Account created successfully!');
@@ -651,6 +711,44 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                             },
                           ),
                           const SizedBox(height: 20),
+
+                          // Department Dropdown <-- ADDED HERE
+                          if (!_departmentsLoaded)
+                            _buildInputField(
+                              controller: TextEditingController(text: 'Loading departments...'),
+                              label: 'Department',
+                              placeholder: 'Loading...',
+                              icon: Icons.business_outlined,
+                              enabled: false,
+                              validator: (_) => null,
+                            )
+                          else if (_departmentNames.isEmpty)
+                            _buildInputField(
+                              controller: TextEditingController(text: 'No departments found (Check DB)'),
+                              label: 'Department',
+                              placeholder: 'Check database connection or seeding',
+                              icon: Icons.error_outline,
+                              enabled: false,
+                              validator: (_) => 'Department list is empty.',
+                            )
+                          else
+                            _buildDropdownField(
+                              label: 'Department',
+                              value: selectedDepartment,
+                              items: _departmentNames,
+                              onChanged: (value) =>
+                                  setState(() => selectedDepartment = value),
+                              hint: 'Select department',
+                              icon: Icons.business_outlined,
+                              validator: (value) {
+                                if (value == null) {
+                                  return 'Please select your department';
+                                }
+                                return null;
+                              },
+                            ),
+                          const SizedBox(height: 20),
+                          // End Department Dropdown
 
                           // Gender field
                           _buildDropdownField(
@@ -1517,39 +1615,4 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       ],
     );
   }
-}
-
-// Custom painter for captcha background pattern
-class CaptchaBackgroundPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.grey.withOpacity(0.1)
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
-
-    final random = Random(42);
-    for (int i = 0; i < 8; i++) {
-      final startX = random.nextDouble() * size.width;
-      final startY = random.nextDouble() * size.height;
-      final endX = random.nextDouble() * size.width;
-      final endY = random.nextDouble() * size.height;
-
-      canvas.drawLine(
-        Offset(startX, startY),
-        Offset(endX, endY),
-        paint,
-      );
-    }
-
-    paint.style = PaintingStyle.fill;
-    for (int i = 0; i < 15; i++) {
-      final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height;
-      canvas.drawCircle(Offset(x, y), 1, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
