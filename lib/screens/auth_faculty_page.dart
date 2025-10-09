@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
-import 'auth_hod_page.dart';
-
 // Global Supabase client accessor (assuming it's defined in main.dart)
 SupabaseClient get supabase => Supabase.instance.client;
 
@@ -30,7 +28,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
   String? selectedGender;
-  String? selectedDepartment; // <-- NEW: Department State
+  String? selectedDepartment; // Department State
   List<String> selectedSubjects = [];
   String _captchaText = '';
   int _otpCountdown = 0;
@@ -97,7 +95,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
 
     _generateCaptcha();
-    _fetchDepartments(); // <-- ADDED: Fetch departments on startup
+    _fetchDepartments();
     _backgroundController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
       _contentController.forward();
@@ -164,14 +162,12 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         });
       }
     } catch (e) {
-      _showErrorMessage('Error loading departments. Please check your network.');
       print('Department fetch error: $e');
       setState(() {
         _departmentsLoaded = true;
       });
     }
   }
-
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -327,7 +323,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         return;
       }
 
-      if (!_isLogin && selectedDepartment == null) { // <-- NEW VALIDATION
+      if (!_isLogin && selectedDepartment == null) { // NEW VALIDATION
         _showErrorMessage('Please select your department.');
         return;
       }
@@ -368,6 +364,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   Future<void> _handleLogin() async {
     try {
       // 1. Look up email using faculty_id from the 'faculty' table
+      // NOTE: This assumes the faculty table contains the 'email' column (which requires schema fix 2.)
       final facultyResponse = await supabase
           .from('faculty')
           .select('email')
@@ -429,7 +426,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'last_name': _lastNameController.text.trim(),
           'phone': _phoneController.text.trim(),
           'gender': selectedGender,
-          'department_id': departmentId, // <-- ADDED: Department ID for profiles
+          'department_id': departmentId,
           'country_id': _profileData['country_id'],
           'state_id': _profileData['state_id'],
           'institute_id': instituteId,
@@ -442,7 +439,12 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'user_id': userId,
           'faculty_id': _facultyIdController.text.trim(),
           'subjects': selectedSubjects,
-          'department_id': departmentId, // <-- ADDED: Department ID for faculty table
+          'department_id': departmentId,
+          'email': _emailController.text.trim(), // Keep for login/reset lookup compatibility
+          'first_name': _firstNameController.text.trim(),
+          'last_name': _lastNameController.text.trim(),
+          'phone': _phoneController.text.trim(),
+          'gender': selectedGender,
           'joining_date': currentTime.substring(0, 10),
         });
 
@@ -467,6 +469,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
 
     try {
+      // Look up email using faculty_id from the 'faculty' table
       final response = await supabase
           .from('faculty')
           .select('email')
@@ -1026,7 +1029,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   // -------------------------------------------------------------------
-  // Helper Widgets (INJECTED from working HOD page)
+  // Helper Widgets (ALL DEFINITIONS)
   // -------------------------------------------------------------------
 
   Widget _buildInputField({
@@ -1038,7 +1041,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     TextInputType? keyboardType,
     String? Function(String?)? validator,
     Widget? suffixIcon,
-    bool enabled = true, // Added for completeness, if used in build()
+    bool enabled = true,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1250,7 +1253,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
-  // Missing helper method from HOD page
   Widget _buildSubjectSelectionDialog() {
     return StatefulBuilder(
       builder: (context, setDialogState) {
@@ -1290,11 +1292,39 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
-  // Missing helper method from HOD page
   Widget _buildEmailFieldWithOTP() {
     // Hide this complex field in login mode, as Faculty ID is used for lookup.
     if (_isLogin) {
       return const SizedBox.shrink();
+    }
+
+    // Determine the suffix icon
+    Widget? emailSuffixIcon;
+    if (!_isOtpSent && !_isOtpVerified) {
+      emailSuffixIcon = Padding(
+        padding: const EdgeInsets.only(right: 8.0),
+        child: TextButton(
+          onPressed: _isLoading ? null : _sendOTP,
+          child: _isLoading && _isOtpSent == false
+              ? const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFF8B5CF6),
+            ),
+          )
+              : const Text(
+            'Send OTP',
+            style: TextStyle(
+              color: Color(0xFF8B5CF6),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    } else if (_isOtpVerified) {
+      emailSuffixIcon = const Icon(Icons.check_circle, color: Colors.green);
     }
 
     return Column(
@@ -1316,32 +1346,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
             }
             return null;
           },
-          suffixIcon: !_isOtpSent && !_isOtpVerified
-              ? Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: TextButton(
-              onPressed: _isLoading ? null : _sendOTP,
-              child: _isLoading && _isOtpSent == false
-                  ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFF8B5CF6),
-                ),
-              )
-                  : const Text(
-                'Send OTP',
-                style: TextStyle(
-                  color: Color(0xFF8B5CF6),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          )
-              : _isOtpVerified
-              ? const Icon(Icons.check_circle, color: Colors.green)
-              : null,
+          suffixIcon: emailSuffixIcon,
         ),
 
         // 2. OTP Verification Field
@@ -1355,7 +1360,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
-  // Missing helper method from HOD page
   Widget _buildEnhancedOtpField() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1615,4 +1619,39 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       ],
     );
   }
+}
+
+// Custom painter for captcha background pattern - MUST BE OUTSIDE _AuthFacultyPageState
+class CaptchaBackgroundPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.grey.withOpacity(0.1)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    final random = Random(42);
+    for (int i = 0; i < 8; i++) {
+      final startX = random.nextDouble() * size.width;
+      final startY = random.nextDouble() * size.height;
+      final endX = random.nextDouble() * size.width;
+      final endY = random.nextDouble() * size.height;
+
+      canvas.drawLine(
+        Offset(startX, startY),
+        Offset(endX, endY),
+        paint,
+      );
+    }
+
+    paint.style = PaintingStyle.fill;
+    for (int i = 0; i < 15; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      canvas.drawCircle(Offset(x, y), 1, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
