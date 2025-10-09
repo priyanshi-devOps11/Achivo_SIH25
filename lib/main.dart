@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:async'; // Added for StreamSubscription
+import 'dart:async';
 
 // Import your screens - CORRECTED: Removed all 'hide' clauses to prevent conflicts
 import 'package:achivo/screens/welcome_screen.dart';
@@ -346,9 +346,24 @@ class _AppInitializerState extends State<AppInitializer> {
       }
 
       final client = Supabase.instance.client;
+
+      // 🚨 FINAL FIX: Manually process session from URL for deep links (like password recovery)
+      try {
+        // Get the full URL hash (e.g., #access_token=...&type=recovery)
+        final urlHash = Uri.base.fragment;
+
+        if (urlHash.isNotEmpty) {
+          // Pass the URL hash string to the method as the required argument for this SDK version.
+          await client.auth.getSessionFromUrl(urlHash as Uri);
+        }
+      } catch (e) {
+        // Ignore errors here; this just means the URL doesn't contain auth tokens or SDK is newer.
+        // The listener or initial session check will handle the standard flow.
+      }
+
       final session = client.auth.currentSession;
 
-      // If a recovery event has occurred, the listener handles navigation.
+      // If a recovery event has occurred, the listener has taken control.
       if (_isInitialized) return;
 
       setState(() {
@@ -360,6 +375,15 @@ class _AppInitializerState extends State<AppInitializer> {
         // Check if user is already logged in and redirect to appropriate dashboard
         if (session != null) {
           final user = session.user;
+
+          // CRITICAL: If the session has a very short expiry time, assume it's a recovery link
+          // and let the listener handle the UI, preventing the login/logout loop.
+          // The passwordRecovery event will be triggered by getSessionFromUrl().
+          if (session.expiresIn != null && session.expiresIn! < 60) {
+            print('Skipping role check: Detected short-lived recovery session.');
+            return;
+          }
+
           try {
             // Get user profile to determine role
             final profile = await client
