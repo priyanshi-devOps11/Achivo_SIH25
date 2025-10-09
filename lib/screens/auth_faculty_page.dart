@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
+// Global Supabase client accessor (assuming it's defined in main.dart)
+SupabaseClient get supabase => Supabase.instance.client;
+
 class AuthFacultyPage extends StatefulWidget {
   const AuthFacultyPage({Key? key}) : super(key: key);
 
@@ -170,13 +173,14 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
 
     try {
-      final response = await supabase
-          .from('faculty')
+      // 1. Check if user exists in the central 'profiles' table for a clean registration flow.
+      final profileResponse = await supabase
+          .from('profiles')
           .select('email')
           .eq('email', _emailController.text.trim())
           .maybeSingle();
 
-      if (response != null && !_isLogin) {
+      if (profileResponse != null && !_isLogin) {
         _showErrorMessage('Email already registered. Please use login instead.');
         setState(() {
           _isLoading = false;
@@ -184,6 +188,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         return;
       }
 
+      // 2. Send OTP using Supabase Auth
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
       );
@@ -238,6 +243,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           _isOtpVerified = true;
           _otpTimerController.stop();
         });
+        // Sign out the temporary session created by verifyOTP
+        await supabase.auth.signOut();
 
         _showSuccessMessage('Email verified successfully! You can now complete registration.');
       }
@@ -306,6 +313,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
   Future<void> _handleLogin() async {
     try {
+      // 1. Look up email using faculty_id from the 'faculty' table
       final facultyResponse = await supabase
           .from('faculty')
           .select('email')
@@ -316,6 +324,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         throw Exception('Faculty not found. Please check your Faculty ID.');
       }
 
+      // 2. Sign in using the retrieved email and password
       final authResponse = await supabase.auth.signInWithPassword(
         email: facultyResponse['email'],
         password: _passwordController.text.trim(),
@@ -323,7 +332,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       if (authResponse.user != null) {
         _showSuccessMessage('Login successful!');
-        Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/faculty-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Login failed: Invalid credentials or account not confirmed.');
@@ -341,7 +350,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       final currentTime = DateTime.now().toIso8601String();
       final instituteId = _profileData['institute_id'] as int;
 
-      // 1. Sign up the user in Supabase Auth
+      // 1. Sign up the user in Supabase Auth (Creates user ID and password hash)
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -350,21 +359,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       if (authResponse.user != null) {
         final userId = authResponse.user!.id;
 
-        // 2. Insert faculty details into 'faculty' table
-        await supabase.from('faculty').insert({
-          'user_id': userId,
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'father_name': _fatherNameController.text.trim(),
-          'gender': selectedGender,
-          'phone': _phoneController.text.trim(),
-          'faculty_id': _facultyIdController.text.trim(),
-          'subjects': selectedSubjects,
-          'created_at': currentTime,
-        });
-
-        // 3. Insert profile/role information into 'profiles' table
+        // 2. Insert profile/role information into 'profiles' table (Central identity)
+        // Ensure email_verified is true because we verified it with OTP
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'faculty',
@@ -380,8 +376,18 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'created_at': currentTime,
         });
 
+        // 3. Insert faculty-specific details into 'faculty' table
+        // We only insert columns that are specific to the 'faculty' table (non-redundant fields).
+        await supabase.from('faculty').insert({
+          'user_id': userId,
+          'faculty_id': _facultyIdController.text.trim(),
+          'subjects': selectedSubjects,
+          'joining_date': currentTime.substring(0, 10), // Use current date as joining date placeholder
+          // department_id, designation, etc., should be added here if available
+        });
+
         _showSuccessMessage('Account created successfully!');
-        Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/faculty-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Registration failed: ${e.message}');
@@ -922,7 +928,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   // -------------------------------------------------------------------
-  // Helper Widgets
+  // Helper Widgets (INJECTED from working HOD page)
   // -------------------------------------------------------------------
 
   Widget _buildInputField({
@@ -934,6 +940,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     TextInputType? keyboardType,
     String? Function(String?)? validator,
     Widget? suffixIcon,
+    bool enabled = true, // Added for completeness, if used in build()
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -966,6 +973,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
             obscureText: obscureText,
             keyboardType: keyboardType,
             validator: validator,
+            enabled: enabled,
             style: TextStyle(color: Colors.grey[800], fontSize: 16),
             decoration: InputDecoration(
               hintText: placeholder,
@@ -1144,6 +1152,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
+  // Missing helper method from HOD page
   Widget _buildSubjectSelectionDialog() {
     return StatefulBuilder(
       builder: (context, setDialogState) {
@@ -1183,6 +1192,72 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
+  // Missing helper method from HOD page
+  Widget _buildEmailFieldWithOTP() {
+    // Hide this complex field in login mode, as Faculty ID is used for lookup.
+    if (_isLogin) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. Email Input Field
+        _buildInputField(
+          controller: _emailController,
+          label: 'Email Address',
+          placeholder: 'Enter your institutional email',
+          icon: Icons.email_outlined,
+          keyboardType: TextInputType.emailAddress,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter your email';
+            }
+            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+              return 'Please enter a valid email address';
+            }
+            return null;
+          },
+          suffixIcon: !_isOtpSent && !_isOtpVerified
+              ? Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: TextButton(
+              onPressed: _isLoading ? null : _sendOTP,
+              child: _isLoading && _isOtpSent == false
+                  ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFF8B5CF6),
+                ),
+              )
+                  : const Text(
+                'Send OTP',
+                style: TextStyle(
+                  color: Color(0xFF8B5CF6),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          )
+              : _isOtpVerified
+              ? const Icon(Icons.check_circle, color: Colors.green)
+              : null,
+        ),
+
+        // 2. OTP Verification Field
+        if (_isOtpSent && !_isOtpVerified) ...[
+          const SizedBox(height: 20),
+          _buildEnhancedOtpField(),
+        ],
+
+        if (_isOtpVerified) const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  // Missing helper method from HOD page
   Widget _buildEnhancedOtpField() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1442,75 +1517,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       ],
     );
   }
-
-  Widget _buildEmailFieldWithOTP() {
-    // Hide this complex field in login mode, as Faculty ID is used for lookup.
-    if (_isLogin) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 1. Email Input Field
-        _buildInputField(
-          controller: _emailController,
-          label: 'Email Address',
-          placeholder: 'Enter your institutional email',
-          icon: Icons.email_outlined,
-          keyboardType: TextInputType.emailAddress,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your email';
-            }
-            if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-              return 'Please enter a valid email address';
-            }
-            return null;
-          },
-          suffixIcon: !_isOtpSent && !_isOtpVerified
-              ? Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: TextButton(
-              onPressed: _isLoading ? null : _sendOTP,
-              child: _isLoading && _isOtpSent == false
-                  ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Color(0xFF8B5CF6),
-                ),
-              )
-                  : const Text(
-                'Send OTP',
-                style: TextStyle(
-                  color: Color(0xFF8B5CF6),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          )
-              : _isOtpVerified
-              ? const Icon(Icons.check_circle, color: Colors.green)
-              : null,
-        ),
-
-        // 2. OTP Verification Field
-        if (_isOtpSent && !_isOtpVerified) ...[
-          const SizedBox(height: 20),
-          _buildEnhancedOtpField(),
-        ],
-
-        if (_isOtpVerified) const SizedBox(height: 10),
-      ],
-    );
-  }
 }
-
-// ===================================================================
-// FIX: CaptchaBackgroundPainter is moved outside the State class.
-// ===================================================================
 
 // Custom painter for captcha background pattern
 class CaptchaBackgroundPainter extends CustomPainter {
