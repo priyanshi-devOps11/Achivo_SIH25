@@ -132,7 +132,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     super.dispose();
   }
 
-  // ADDED: Fetch departments from DB function
   Future<void> _fetchDepartments() async {
     try {
       final response = await supabase
@@ -364,7 +363,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   Future<void> _handleLogin() async {
     try {
       // 1. Look up email using faculty_id from the 'faculty' table
-      // NOTE: This assumes the faculty table contains the 'email' column (which requires schema fix 2.)
       final facultyResponse = await supabase
           .from('faculty')
           .select('email')
@@ -440,7 +438,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'faculty_id': _facultyIdController.text.trim(),
           'subjects': selectedSubjects,
           'department_id': departmentId,
-          'email': _emailController.text.trim(), // Keep for login/reset lookup compatibility
+          'email': _emailController.text.trim(),
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
           'phone': _phoneController.text.trim(),
