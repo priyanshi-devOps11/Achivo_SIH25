@@ -361,7 +361,8 @@ class _AuthHodPageState extends State<AuthHodPage>
     }
   }
 
-  // >>>>>>>>>>>>>> CORRECTED REGISTRATION LOGIC <<<<<<<<<<<<<<
+  // Inside _AuthHodPageState class in auth_hod_page.dart
+
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
       throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
@@ -380,13 +381,13 @@ class _AuthHodPageState extends State<AuthHodPage>
     try {
       final currentTime = DateTime.now().toIso8601String();
       final instituteId = _profileData['institute_id'] as int;
-      final confirmationTime = DateTime.now().toIso8601String(); // For manual confirmation
+      final confirmationTime = DateTime.now().toIso8601String(); // Define confirmation time
 
       // 1. Sign up with email and password
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        // 🚨 FIX: Pass confirmation data to instantly confirm the user
+        // 🚨 CRITICAL FIX: Pass confirmation data to instantly confirm the user
         data: {
           'email_confirmed_at': confirmationTime,
           'email_verified': true,
@@ -396,7 +397,7 @@ class _AuthHodPageState extends State<AuthHodPage>
       if (authResponse.user != null) {
         final userId = authResponse.user!.id;
 
-        // 2. CRUCIAL FIX: Insert into 'profiles'. DO NOT include the password field.
+        // 2. Insert into 'profiles' (Central identity)
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'hod',
@@ -409,7 +410,7 @@ class _AuthHodPageState extends State<AuthHodPage>
           'country_id': _profileData['country_id'],
           'state_id': _profileData['state_id'],
           'institute_id': instituteId,
-          'email_verified': true,
+          'email_verified': true, // Matching the manual confirmation above
           'created_at': currentTime,
         });
 
