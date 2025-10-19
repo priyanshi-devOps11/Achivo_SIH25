@@ -361,7 +361,7 @@ class _AuthHodPageState extends State<AuthHodPage>
     }
   }
 
-  // >>>>>>>>>>>>>> FIX APPLIED HERE: Removed password from custom tables <<<<<<<<<<<<<<
+  // >>>>>>>>>>>>>> CORRECTED REGISTRATION LOGIC <<<<<<<<<<<<<<
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
       throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
@@ -380,11 +380,17 @@ class _AuthHodPageState extends State<AuthHodPage>
     try {
       final currentTime = DateTime.now().toIso8601String();
       final instituteId = _profileData['institute_id'] as int;
+      final confirmationTime = DateTime.now().toIso8601String(); // For manual confirmation
 
-      // 1. Sign up with email and password (Creates the user and password hash in auth.users)
+      // 1. Sign up with email and password
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
+        // 🚨 FIX: Pass confirmation data to instantly confirm the user
+        data: {
+          'email_confirmed_at': confirmationTime,
+          'email_verified': true,
+        },
       );
 
       if (authResponse.user != null) {
@@ -397,7 +403,7 @@ class _AuthHodPageState extends State<AuthHodPage>
           'email': _emailController.text.trim(),
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
-          'phone': _phoneController.text.trim(), // Phone field now exists in schema
+          'phone': _phoneController.text.trim(),
           'gender': selectedGender,
           'department_id': departmentId,
           'country_id': _profileData['country_id'],
@@ -971,6 +977,10 @@ class _AuthHodPageState extends State<AuthHodPage>
       ),
     );
   }
+
+  // -------------------------------------------------------------------
+  // Helper Widgets (ALL DEFINITIONS)
+  // -------------------------------------------------------------------
 
   Widget _buildInputField({
     required TextEditingController controller,
