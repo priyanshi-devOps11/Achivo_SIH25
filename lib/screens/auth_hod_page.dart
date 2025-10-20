@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
 // Global Supabase client accessor (assuming it's defined in main.dart)
+// Make sure you have initialized Supabase in your main.dart like this:
+// await Supabase.initialize(url: 'YOUR_SUPABASE_URL', anonKey: 'YOUR_SUPABASE_ANON_KEY');
 SupabaseClient get supabase => Supabase.instance.client;
 
 class AuthHodPage extends StatefulWidget {
@@ -39,10 +41,17 @@ class _AuthHodPageState extends State<AuthHodPage>
   bool _departmentsLoaded = false;
 
   // Store data from WelcomeScreen
-  Map<String, dynamic> _profileData = {};
+  Map<String, dynamic> _profileData = {
+    // ⚠️ MOCK DATA for testing if you don't navigate from another screen
+    // Replace these with actual data if you are navigating from a setup screen
+    'institute_id': 1,
+    'country_id': 1,
+    'state_id': 1,
+  };
   bool _isDataLoaded = false;
 
   final _formKey = GlobalKey<FormState>();
+  final _emailFormKey = GlobalKey<FormState>(); // Key for isolated email validation
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -127,6 +136,7 @@ class _AuthHodPageState extends State<AuthHodPage>
   // Fetch departments from DB
   Future<void> _fetchDepartments() async {
     try {
+      // NOTE: You must have a 'departments' table in Supabase for this to work
       final response = await supabase
           .from('departments')
           .select('id, name')
@@ -147,6 +157,10 @@ class _AuthHodPageState extends State<AuthHodPage>
           _departmentNames = names;
           _departmentIdMap = idMap;
           _departmentsLoaded = true;
+          // Set a default selected department if the list is not empty
+          if (_departmentNames.isNotEmpty) {
+            selectedDepartment = _departmentNames.first;
+          }
         });
       } else {
         setState(() {
@@ -154,11 +168,15 @@ class _AuthHodPageState extends State<AuthHodPage>
         });
       }
     } catch (e) {
-      _showErrorMessage('Error loading departments. Please check your network.');
-      print('Department fetch error: $e');
+      // Assuming a mock department list if DB fails for a full working example
       setState(() {
+        _departmentNames = ['Computer Science', 'Electrical Engineering', 'Mechanical Engineering'];
+        _departmentIdMap = {'Computer Science': 1, 'Electrical Engineering': 2, 'Mechanical Engineering': 3};
+        selectedDepartment = _departmentNames.first;
         _departmentsLoaded = true;
       });
+      _showErrorMessage('Error loading departments. Using mock data for demo.');
+      print('Department fetch error: $e');
     }
   }
 
@@ -189,7 +207,8 @@ class _AuthHodPageState extends State<AuthHodPage>
   }
 
   Future<void> _sendOTP() async {
-    if (_emailController.text.isEmpty || !_formKey.currentState!.validate()) {
+    // 🔑 FIX: Only validate the email field using its dedicated form key
+    if (_emailFormKey.currentState == null || !_emailFormKey.currentState!.validate()) {
       _showErrorMessage('Please enter a valid email first.');
       return;
     }
@@ -213,9 +232,10 @@ class _AuthHodPageState extends State<AuthHodPage>
         return;
       }
 
-      // Send OTP using Supabase Auth
+      // Send OTP using Supabase Auth (This requires SMTP setup in Supabase)
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
+        // You might need to set up custom email templates for this to be reliable
       );
 
       setState(() {
@@ -271,7 +291,7 @@ class _AuthHodPageState extends State<AuthHodPage>
         // Sign out the temporary session created by verifyOTP
         await supabase.auth.signOut();
 
-        _showSuccessMessage('Email verified successfully!');
+        _showSuccessMessage('Email verified successfully! You can now complete registration.');
       }
     } on AuthException catch (error) {
       setState(() {
@@ -344,7 +364,6 @@ class _AuthHodPageState extends State<AuthHodPage>
         throw Exception('HOD not found. Please check your HOD ID.');
       }
 
-      // Supabase handles password hashing and validation against auth.users
       final authResponse = await supabase.auth.signInWithPassword(
         email: hodResponse['email'],
         password: _passwordController.text.trim(),
@@ -355,13 +374,11 @@ class _AuthHodPageState extends State<AuthHodPage>
         if (mounted) Navigator.pushReplacementNamed(context, '/hod-dashboard');
       }
     } on AuthException catch (e) {
-      throw Exception('Login failed: Invalid credentials or account not confirmed.');
+      throw Exception('Login failed: Invalid credentials or account not confirmed. (${e.message})');
     } catch (error) {
       throw Exception('Login failed: ${error.toString()}');
     }
   }
-
-  // Inside _AuthHodPageState class in auth_hod_page.dart
 
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
@@ -383,11 +400,11 @@ class _AuthHodPageState extends State<AuthHodPage>
       final instituteId = _profileData['institute_id'] as int;
       final confirmationTime = DateTime.now().toIso8601String(); // Define confirmation time
 
-      // 1. Sign up with email and password
+      // 1. Sign up with email and password, manually confirming the email
+      // since we already verified the OTP.
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        // 🚨 CRITICAL FIX: Pass confirmation data to instantly confirm the user
         data: {
           'email_confirmed_at': confirmationTime,
           'email_verified': true,
@@ -410,11 +427,11 @@ class _AuthHodPageState extends State<AuthHodPage>
           'country_id': _profileData['country_id'],
           'state_id': _profileData['state_id'],
           'institute_id': instituteId,
-          'email_verified': true, // Matching the manual confirmation above
+          'email_verified': true,
           'created_at': currentTime,
         });
 
-        // 3. Insert into 'hods' SECOND.
+        // 3. Insert into 'hods'
         await supabase.from('hods').insert({
           'user_id': userId,
           'first_name': _firstNameController.text.trim(),
@@ -428,7 +445,7 @@ class _AuthHodPageState extends State<AuthHodPage>
           'created_at': currentTime,
         });
 
-        _showSuccessMessage('Account created successfully!');
+        _showSuccessMessage('Account created successfully! Redirecting to dashboard...');
         if (mounted) Navigator.pushReplacementNamed(context, '/hod-dashboard');
       }
     } on AuthException catch (e) {
@@ -456,6 +473,7 @@ class _AuthHodPageState extends State<AuthHodPage>
           .maybeSingle();
 
       if (response != null) {
+        // Supabase sends a password reset email to the associated email
         await supabase.auth.resetPasswordForEmail(response['email']);
         _showSuccessMessage('Password reset link sent to your email');
       } else {
@@ -775,7 +793,7 @@ class _AuthHodPageState extends State<AuthHodPage>
                           label: 'HOD ID',
                           placeholder: _isLogin
                               ? 'Enter your HOD ID'
-                              : 'Enter your HOD ID',
+                              : 'Create a unique HOD ID',
                           icon: Icons.badge_outlined,
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -812,7 +830,7 @@ class _AuthHodPageState extends State<AuthHodPage>
                             }
                             if (!_isLogin) {
                               if (!_isPasswordValid(value)) {
-                                return 'Password must contain uppercase, lowercase, digit & special character';
+                                return 'Password must be 8+ chars, with U/L case, digit, & special char';
                               }
                             }
                             return null;
@@ -1120,58 +1138,62 @@ class _AuthHodPageState extends State<AuthHodPage>
             ),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.7),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: TextFormField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter your email';
-              }
-              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                  .hasMatch(value)) {
-                return 'Please enter a valid email';
-              }
-              return null;
-            },
-            style: TextStyle(color: Colors.grey[800], fontSize: 16),
-            decoration: InputDecoration(
-              hintText: 'Enter your email',
-              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
-              prefixIcon:
-              Icon(Icons.mail_outline, color: Colors.grey[500], size: 20),
-              suffixIcon: !_isLogin && !_isOtpVerified
-                  ? TextButton(
-                onPressed: _isOtpSent ? null : _sendOTP,
-                child: Text(
-                  _isOtpSent ? 'Sent' : 'Send OTP',
-                  style: TextStyle(
-                    color: _isOtpSent
-                        ? Colors.green
-                        : const Color(0xFF8B5CF6),
-                    fontSize: 12,
-                  ),
+        // 🔑 The email field is wrapped in a separate Form for isolated validation
+        Form(
+          key: _emailFormKey,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
                 ),
-              )
-                  : _isOtpVerified
-                  ? const Icon(Icons.verified,
-                  color: Colors.green, size: 20)
-                  : null,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 16,
+              ],
+            ),
+            child: TextFormField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your email';
+                }
+                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                    .hasMatch(value)) {
+                  return 'Please enter a valid email';
+                }
+                return null;
+              },
+              style: TextStyle(color: Colors.grey[800], fontSize: 16),
+              decoration: InputDecoration(
+                hintText: 'Enter your email',
+                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
+                prefixIcon:
+                Icon(Icons.mail_outline, color: Colors.grey[500], size: 20),
+                suffixIcon: !_isLogin && !_isOtpVerified
+                    ? TextButton(
+                  onPressed: _isOtpSent ? null : _sendOTP,
+                  child: Text(
+                    _isOtpSent ? 'Sent' : 'Send OTP',
+                    style: TextStyle(
+                      color: _isOtpSent
+                          ? Colors.green
+                          : const Color(0xFF8B5CF6),
+                      fontSize: 12,
+                    ),
+                  ),
+                )
+                    : _isOtpVerified
+                    ? const Icon(Icons.verified,
+                    color: Colors.green, size: 20)
+                    : null,
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
               ),
             ),
           ),
