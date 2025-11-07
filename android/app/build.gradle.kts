@@ -34,6 +34,7 @@ android {
         release {
             // KEEP THIS LINE: Ensures you can sign with debug keys for testing
             signingConfig = signingConfigs.getByName("debug")
+            
         }
     }
 }
