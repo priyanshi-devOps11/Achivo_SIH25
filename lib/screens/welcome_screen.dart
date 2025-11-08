@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
 class WelcomeScreen extends StatefulWidget {
+  // Added optional key for consistency, removed required onNext since it's not used in this context
   const WelcomeScreen({Key? key, required Null Function() onNext}) : super(key: key);
 
   @override
@@ -30,7 +31,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   int? selectedStateId;
   int? selectedInstituteId;
 
-  // Animation controllers (omitted for brevity, assume they are initialized)
+  // Animation controllers
   late AnimationController _backgroundController;
   late AnimationController _contentController;
   late AnimationController _floatingController;
@@ -59,7 +60,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   void initState() {
     super.initState();
-    // Initialize all controllers and animations here (as in your original code)
+    // Initialize all controllers and animations
     _backgroundController = AnimationController(duration: const Duration(seconds: 2), vsync: this);
     _contentController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
     _floatingController = AnimationController(duration: const Duration(seconds: 2), vsync: this);
@@ -83,6 +84,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // This check ensures _fetchCountries runs only once after the widget is fully built and ready
     if (_isInitialized && countries.isEmpty && !isLoadingCountries) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && Supabase.instance.isInitialized) {
@@ -122,7 +124,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        Navigator.pushNamed(context, route, arguments: arguments);
+        // Use pushReplacementNamed to prevent stacking login screens
+        Navigator.pushReplacementNamed(context, route, arguments: arguments);
       }
     });
   }
@@ -201,7 +204,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     }
   }
 
-  // FIXED: Removed all database saving functions. Now just navigates.
   void handleContinue() async {
     if (!isFormComplete) {
       _showSnackBar("Please complete all fields", isError: true);
@@ -237,6 +239,113 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     });
   }
 
+  // ⭐ This function is the core of the request: Check existing session and navigate
+  Future<void> _checkExistingSessionAndNavigate() async {
+    try {
+      final session = supabase.auth.currentSession;
+
+      // Check if user has an active session
+      if (session != null) {
+        // User is logged in, show loading and redirect to dashboard
+        if (mounted) {
+          // Use a full-screen transparent modal to show loading while checking role
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.blue.shade50.withOpacity(0.9),
+                    Colors.purple.shade50.withOpacity(0.9),
+                  ],
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Redirecting to your dashboard...',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        decoration: TextDecoration.none, // Fix potential text decoration inheritance
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        try {
+          final user = session.user;
+
+          // Get user profile to determine role
+          // Assuming 'profiles' table exists and has 'role' column linked by user 'id'
+          final profile = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', user.id)
+              .single();
+
+          final role = profile['role'] as String?;
+
+          // Close loading dialog if still open
+          if (mounted) Navigator.of(context).pop();
+
+          // Navigate based on role using pushReplacementNamed to prevent back button issues
+          if (mounted) {
+            switch (role?.toLowerCase()) {
+              case 'admin':
+                Navigator.pushReplacementNamed(context, '/admin-dashboard');
+                break;
+              case 'hod':
+                Navigator.pushReplacementNamed(context, '/hod-dashboard');
+                break;
+              case 'faculty':
+                Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+                break;
+              case 'student':
+                Navigator.pushReplacementNamed(context, '/student-dashboard');
+                break;
+              default:
+              // Unknown role or null role, sign out and show form
+                await supabase.auth.signOut();
+                _navigateToWelcomeForm();
+            }
+          }
+        } catch (e) {
+          print('Error fetching user profile: $e');
+          // Close loading dialog if open
+          if (mounted) Navigator.of(context).pop();
+
+          // Profile doesn't exist or error occurred, sign out and show form
+          await supabase.auth.signOut();
+          _showSnackBar('Session expired or profile error. Please sign in again.', isError: true);
+          _navigateToWelcomeForm();
+        }
+      } else {
+        // No active session, user needs to sign in - show the form
+        _navigateToWelcomeForm();
+      }
+    } catch (e) {
+      print('Error checking session: $e');
+      // On any error, show the form
+      _showSnackBar('Unable to verify session. Please sign in.', isError: true);
+      _navigateToWelcomeForm();
+    }
+  }
+
   void _navigateToWelcomeForm() {
     if (countries.isEmpty && !isLoadingCountries) {
       _showSnackBar("Please wait while we load the data...", isError: true);
@@ -269,10 +378,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       ),
     );
   }
-
-  // Helper widgets (_buildWelcomeScreen, _buildWelcomeForm, _buildCountryDropdown, etc.)
-  // are structurally correct from your previous submission.
-  // Omitting them here for brevity but assuming they are present in your file.
 
   Widget _buildWelcomeScreen() {
     return AnimatedBuilder(
@@ -467,7 +572,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       child: Transform.translate(
                         offset: Offset(0, -4 * _floatingAnimation.value),
                         child: GestureDetector(
-                          onTap: _navigateToWelcomeForm,
+                          // ⭐ THE CRITICAL FIX IS HERE:
+                          // Calling _checkExistingSessionAndNavigate() ensures the user is redirected
+                          // to their dashboard if they are already logged in.
+                          onTap: _checkExistingSessionAndNavigate,
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(30),
