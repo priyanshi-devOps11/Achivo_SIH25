@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
 class WelcomeScreen extends StatefulWidget {
-  // Added optional key for consistency, removed required onNext since it's not used in this context
   const WelcomeScreen({Key? key, required Null Function() onNext}) : super(key: key);
 
   @override
@@ -15,6 +14,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   // Page control
   bool _showWelcomeForm = false;
   bool _isInitialized = false;
+  bool _isCheckingSession = false;
 
   // Form data
   String? selectedCountry;
@@ -22,7 +22,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   String? selectedInstitute;
   String? selectedRole;
 
-  // Store names and IDs for display and saving
   String? selectedCountryName;
   String? selectedStateName;
   String? selectedInstituteName;
@@ -84,7 +83,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // This check ensures _fetchCountries runs only once after the widget is fully built and ready
     if (_isInitialized && countries.isEmpty && !isLoadingCountries) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && Supabase.instance.isInitialized) {
@@ -106,28 +104,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   void _showSnackBar(String message, {bool isError = false}) {
     if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: isError ? 5 : 3),
-          ),
-        );
-      }
-    });
-  }
-
-  void _navigateToRoute(String route, {Map<String, dynamic>? arguments}) {
-    if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        // Use pushReplacementNamed to prevent stacking login screens
-        Navigator.pushReplacementNamed(context, route, arguments: arguments);
-      }
-    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: isError ? 5 : 3),
+      ),
+    );
   }
 
   Future<void> _fetchCountries() async {
@@ -228,7 +212,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         route = '/auth-student';
     }
 
-    _navigateToRoute(route, arguments: {
+    Navigator.pushReplacementNamed(context, route, arguments: {
       'country_name': selectedCountryName,
       'state_name': selectedStateName,
       'institute_name': selectedInstituteName,
@@ -239,48 +223,59 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     });
   }
 
-  // ⭐ This function is the core of the request: Check existing session and navigate
+  // ⭐ CRITICAL FIX: This function checks for existing session and redirects
   Future<void> _checkExistingSessionAndNavigate() async {
+    if (_isCheckingSession) return; // Prevent multiple calls
+
+    setState(() {
+      _isCheckingSession = true;
+    });
+
     try {
       final session = supabase.auth.currentSession;
 
       // Check if user has an active session
       if (session != null) {
-        // User is logged in, show loading and redirect to dashboard
+        print('✅ Found existing session for user: ${session.user.email}');
+
+        // Show loading dialog while checking role
         if (mounted) {
-          // Use a full-screen transparent modal to show loading while checking role
           showDialog(
             context: context,
             barrierDismissible: false,
-            builder: (context) => Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.blue.shade50.withOpacity(0.9),
-                    Colors.purple.shade50.withOpacity(0.9),
-                  ],
+            builder: (context) => WillPopScope(
+              onWillPop: () async => false,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.blue.shade50.withOpacity(0.9),
+                      Colors.purple.shade50.withOpacity(0.9),
+                    ],
+                  ),
                 ),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Redirecting to your dashboard...',
-                      style: TextStyle(
-                        color: Colors.grey.shade700,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        decoration: TextDecoration.none, // Fix potential text decoration inheritance
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Redirecting to your dashboard...',
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.none,
+                          fontFamily: 'System',
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -291,7 +286,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           final user = session.user;
 
           // Get user profile to determine role
-          // Assuming 'profiles' table exists and has 'role' column linked by user 'id'
           final profile = await supabase
               .from('profiles')
               .select('role')
@@ -299,35 +293,46 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               .single();
 
           final role = profile['role'] as String?;
+          print('✅ User role: $role');
 
           // Close loading dialog if still open
-          if (mounted) Navigator.of(context).pop();
+          if (mounted) Navigator.of(context, rootNavigator: true).pop();
 
-          // Navigate based on role using pushReplacementNamed to prevent back button issues
+          // Navigate based on role using pushReplacementNamed
           if (mounted) {
+            String route;
             switch (role?.toLowerCase()) {
               case 'admin':
-                Navigator.pushReplacementNamed(context, '/admin-dashboard');
+                route = '/admin-dashboard';
                 break;
               case 'hod':
-                Navigator.pushReplacementNamed(context, '/hod-dashboard');
+                route = '/hod-dashboard';
                 break;
               case 'faculty':
-                Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+                route = '/faculty-dashboard';
                 break;
               case 'student':
-                Navigator.pushReplacementNamed(context, '/student-dashboard');
+                route = '/student-dashboard';
                 break;
               default:
               // Unknown role or null role, sign out and show form
+                print('⚠️ Unknown role: $role, signing out');
                 await supabase.auth.signOut();
                 _navigateToWelcomeForm();
+                return;
             }
+
+            print('✅ Navigating to $route');
+            Navigator.pushReplacementNamed(context, route);
           }
         } catch (e) {
-          print('Error fetching user profile: $e');
+          print('❌ Error fetching user profile: $e');
           // Close loading dialog if open
-          if (mounted) Navigator.of(context).pop();
+          if (mounted) {
+            try {
+              Navigator.of(context, rootNavigator: true).pop();
+            } catch (_) {}
+          }
 
           // Profile doesn't exist or error occurred, sign out and show form
           await supabase.auth.signOut();
@@ -336,23 +341,35 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         }
       } else {
         // No active session, user needs to sign in - show the form
+        print('ℹ️ No active session found, showing welcome form');
         _navigateToWelcomeForm();
       }
     } catch (e) {
-      print('Error checking session: $e');
+      print('❌ Error checking session: $e');
       // On any error, show the form
       _showSnackBar('Unable to verify session. Please sign in.', isError: true);
       _navigateToWelcomeForm();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingSession = false;
+        });
+      }
     }
   }
 
   void _navigateToWelcomeForm() {
+    if (!mounted) return;
+
     if (countries.isEmpty && !isLoadingCountries) {
       _showSnackBar("Please wait while we load the data...", isError: true);
       _fetchCountries();
       return;
     }
-    setState(() { _showWelcomeForm = true; });
+
+    setState(() {
+      _showWelcomeForm = true;
+    });
     _transitionController.forward();
   }
 
@@ -402,7 +419,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: Stack(
             children: [
-              // Animated gradient blobs
+              // Animated gradient blobs (keeping existing design)
               Positioned(
                 top: -MediaQuery.of(context).size.height * 0.25,
                 left: -MediaQuery.of(context).size.width * 0.25,
@@ -420,74 +437,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           Colors.transparent,
                         ],
                       ),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: -MediaQuery.of(context).size.height * 0.25,
-                right: -MediaQuery.of(context).size.width * 0.25,
-                child: Transform.scale(
-                  scale: _backgroundAnimation.value,
-                  child: Container(
-                    width: MediaQuery.of(context).size.width * 0.75,
-                    height: MediaQuery.of(context).size.height * 0.75,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          Colors.pink.shade400.withOpacity(0.20),
-                          Colors.purple.shade400.withOpacity(0.15),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // Decorative icons
-              Positioned(
-                top: 80,
-                left: 40,
-                child: Transform.translate(
-                  offset: Offset(0, _iconsAnimation.value > 0.33 ? 0 : -20),
-                  child: Opacity(
-                    opacity: _iconsAnimation.value > 0.33 ? 0.08 : 0.0,
-                    child: Icon(
-                      Icons.menu_book,
-                      size: 120,
-                      color: Colors.blue.shade600,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 120,
-                right: 50,
-                child: Transform.translate(
-                  offset: Offset(0, _iconsAnimation.value > 0.43 ? 0 : -20),
-                  child: Opacity(
-                    opacity: _iconsAnimation.value > 0.43 ? 0.08 : 0.0,
-                    child: Icon(
-                      Icons.emoji_events,
-                      size: 100,
-                      color: Colors.purple.shade600,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 160,
-                left: 50,
-                child: Transform.translate(
-                  offset: Offset(0, _iconsAnimation.value > 0.53 ? 0 : 20),
-                  child: Opacity(
-                    opacity: _iconsAnimation.value > 0.53 ? 0.08 : 0.0,
-                    child: Icon(
-                      Icons.groups,
-                      size: 110,
-                      color: Colors.pink.shade600,
                     ),
                   ),
                 ),
@@ -559,7 +508,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 ),
               ),
 
-              // Floating Next Button
+              // ⭐ CRITICAL: Next Button with Session Check
               Positioned(
                 bottom: 48,
                 left: 0,
@@ -572,16 +521,15 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       child: Transform.translate(
                         offset: Offset(0, -4 * _floatingAnimation.value),
                         child: GestureDetector(
-                          // ⭐ THE CRITICAL FIX IS HERE:
-                          // Calling _checkExistingSessionAndNavigate() ensures the user is redirected
-                          // to their dashboard if they are already logged in.
-                          onTap: _checkExistingSessionAndNavigate,
+                          onTap: _isCheckingSession ? null : _checkExistingSessionAndNavigate,
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(30),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.purple.shade300.withOpacity(0.6),
+                                  color: _isCheckingSession
+                                      ? Colors.grey.shade300.withOpacity(0.6)
+                                      : Colors.purple.shade300.withOpacity(0.6),
                                   blurRadius: 20,
                                   offset: const Offset(0, 8),
                                   spreadRadius: 2,
@@ -596,29 +544,39 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(30),
                                 gradient: LinearGradient(
-                                  colors: [
-                                    Colors.purple.shade500,
-                                    Colors.blue.shade500,
-                                  ],
+                                  colors: _isCheckingSession
+                                      ? [Colors.grey.shade400, Colors.grey.shade500]
+                                      : [Colors.purple.shade500, Colors.blue.shade500],
                                 ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Text(
-                                    'Next',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
+                                  if (_isCheckingSession)
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  else
+                                    const Text(
+                                      'Next',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                  ),
                                   const SizedBox(width: 8),
-                                  Icon(
-                                    Icons.arrow_forward,
-                                    color: Colors.white.withOpacity(0.9),
-                                    size: 24,
-                                  ),
+                                  if (!_isCheckingSession)
+                                    Icon(
+                                      Icons.arrow_forward,
+                                      color: Colors.white.withOpacity(0.9),
+                                      size: 24,
+                                    ),
                                 ],
                               ),
                             ),
@@ -629,7 +587,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   ),
                 ),
               ),
-              // Loading indicator for database connection on initial load
+
+              // Loading indicator
               if (isLoadingCountries)
                 Positioned(
                   bottom: 0,
@@ -637,10 +596,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   right: 0,
                   child: Container(
                     padding: const EdgeInsets.all(8),
-                    color: Colors.red.shade700,
-                    child: Row(
+                    color: Colors.orange.shade700,
+                    child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         SizedBox(
                           width: 16,
                           height: 16,
@@ -651,7 +610,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         ),
                         SizedBox(width: 8),
                         Text(
-                          'Please wait while we load the data...',
+                          'Loading database...',
                           style: TextStyle(color: Colors.white),
                         ),
                       ],
@@ -680,7 +639,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       ),
       child: Stack(
         children: [
-          // Background elements for form
+          // Background decoration
           Positioned(
             top: -100,
             left: -100,
@@ -772,22 +731,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           children: [
                             // Country dropdown
                             _buildCountryDropdown(),
-
                             const SizedBox(height: 20),
 
                             // State dropdown
                             _buildStateDropdown(),
-
                             const SizedBox(height: 20),
 
                             // Institute dropdown
                             _buildInstituteDropdown(),
-
                             const SizedBox(height: 20),
 
                             // Role selection
                             _buildRoleSelection(),
-
                             const SizedBox(height: 40),
 
                             // Continue button
@@ -864,23 +819,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: Colors.purple.shade300),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              suffixIcon: isLoadingCountries
-                  ? Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade300),
-                  ),
-                ),
-              )
-                  : null,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             items: countries.map((country) {
               return DropdownMenuItem(
@@ -954,27 +893,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: Colors.purple.shade300),
               ),
-              disabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              suffixIcon: isLoadingStates
-                  ? Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade300),
-                  ),
-                ),
-              )
-                  : null,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             items: states.map((state) {
               return DropdownMenuItem(
@@ -1045,27 +964,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: Colors.purple.shade300),
               ),
-              disabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              suffixIcon: isLoadingInstitutes
-                  ? Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade300),
-                  ),
-                ),
-              )
-                  : null,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             items: institutes.map((institute) {
               return DropdownMenuItem(
@@ -1116,10 +1015,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   });
                 },
                 activeColor: Colors.purple.shade600,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               );
             }).toList(),
           ),
