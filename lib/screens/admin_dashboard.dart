@@ -2,278 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Supabase - Replace with your actual credentials
-  await Supabase.initialize(
-    url: 'NEXT_PUBLIC_SUPABASE_URL', // Replace with your Supabase URL
-    anonKey: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', // Replace with your Supabase anon key
-  );
-
-  runApp(const MyApp());
-}
+// Note: Replace the admin_dashboard.dart file content with this updated version
 
 final supabase = Supabase.instance.client;
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Achivo - Admin',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.white,
-          elevation: 1,
-          iconTheme: IconThemeData(color: Colors.black87),
-          titleTextStyle: TextStyle(
-            color: Colors.black87,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      home: AuthWrapper(),
-      routes: {
-        '/dashboard': (context) => AdminDashboard(),
-        '/departments': (context) => DepartmentsPage(),
-        '/faculty': (context) => FacultyPage(),
-        '/students': (context) => StudentsPage(),
-        '/activities': (context) => ActivitiesPage(),
-        '/system-settings': (context) => SystemSettingsPage(),
-        '/user-management': (context) => UserManagementPage(),
-        '/audit-logs': (context) => AuditLogsPage(),
-      },
-    );
-  }
-}
-
-class AuthWrapper extends StatefulWidget {
-  @override
-  _AuthWrapperState createState() => _AuthWrapperState();
-}
-
-class _AuthWrapperState extends State<AuthWrapper> {
-  User? _user;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _getInitialSession();
-    _setupAuthListener();
-  }
-
-  void _getInitialSession() {
-    final session = supabase.auth.currentSession;
-    setState(() {
-      _user = session?.user;
-      _isLoading = false;
-    });
-  }
-
-  void _setupAuthListener() {
-    supabase.auth.onAuthStateChange.listen((data) {
-      setState(() {
-        _user = data.session?.user;
-      });
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Loading...',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    return _user != null ? AdminDashboard() : LoginScreen();
-  }
-}
-
-class LoginScreen extends StatefulWidget {
-  @override
-  _LoginScreenState createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-  String _errorMessage = '';
-
-  Future<void> _signIn() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = '';
-    });
-
-    try {
-      final response = await supabase.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-
-      if (response.user != null) {
-        // Navigation handled by AuthWrapper
-      }
-    } catch (error) {
-      setState(() {
-        _errorMessage = error.toString();
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Card(
-              elevation: 8,
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade600,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.admin_panel_settings,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Achivo',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Admin Dashboard',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    TextField(
-                      controller: _emailController,
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _passwordController,
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: const Icon(Icons.lock_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      obscureText: true,
-                    ),
-                    if (_errorMessage.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.error_outline, color: Colors.red.shade600, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _errorMessage,
-                                style: TextStyle(color: Colors.red.shade600, fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _signIn,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                            : const Text('Sign In'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class AdminDashboard extends StatefulWidget {
   @override
@@ -319,7 +50,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ]);
     } catch (error) {
       print('Error loading data: $error');
-      _loadSampleData(); // Fallback to sample data
+      _loadSampleData();
     } finally {
       setState(() => _isLoading = false);
     }
@@ -334,13 +65,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _loadDashboardStats() async {
     try {
-      // Get departments count
       final departmentsResponse = await supabase
           .from('departments')
           .select('id')
           .count();
 
-      // Get faculty count
       final facultyResponse = await supabase
           .from('profiles')
           .select('id')
@@ -348,7 +77,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .eq('status', 'active')
           .count();
 
-      // Get students count
       final studentsResponse = await supabase
           .from('profiles')
           .select('id')
@@ -356,20 +84,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .eq('status', 'active')
           .count();
 
-      // Get pending approvals count
       final approvalsResponse = await supabase
           .from('activities')
           .select('id')
           .eq('status', 'pending')
           .count();
 
-      // Get total activities count
       final activitiesResponse = await supabase
           .from('activities')
           .select('id')
           .count();
 
-      // Get active users (logged in within last 7 days)
       final activeUsersResponse = await supabase
           .from('profiles')
           .select('id')
@@ -412,7 +137,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _loadActivitiesOverview() async {
     try {
-      // Get monthly activity statistics for the last 6 months
       final now = DateTime.now();
       List<MonthlyTrendData> trends = [];
 
@@ -454,7 +178,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _loadSystemOverview() async {
     try {
-      // Get recent activities
       final recentActivitiesResponse = await supabase
           .from('activities')
           .select('''
@@ -473,14 +196,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
           id: item['id'] ?? 0,
           student: item['profiles']?['full_name'] ?? 'Unknown Student',
           activity: item['title'] ?? 'Unknown Activity',
-          department: 'Various', // You may need to join with departments
+          department: 'Various',
           status: _parseActivityStatus(item['status']),
           date: item['activity_date'] ?? DateTime.now().toIso8601String().substring(0, 10),
         ))
             .toList();
       }
 
-      // Get system overview data
       final approvedCount = await supabase
           .from('activities')
           .select('id')
@@ -528,7 +250,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   void _loadSampleData() {
-    // Sample data for demonstration when Supabase fails
     departmentData = [
       DepartmentData(name: "Computer Science", students: 145, faculty: 12),
       DepartmentData(name: "Electronics", students: 98, faculty: 8),
@@ -593,7 +314,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _signOut() async {
     try {
       await supabase.auth.signOut();
-      // Navigate to welcome screen
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/welcome',
@@ -602,6 +322,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     } catch (error) {
       _showSnackBar('Error signing out', Colors.red);
     }
+  }
+
+  void _navigateToPage(String route) {
+    Navigator.pop(context); // Close drawer
+    Navigator.pushNamed(context, route);
   }
 
   @override
@@ -738,13 +463,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Column(
         children: [
           Container(
+            width: double.infinity,
             color: Colors.blue.shade600,
             child: SafeArea(
+              bottom: false,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min, // Added
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
@@ -792,66 +519,46 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _buildDrawerItem(
                   icon: Icons.business,
                   title: 'Departments',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/departments');
-                  },
+                  onTap: () => _navigateToPage('/admin/departments'),
                 ),
                 _buildDrawerItem(
                   icon: Icons.people,
                   title: 'Faculty Management',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/faculty');
-                  },
+                  onTap: () => _navigateToPage('/admin/faculty'),
                 ),
                 _buildDrawerItem(
                   icon: Icons.school,
                   title: 'Student Management',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/students');
-                  },
+                  onTap: () => _navigateToPage('/admin/students'),
                 ),
                 _buildDrawerItem(
                   icon: Icons.verified,
                   title: 'Activity Approvals',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/activities');
-                  },
+                  onTap: () => _navigateToPage('/admin/activities'),
                 ),
                 _buildDrawerItem(
                   icon: Icons.manage_accounts,
                   title: 'User Management',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/user-management');
-                  },
+                  onTap: () => _navigateToPage('/admin/user-management'),
                 ),
                 _buildDrawerItem(
                   icon: Icons.settings,
                   title: 'System Settings',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/system-settings');
-                  },
+                  onTap: () => _navigateToPage('/admin/system-settings'),
                 ),
                 _buildDrawerItem(
                   icon: Icons.history,
                   title: 'Audit Logs',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushNamed(context, '/audit-logs');
-                  },
+                  onTap: () => _navigateToPage('/admin/audit-logs'),
                 ),
               ],
             ),
           ),
-          const Divider(),
+          const Divider(height: 1),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 _buildDrawerItem(
                   icon: Icons.help,
@@ -1049,7 +756,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 1.2, // Adjusted childAspectRatio
+      childAspectRatio: 1.2,
       children: [
         _buildStatCard(
           title: "Total Departments",
@@ -1296,7 +1003,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
         setState(() {
           _selectedPeriod = label;
         });
-        // Here you could reload data based on selected period
       },
       child: Container(
         margin: const EdgeInsets.only(left: 4),
@@ -1320,7 +1026,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildSystemManagement() {
     return Column(
       children: [
-        // Recent Activities
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -1338,7 +1043,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ),
                     ),
                     TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/activities'),
+                      onPressed: () => _navigateToPage('/admin/activities'),
                       child: const Text('View All'),
                     ),
                   ],
@@ -1366,9 +1071,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         ),
         const SizedBox(height: 16),
-        // System Management Row
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start, // Align cards at the top
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Card(
@@ -1388,7 +1092,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             ),
                           ),
                           TextButton(
-                            onPressed: () => Navigator.pushNamed(context, '/user-management'),
+                            onPressed: () => _navigateToPage('/admin/user-management'),
                             child: const Text('Manage'),
                           ),
                         ],
@@ -1429,7 +1133,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             ),
                           ),
                           TextButton(
-                            onPressed: () => Navigator.pushNamed(context, '/audit-logs'),
+                            onPressed: () => _navigateToPage('/admin/audit-logs'),
                             child: const Text('View Logs'),
                           ),
                         ],
@@ -1630,112 +1334,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
             style: const TextStyle(fontSize: 10),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// Placeholder pages for navigation with admin-specific features
-class DepartmentsPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Department Management')),
-      body: const Center(
-        child: Text(
-          'Department management interface\nCreate, edit, and manage institutional departments',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class FacultyPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Faculty Management')),
-      body: const Center(
-        child: Text(
-          'Faculty management interface\nManage faculty profiles, roles, and assignments',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class StudentsPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Student Management')),
-      body: const Center(
-        child: Text(
-          'Student management interface\nView and manage student registrations and profiles',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class ActivitiesPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Activity Approvals')),
-      body: const Center(
-        child: Text(
-          'Activity approval interface\nReview and approve/reject student activity submissions',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class SystemSettingsPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('System Settings')),
-      body: const Center(
-        child: Text(
-          'System configuration interface\nManage system-wide settings and configurations',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class UserManagementPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('User Management')),
-      body: const Center(
-        child: Text(
-          'User management interface\nManage user roles, permissions, and access controls',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class AuditLogsPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Audit Logs')),
-      body: const Center(
-        child: Text(
-          'System audit logs\nView system activities, user actions, and security events',
-          textAlign: TextAlign.center,
-        ),
       ),
     );
   }
