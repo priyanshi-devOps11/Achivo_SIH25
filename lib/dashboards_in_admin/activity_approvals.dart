@@ -25,11 +25,11 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
   Future<void> _loadActivities() async {
     setState(() => isLoading = true);
     try {
-      var query = supabase.from('activities').select('''
+      PostgrestFilterBuilder query = supabase.from('activities').select('''
         *,
         students!inner(first_name, last_name, roll_number, email),
         departments!inner(name)
-      ''').order('created_at', ascending: false);
+      ''').order('created_at', ascending: false) as PostgrestFilterBuilder;
 
       if (filterStatus != 'all') {
         query = query.eq('status', filterStatus);
@@ -53,7 +53,7 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', activityId);
 
-      _showSnackBar('Activity ${status} successfully', Colors.green);
+      _showSnackBar('Activity $status successfully', Colors.green);
       _loadActivities();
     } catch (e) {
       _showSnackBar('Error updating activity: $e', Colors.red);
@@ -231,7 +231,7 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(status).withOpacity(0.2),
+                    color: _getStatusColor(status).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
