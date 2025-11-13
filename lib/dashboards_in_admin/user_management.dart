@@ -25,7 +25,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Future<void> _loadUsers() async {
     setState(() => isLoading = true);
     try {
-      var query = supabase
+      dynamic query = supabase
           .from('profiles')
           .select('*')
           .order('created_at', ascending: false);
@@ -195,7 +195,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   elevation: 2,
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: _getRoleColor(user['role']).withOpacity(0.2),
+                      backgroundColor: _getRoleColor(user['role']).withValues(alpha: 0.2),
                       child: Text(
                         user['first_name'][0].toUpperCase(),
                         style: TextStyle(
@@ -217,7 +217,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: _getRoleColor(user['role']).withOpacity(0.2),
+                                color: _getRoleColor(user['role']).withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
