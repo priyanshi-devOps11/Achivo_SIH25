@@ -3,28 +3,32 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
-// Import your screens - CORRECTED: Removed all 'hide' clauses to prevent conflicts
+// Import your screens
 import 'package:achivo/screens/welcome_screen.dart';
 import 'package:achivo/screens/auth_admin_page.dart';
 import 'package:achivo/screens/auth_hod_page.dart';
 import 'package:achivo/screens/auth_faculty_page.dart';
 import 'package:achivo/screens/auth_student_page.dart';
 import 'package:achivo/screens/student_dashboard.dart';
-// Import the admin dashboard from your admin_dashboard.dart file
 import 'package:achivo/screens/admin_dashboard.dart';
 
-// NOTE: You must also ensure that AuthAdminPage, AuthHodPage, AuthFacultyPage,
-// AdminDashboard, and StudentDashboard are proper Flutter Widgets (Stateless/Stateful)
-// in their respective files, as these are not defined in main.dart.
+// Import admin dashboard pages - Only existing ones
+import 'package:achivo/dashboards_in_admin/activity_approvals.dart';
+import 'package:achivo/dashboards_in_admin/user_management.dart';
+import 'package:achivo/dashboards_in_admin/student_management.dart';
+import 'package:achivo/dashboards_in_admin/system_settings.dart';
+
+// TODO: Uncomment these when you create the files
+// import 'package:achivo/dashboards_in_admin/audit_logs.dart';
+// import 'package:achivo/dashboards_in_admin/departments_admin_dashboard.dart';
+// import 'package:achivo/dashboards_in_admin/faculty_management.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    // Load environment variables - note the path change
     await dotenv.load(fileName: "assets/.env.local");
 
-    // Validate required environment variables
     final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'];
     final supabaseAnonKey = dotenv.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
 
@@ -37,14 +41,12 @@ void main() async {
     }
 
     print('🔄 Initializing Supabase...');
-    // Only print a truncated version of the URL for security
     print('   URL: ${supabaseUrl.substring(0, 30)}...');
 
-    // Initialize Supabase with proper configuration
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
-      debug: true, // Enable for debugging
+      debug: true,
       authOptions: const FlutterAuthClientOptions(
         authFlowType: AuthFlowType.pkce,
       ),
@@ -52,10 +54,8 @@ void main() async {
 
     print('✅ Supabase initialized successfully');
 
-    // Test connection
     final client = Supabase.instance.client;
     try {
-      // Simple test query to ensure database connection is established
       await client.from('departments').select('count').count();
       print('✅ Database connection test successful');
     } catch (e) {
@@ -65,13 +65,11 @@ void main() async {
   } catch (e, stackTrace) {
     print('❌ Error initializing app: $e');
     print('Stack trace: $stackTrace');
-    // Continue with app but show error state
   }
 
   runApp(const MyApp());
 }
 
-// Global Supabase client accessor
 SupabaseClient get supabase => Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
@@ -91,11 +89,7 @@ class MyApp extends StatelessWidget {
           linearTrackColor: Colors.grey.shade300,
         ),
       ),
-
-      // Start with initialization checker
       home: const AppInitializer(),
-
-      // Define all routes
       routes: {
         '/welcome': (context) => WelcomeScreen(onNext: () {}),
         '/auth-admin': (context) => const AuthAdminPage(),
@@ -106,17 +100,21 @@ class MyApp extends StatelessWidget {
         '/admin-dashboard': (context) => AdminDashboard(),
         '/faculty-dashboard': (context) => const FacultyDashboardMain(),
         '/student-dashboard': (context) => StudentDashboard(),
+        '/admin/activities': (context) => const ActivityApprovalsPage(),
+        '/admin/user-management': (context) => const UserManagementPage(),
+        '/admin/students': (context) => const StudentManagementPage(),
+        '/admin/system-settings': (context) => const SystemSettingsPage(),
 
-        // Additional routes for admin dashboard sub-pages (Placeholder functions defined below)
-        '/admin/departments': (context) => _buildPlaceholderPage('Department Management', 'Create, edit, and manage institutional departments'),
-        '/admin/faculty': (context) => _buildPlaceholderPage('Faculty Management', 'Manage faculty profiles, roles, and assignments'),
-        '/admin/students': (context) => _buildPlaceholderPage('Student Management', 'View and manage student registrations and profiles'),
-        '/admin/activities': (context) => _buildPlaceholderPage('Activity Approvals', 'Review and approve/reject student activity submissions'),
-        '/admin/system-settings': (context) => _buildPlaceholderPage('System Settings', 'Manage system-wide settings and configurations'),
-        '/admin/user-management': (context) => _buildPlaceholderPage('User Management', 'Manage user roles, permissions, and access controls'),
-        '/admin/audit-logs': (context) => _buildPlaceholderPage('Audit Logs', 'View system activities, user actions, and security events'),
+        // TODO: Uncomment these routes when you create the files
+        // '/admin/departments': (context) => const DepartmentsAdminDashboardPage(),
+        // '/admin/faculty': (context) => const FacultyManagementPage(),
+        // '/admin/audit-logs': (context) => const AuditLogsPage(),
+
+        // Temporary placeholder routes for missing pages
+        '/admin/departments': (context) => _buildPlaceholderPage(context, 'Departments Dashboard', 'Coming Soon'),
+        '/admin/faculty': (context) => _buildPlaceholderPage(context, 'Faculty Management', 'Coming Soon'),
+        '/admin/audit-logs': (context) => _buildPlaceholderPage(context, 'Audit Logs', 'Coming Soon'),
       },
-
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
           builder: (context) => _buildErrorScreen(
@@ -129,38 +127,63 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  // Helper method to create placeholder pages
-  Widget _buildPlaceholderPage(String title, String description) {
+  static Widget _buildPlaceholderPage(BuildContext context, String title, String subtitle) {
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: Colors.purple.shade700,
+        foregroundColor: Colors.white,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFF3E8FF),
+              Color(0xFFE0E7FF),
+              Color(0xFFDBEAFE),
+            ],
+          ),
+        ),
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 Icons.construction,
-                size: 64,
+                size: 80,
                 color: Colors.orange.shade400,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 24,
+                  fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Text(
-                description,
+                subtitle,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   color: Colors.grey.shade600,
                 ),
-                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Go Back'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple.shade500,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
               ),
             ],
           ),
@@ -169,7 +192,7 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  Widget _buildErrorScreen(BuildContext context, String title, String message) {
+  static Widget _buildErrorScreen(BuildContext context, String title, String message) {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -243,7 +266,7 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  Widget _buildGradientButton({
+  static Widget _buildGradientButton({
     required VoidCallback onPressed,
     required Widget child,
   }) {
@@ -258,7 +281,7 @@ class MyApp extends StatelessWidget {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF8B5CF6).withOpacity(0.3),
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -283,7 +306,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-
 class AppInitializer extends StatefulWidget {
   const AppInitializer({super.key});
 
@@ -295,14 +317,11 @@ class _AppInitializerState extends State<AppInitializer> {
   bool _isInitialized = false;
   String? _errorMessage;
   bool _isRetrying = false;
-
-  // New: Subscription to listen for auth events globally
   late final StreamSubscription<AuthState> _authStateSubscription;
 
   @override
   void initState() {
     super.initState();
-    // Initialize checking and start the global listener
     _setupAuthListener();
     _checkInitialization();
   }
@@ -313,23 +332,17 @@ class _AppInitializerState extends State<AppInitializer> {
     super.dispose();
   }
 
-  // New function to listen for password recovery event
   void _setupAuthListener() {
     _authStateSubscription = supabase.auth.onAuthStateChange.listen((data) {
       final AuthChangeEvent event = data.event;
       final Session? session = data.session;
 
       if (event == AuthChangeEvent.passwordRecovery && session != null && mounted) {
-        // User is authenticated via the password recovery link.
-        // STOP the normal initialization flow and force a password change.
         setState(() {
           _isInitialized = true;
         });
 
-        // Ensure we pop any existing routes before showing the dialog
         Navigator.popUntil(context, (route) => route.isFirst);
-
-        // Use a dialog to prompt for the new password immediately
         _showPasswordUpdateDialog(session.user);
       }
     });
@@ -337,55 +350,41 @@ class _AppInitializerState extends State<AppInitializer> {
 
   Future<void> _checkInitialization() async {
     try {
-      // Wait for initialization to complete
       await Future.delayed(const Duration(milliseconds: 1000));
 
-      // The `main` function should have initialized Supabase, check its status here.
       if (!Supabase.instance.isInitialized) {
         throw Exception('Supabase initialization failed - check your .env.local file and network connection');
       }
 
       final client = Supabase.instance.client;
 
-      // 🚨 FINAL FIX: Manually process session from URL for deep links (like password recovery)
       try {
-        // Get the full URL hash (e.g., #access_token=...&type=recovery)
         final urlHash = Uri.base.fragment;
-
         if (urlHash.isNotEmpty) {
-          // Pass the URL hash string to the method as the required argument for this SDK version.
-          await client.auth.getSessionFromUrl(urlHash as Uri);
+          await client.auth.getSessionFromUrl(Uri.parse(urlHash));
         }
       } catch (e) {
-        // Ignore errors here; this just means the URL doesn't contain auth tokens or SDK is newer.
-        // The listener or initial session check will handle the standard flow.
+        // Ignore errors
       }
 
       final session = client.auth.currentSession;
 
-      // If a recovery event has occurred, the listener has taken control.
       if (_isInitialized) return;
 
       setState(() {
         _isInitialized = true;
       });
 
-      // Navigate after successful initialization
       if (mounted) {
-        // Check if user is already logged in and redirect to appropriate dashboard
         if (session != null) {
           final user = session.user;
 
-          // CRITICAL: If the session has a very short expiry time, assume it's a recovery link
-          // and let the listener handle the UI, preventing the login/logout loop.
-          // The passwordRecovery event will be triggered by getSessionFromUrl().
           if (session.expiresIn != null && session.expiresIn! < 60) {
             print('Skipping role check: Detected short-lived recovery session.');
             return;
           }
 
           try {
-            // Get user profile to determine role
             final profile = await client
                 .from('profiles')
                 .select('role')
@@ -394,7 +393,6 @@ class _AppInitializerState extends State<AppInitializer> {
 
             final role = profile['role'] as String?;
 
-            // Navigate based on role
             switch (role) {
               case 'admin':
                 Navigator.pushReplacementNamed(context, '/admin-dashboard');
@@ -409,12 +407,10 @@ class _AppInitializerState extends State<AppInitializer> {
                 Navigator.pushReplacementNamed(context, '/student-dashboard');
                 break;
               default:
-              // Logged in but unknown role, sign out and go to welcome
                 await client.auth.signOut();
                 Navigator.pushReplacementNamed(context, '/welcome');
             }
           } catch (e) {
-            // If profile doesn't exist or error, sign out and go to welcome
             print('Profile lookup failed for user ${user.id}: $e');
             await client.auth.signOut();
             Navigator.pushReplacementNamed(context, '/welcome');
@@ -435,10 +431,9 @@ class _AppInitializerState extends State<AppInitializer> {
     }
   }
 
-  // Dialog to handle password update when the recovery link is clicked
   void _showPasswordUpdateDialog(User user) {
-    final TextEditingController _newPasswordController = TextEditingController();
-    final _dialogFormKey = GlobalKey<FormState>();
+    final TextEditingController newPasswordController = TextEditingController();
+    final dialogFormKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
@@ -447,9 +442,9 @@ class _AppInitializerState extends State<AppInitializer> {
         return AlertDialog(
           title: const Text('Set New Password'),
           content: Form(
-            key: _dialogFormKey,
+            key: dialogFormKey,
             child: TextFormField(
-              controller: _newPasswordController,
+              controller: newPasswordController,
               obscureText: true,
               decoration: const InputDecoration(
                 labelText: 'Enter new password',
@@ -466,25 +461,26 @@ class _AppInitializerState extends State<AppInitializer> {
             TextButton(
               child: const Text('Update Password'),
               onPressed: () async {
-                if (_dialogFormKey.currentState!.validate()) {
-                  // Attempt to update the password
+                if (dialogFormKey.currentState!.validate()) {
                   try {
                     await supabase.auth.updateUser(
-                        UserAttributes(password: _newPasswordController.text));
+                        UserAttributes(password: newPasswordController.text));
 
-                    // Password successfully updated, navigate to login
                     if (dialogContext.mounted) Navigator.of(dialogContext).pop();
                     await supabase.auth.signOut();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Password updated successfully! Please log in.'), backgroundColor: Colors.green));
+                          const SnackBar(
+                              content: Text('Password updated successfully! Please log in.'),
+                              backgroundColor: Colors.green));
                       Navigator.pushReplacementNamed(context, '/welcome');
                     }
                   } catch (e) {
-                    // Handle failure to update password
                     if (dialogContext.mounted) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text('Failed to update password: ${e.toString()}'), backgroundColor: Colors.red));
+                          SnackBar(
+                              content: Text('Failed to update password: ${e.toString()}'),
+                              backgroundColor: Colors.red));
                     }
                   }
                 }
@@ -540,7 +536,6 @@ class _AppInitializerState extends State<AppInitializer> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // App logo
                 ShaderMask(
                   shaderCallback: (bounds) => LinearGradient(
                     colors: [
@@ -559,11 +554,8 @@ class _AppInitializerState extends State<AppInitializer> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 32),
-
                 if (_errorMessage == null && !_isRetrying) ...[
-                  // Loading state
                   CircularProgressIndicator(
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
                   ),
@@ -588,7 +580,6 @@ class _AppInitializerState extends State<AppInitializer> {
                     ),
                   ),
                 ] else ...[
-                  // Error state
                   Icon(
                     Icons.error_outline,
                     size: 48,
@@ -648,9 +639,7 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 }
 
-// Data Models (Included below for completeness, assuming they are required)
-// --- Data Models and Dashboards are large, including a subset for completeness ---
-
+// Data Models
 class Faculty {
   final String id;
   final String name;
@@ -783,9 +772,7 @@ class ApprovalRequest {
   }
 }
 
-
-// --- Dedicated List Views for HOD Dashboard Tabs (Refactored) ---
-
+// List Views for HOD Dashboard
 class FacultyListView extends StatelessWidget {
   final List<Faculty> faculty;
   final String searchTerm;
@@ -800,7 +787,6 @@ class FacultyListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Apply filters and search
     final filteredFaculty = faculty.where((member) {
       final matchesSearch = searchTerm.isEmpty ||
           member.name.toLowerCase().contains(searchTerm.toLowerCase()) ||
@@ -857,7 +843,6 @@ class FacultyListView extends StatelessWidget {
               ),
             ),
             onTap: () {
-              // TODO: Implement navigation to Faculty Detail Screen
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Viewing ${member.name} details')),
               );
@@ -881,7 +866,6 @@ class StudentListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Apply search filter
     final filteredStudents = students.where((student) {
       return searchTerm.isEmpty ||
           student.name.toLowerCase().contains(searchTerm.toLowerCase()) ||
@@ -934,7 +918,6 @@ class StudentListView extends StatelessWidget {
               ),
             ),
             onTap: () {
-              // TODO: Implement navigation to Student Detail Screen
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('Viewing ${student.name} details')),
               );
@@ -975,7 +958,6 @@ class ApprovalRequestListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Apply filters and search
     final filteredRequests = approvalRequests.where((request) {
       final matchesSearch = searchTerm.isEmpty ||
           request.title.toLowerCase().contains(searchTerm.toLowerCase()) ||
@@ -1115,7 +1097,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     _tabController = TabController(length: 3, vsync: this);
     _loadData();
 
-    // Clear search/filters when tab changes
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
         setState(() {
@@ -1137,7 +1118,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     setState(() => isLoading = true);
 
     try {
-      // Try to load from Supabase, but fall back to sample data if it fails
       await _loadFromSupabase();
     } catch (e) {
       print('Error loading data from Supabase: $e');
@@ -1148,7 +1128,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   }
 
   Future<void> _loadFromSupabase() async {
-    // Load Faculty with error handling
     try {
       final facultyResponse = await supabase
           .from('faculty')
@@ -1159,13 +1138,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           .toList();
     } catch (e) {
       print('Error loading faculty: $e');
-      // Keep existing faculty data or load sample data
       if (faculty.isEmpty) {
         faculty = _getSampleFaculty();
       }
     }
 
-    // Load Students with error handling
     try {
       final studentsResponse = await supabase
           .from('students')
@@ -1181,7 +1158,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       }
     }
 
-    // Load Approval Requests with error handling
     try {
       final requestsResponse = await supabase
           .from('approval_requests')
@@ -1349,7 +1325,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
       _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully');
     } catch (e) {
-      // If Supabase update fails, still update locally for demo
       setState(() {
         final index = approvalRequests.indexWhere((r) => r.id == requestId);
         if (index != -1) {
@@ -1361,7 +1336,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }
   }
 
-  // Helper to build search/filter UI
   Widget _buildSearchAndFilterRow(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -1388,7 +1362,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             ),
           ),
           const SizedBox(width: 10),
-          // Filter Button - Will show a dialog for current tab's filters
           IconButton(
             icon: const Icon(Icons.filter_list, color: Color(0xFF1976D2)),
             onPressed: () => _showFilterOptions(context),
@@ -1402,7 +1375,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   void _showFilterOptions(BuildContext context) {
     String currentTab = ['Faculty', 'Students', 'Approvals'][_tabController.index];
 
-    // Simple placeholder for the dialog logic
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1473,7 +1445,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           indicatorColor: Colors.white,
           onTap: (_) {
             setState(() {
-              // Clear search term when changing tabs for better UX
               searchTerm = '';
             });
           },
@@ -1486,26 +1457,20 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       ),
       body: Column(
         children: [
-          // Search and Filter Row
           _buildSearchAndFilterRow(context),
-
-          // TabBarView
           Expanded(
             child: TabBarView(
               controller: _tabController,
               children: [
-                // Faculty Tab
                 FacultyListView(
                   faculty: faculty,
                   searchTerm: searchTerm,
                   filterDesignation: filterDesignation,
                 ),
-                // Students Tab
                 StudentListView(
                   students: students,
                   searchTerm: searchTerm,
                 ),
-                // Approvals Tab
                 ApprovalRequestListView(
                   approvalRequests: approvalRequests,
                   searchTerm: searchTerm,
@@ -1618,7 +1583,7 @@ class _FacultyDashboardMainState extends State<FacultyDashboardMain> {
   }
 }
 
-// Shared sign out function that redirects to welcome screen
+// Shared sign out function
 Future<void> _handleSignOut(BuildContext context) async {
   try {
     await supabase.auth.signOut();
