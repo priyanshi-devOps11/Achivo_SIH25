@@ -108,7 +108,7 @@ class MyApp extends StatelessWidget {
         // TODO: Uncomment these routes when you create the files
         // '/admin/departments': (context) => const DepartmentsAdminDashboardPage(),
         // '/admin/faculty': (context) => const FacultyManagementPage(),
-        // '/admin/audit-logs': (context) => const AuditLogsPage(),
+        '/admin/audit-logs': (context) => const AuditLogsPage(),
 
         // Temporary placeholder routes for missing pages
         '/admin/departments': (context) => _buildPlaceholderPage(context, 'Departments Dashboard', 'Coming Soon'),
