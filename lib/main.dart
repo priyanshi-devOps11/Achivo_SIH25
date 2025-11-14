@@ -19,7 +19,7 @@ import 'package:achivo/dashboards_in_admin/student_management.dart';
 import 'package:achivo/dashboards_in_admin/system_settings.dart';
 
 // TODO: Uncomment these when you create the files
-// import 'package:achivo/dashboards_in_admin/audit_logs.dart';
+import 'package:achivo/dashboards_in_admin/audit_logs.dart';
 // import 'package:achivo/dashboards_in_admin/departments_admin_dashboard.dart';
 // import 'package:achivo/dashboards_in_admin/faculty_management.dart';
 
