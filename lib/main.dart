@@ -9,12 +9,10 @@ import 'package:achivo/screens/auth_admin_page.dart';
 import 'package:achivo/screens/auth_hod_page.dart';
 import 'package:achivo/screens/auth_faculty_page.dart';
 import 'package:achivo/screens/auth_student_page.dart';
-
-// Screens listed in your project structure
 import 'package:achivo/screens/student_dashboard.dart';
 import 'package:achivo/screens/admin_dashboard.dart';
 
-// Import admin dashboard pages (all listed in the file structure)
+// Import admin dashboard pages
 import 'package:achivo/dashboards_in_admin/activity_approvals.dart';
 import 'package:achivo/dashboards_in_admin/user_management.dart';
 import 'package:achivo/dashboards_in_admin/student_management.dart';
@@ -23,61 +21,10 @@ import 'package:achivo/dashboards_in_admin/audit_logs.dart';
 import 'package:achivo/dashboards_in_admin/departments_admin_dashboard.dart';
 import 'package:achivo/dashboards_in_admin/faculty_management.dart';
 
-// --- Placeholder for Imported Screen Classes ---
-// These classes use the static helper method from MyApp to prevent errors
-// if their external files are missing or empty.
-class StudentDashboard extends StatelessWidget {
-  const StudentDashboard({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Student Dashboard', 'Your Academic Portal');
-}
-class AdminDashboard extends StatelessWidget {
-  const AdminDashboard({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Admin Dashboard', 'Manage the System');
-}
-class ActivityApprovalsPage extends StatelessWidget {
-  const ActivityApprovalsPage({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Activity Approvals', 'Approve/Reject Requests');
-}
-class UserManagementPage extends StatelessWidget {
-  const UserManagementPage({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'User Management', 'Manage all users');
-}
-class StudentManagementPage extends StatelessWidget {
-  const StudentManagementPage({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Student Management', 'Manage student data');
-}
-class SystemSettingsPage extends StatelessWidget {
-  const SystemSettingsPage({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'System Settings', 'Configure the system');
-}
-class AuditLogsPage extends StatelessWidget {
-  const AuditLogsPage({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Audit Logs', 'View system activity');
-}
-class DepartmentsAdminDashboardPage extends StatelessWidget {
-  const DepartmentsAdminDashboardPage({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Departments Dashboard', 'Manage Departments');
-}
-class FacultyManagementPage extends StatelessWidget {
-  const FacultyManagementPage({super.key});
-  @override
-  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Faculty Management', 'Manage Faculty Data');
-}
-// --- End of Placeholder implementations ---
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    // IMPORTANT: Make sure you have 'assets/.env.local' file in your project
     await dotenv.load(fileName: "assets/.env.local");
 
     final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'];
@@ -88,10 +35,13 @@ void main() async {
     }
 
     if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
-      throw Exception('NEXT_PUBLIC_SUPABASE_ANON_KEY is not set in .env.local file');
+      throw Exception(
+          'NEXT_PUBLIC_SUPABASE_ANON_KEY is not set in .env.local file');
     }
 
     print('🔄 Initializing Supabase...');
+    print('   URL: ${supabaseUrl.substring(0, 30)}...');
+
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
@@ -103,14 +53,13 @@ void main() async {
 
     print('✅ Supabase initialized successfully');
 
-    // Connection test (optional but good practice)
+    final client = Supabase.instance.client;
     try {
-      await Supabase.instance.client.from('departments').select('count').count();
+      await client.from('departments').select('count').count();
       print('✅ Database connection test successful');
     } catch (e) {
       print('⚠️ Database connection test failed: $e');
     }
-
   } catch (e, stackTrace) {
     print('❌ Error initializing app: $e');
     print('Stack trace: $stackTrace');
@@ -140,24 +89,27 @@ class MyApp extends StatelessWidget {
       ),
       home: const AppInitializer(),
       routes: {
+        // Auth routes
         '/welcome': (context) => WelcomeScreen(onNext: () {}),
         '/auth-admin': (context) => const AuthAdminPage(),
         '/auth-hod': (context) => const AuthHodPage(),
         '/auth-faculty': (context) => const AuthFacultyPage(),
         '/auth-student': (context) => const AuthStudentPage(),
-        '/hod-dashboard': (context) => const HODDashboardMain(),
-        '/admin-dashboard': (context) => const AdminDashboard(),
-        '/faculty-dashboard': (context) => const FacultyDashboardMain(),
-        '/student-dashboard': (context) => const StudentDashboard(),
 
-        // All Admin Sub-Routes
+        // Main dashboard routes
+        '/admin-dashboard': (context) => AdminDashboard(),
+        '/hod-dashboard': (context) => const HODDashboardMain(),
+        '/faculty-dashboard': (context) => const FacultyDashboardMain(),
+        '/student-dashboard': (context) => StudentDashboard(),
+
+        // Admin sub-pages routes
         '/admin/activities': (context) => const ActivityApprovalsPage(),
         '/admin/user-management': (context) => const UserManagementPage(),
         '/admin/students': (context) => const StudentManagementPage(),
         '/admin/system-settings': (context) => const SystemSettingsPage(),
-        '/admin/audit-logs': (context) => const AuditLogsPage(),
         '/admin/departments': (context) => const DepartmentsAdminDashboardPage(),
         '/admin/faculty': (context) => const FacultyManagementPage(),
+        '/admin/audit-logs': (context) => const AuditLogsPage(),
       },
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
@@ -171,74 +123,8 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  // Helper method for the Placeholder pages (made static)
-  static Widget _buildPlaceholderPage(BuildContext context, String title, String subtitle) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: Colors.purple.shade700,
-        foregroundColor: Colors.white,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF3E8FF),
-              Color(0xFFE0E7FF),
-              Color(0xFFDBEAFE),
-            ],
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.construction,
-                size: 80,
-                color: Colors.orange.shade400,
-              ),
-              const SizedBox(height: 24),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              const SizedBox(height: 32),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Go Back'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.purple.shade500,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Helper method for Error Screen (made static)
-  static Widget _buildErrorScreen(BuildContext context, String title, String message) {
+  static Widget _buildErrorScreen(
+      BuildContext context, String title, String message) {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -312,7 +198,6 @@ class MyApp extends StatelessWidget {
     );
   }
 
-  // Helper method for Gradient Button (made static)
   static Widget _buildGradientButton({
     required VoidCallback onPressed,
     required Widget child,
@@ -353,7 +238,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// App Initializer (responsible for authentication and routing)
 class AppInitializer extends StatefulWidget {
   const AppInitializer({super.key});
 
@@ -385,7 +269,9 @@ class _AppInitializerState extends State<AppInitializer> {
       final AuthChangeEvent event = data.event;
       final Session? session = data.session;
 
-      if (event == AuthChangeEvent.passwordRecovery && session != null && mounted) {
+      if (event == AuthChangeEvent.passwordRecovery &&
+          session != null &&
+          mounted) {
         setState(() {
           _isInitialized = true;
         });
@@ -401,7 +287,8 @@ class _AppInitializerState extends State<AppInitializer> {
       await Future.delayed(const Duration(milliseconds: 1000));
 
       if (!Supabase.instance.isInitialized) {
-        throw Exception('Supabase initialization failed - check your .env.local file and network connection');
+        throw Exception(
+            'Supabase initialization failed - check your .env.local file and network connection');
       }
 
       final client = Supabase.instance.client;
@@ -412,7 +299,7 @@ class _AppInitializerState extends State<AppInitializer> {
           await client.auth.getSessionFromUrl(Uri.parse(urlHash));
         }
       } catch (e) {
-        // Ignore errors
+        // Ignore URL hash errors
       }
 
       final session = client.auth.currentSession;
@@ -427,6 +314,7 @@ class _AppInitializerState extends State<AppInitializer> {
         if (session != null) {
           final user = session.user;
 
+          // Check if this is a password recovery session
           if (session.expiresIn != null && session.expiresIn! < 60) {
             print('Skipping role check: Detected short-lived recovery session.');
             return;
@@ -440,6 +328,8 @@ class _AppInitializerState extends State<AppInitializer> {
                 .single();
 
             final role = profile['role'] as String?;
+
+            if (!mounted) return;
 
             switch (role) {
               case 'admin':
@@ -461,13 +351,14 @@ class _AppInitializerState extends State<AppInitializer> {
           } catch (e) {
             print('Profile lookup failed for user ${user.id}: $e');
             await client.auth.signOut();
-            Navigator.pushReplacementNamed(context, '/welcome');
+            if (mounted) {
+              Navigator.pushReplacementNamed(context, '/welcome');
+            }
           }
         } else {
           Navigator.pushReplacementNamed(context, '/welcome');
         }
       }
-
     } catch (e) {
       print('Initialization error: $e');
       if (mounted) {
@@ -514,21 +405,29 @@ class _AppInitializerState extends State<AppInitializer> {
                     await supabase.auth.updateUser(
                         UserAttributes(password: newPasswordController.text));
 
-                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                    if (dialogContext.mounted) {
+                      Navigator.of(dialogContext).pop();
+                    }
                     await supabase.auth.signOut();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Password updated successfully! Please log in.'),
-                              backgroundColor: Colors.green));
+                        const SnackBar(
+                          content: Text(
+                              'Password updated successfully! Please log in.'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
                       Navigator.pushReplacementNamed(context, '/welcome');
                     }
                   } catch (e) {
                     if (dialogContext.mounted) {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(
-                              content: Text('Failed to update password: ${e.toString()}'),
-                              backgroundColor: Colors.red));
+                        SnackBar(
+                          content: Text(
+                              'Failed to update password: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
                     }
                   }
                 }
@@ -605,7 +504,8 @@ class _AppInitializerState extends State<AppInitializer> {
                 const SizedBox(height: 32),
                 if (_errorMessage == null && !_isRetrying) ...[
                   CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.purple.shade500),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -617,7 +517,8 @@ class _AppInitializerState extends State<AppInitializer> {
                   ),
                 ] else if (_isRetrying) ...[
                   CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.purple.shade500),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -687,7 +588,7 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 }
 
-// Data Models
+// Data Models for HOD Dashboard
 class Faculty {
   final String id;
   final String name;
@@ -868,7 +769,8 @@ class FacultyListView extends StatelessWidget {
               backgroundColor: Colors.blue.shade100,
               child: Text(
                 member.name.substring(0, 1),
-                style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.blue.shade700, fontWeight: FontWeight.bold),
               ),
             ),
             title: Text(
@@ -882,7 +784,9 @@ class FacultyListView extends StatelessWidget {
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: member.status == 'Active' ? Colors.green.shade500 : Colors.red.shade400,
+                color: member.status == 'Active'
+                    ? Colors.green.shade500
+                    : Colors.red.shade400,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -943,7 +847,9 @@ class StudentListView extends StatelessWidget {
               backgroundColor: Colors.purple.shade100,
               child: Text(
                 student.name.substring(0, 1),
-                style: TextStyle(color: Colors.purple.shade700, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.purple.shade700,
+                    fontWeight: FontWeight.bold),
               ),
             ),
             title: Text(
@@ -957,7 +863,9 @@ class StudentListView extends StatelessWidget {
             trailing: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: student.status == 'Active' ? Colors.green.shade500 : Colors.red.shade400,
+                color: student.status == 'Active'
+                    ? Colors.green.shade500
+                    : Colors.red.shade400,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -1011,8 +919,8 @@ class ApprovalRequestListView extends StatelessWidget {
           request.title.toLowerCase().contains(searchTerm.toLowerCase()) ||
           request.studentName.toLowerCase().contains(searchTerm.toLowerCase());
 
-      final matchesStatus = filterStatus == 'all' ||
-          request.status == filterStatus;
+      final matchesStatus =
+          filterStatus == 'all' || request.status == filterStatus;
 
       return matchesSearch && matchesStatus;
     }).toList();
@@ -1052,21 +960,29 @@ class ApprovalRequestListView extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: _getStatusColor(request.status),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
                         request.status,
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('Student: ${request.studentName}', style: TextStyle(color: Colors.grey.shade700)),
-                Text('Type: ${request.type} • Submitted: ${request.submittedDate}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                Text('Student: ${request.studentName}',
+                    style: TextStyle(color: Colors.grey.shade700)),
+                Text(
+                    'Type: ${request.type} • Submitted: ${request.submittedDate}',
+                    style: TextStyle(
+                        color: Colors.grey.shade500, fontSize: 12)),
                 const SizedBox(height: 8),
                 Text(
                   request.description,
@@ -1080,7 +996,8 @@ class ApprovalRequestListView extends StatelessWidget {
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => updateStatusCallback(request.id, 'Approved'),
+                          onPressed: () =>
+                              updateStatusCallback(request.id, 'Approved'),
                           icon: const Icon(Icons.check, size: 18),
                           label: const Text('Approve'),
                           style: ElevatedButton.styleFrom(
@@ -1093,7 +1010,8 @@ class ApprovalRequestListView extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => updateStatusCallback(request.id, 'Rejected'),
+                          onPressed: () =>
+                              updateStatusCallback(request.id, 'Rejected'),
                           icon: const Icon(Icons.close, size: 18),
                           label: const Text('Reject'),
                           style: ElevatedButton.styleFrom(
@@ -1256,19 +1174,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         status: 'Active',
         qualification: 'Ph.D in Information Technology',
       ),
-      Faculty(
-        id: '3',
-        name: 'Ms. Emily Davis',
-        email: 'emily.davis@university.edu',
-        phone: '+1 (555) 345-6789',
-        department: 'Computer Science',
-        designation: 'Assistant Professor',
-        experience: 3,
-        subjects: ['Mobile Computing', 'UX/UI Design'],
-        joiningDate: '2021-06-01',
-        status: 'Active',
-        qualification: 'M.S. in Computer Science',
-      ),
     ];
   }
 
@@ -1288,20 +1193,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         status: 'Active',
         admissionDate: '2021-08-15',
       ),
-      Student(
-        id: '2',
-        name: 'Brian Foster',
-        email: 'brian.foster@student.edu',
-        phone: '+1 (555) 444-5555',
-        rollNumber: 'CS2022010',
-        year: '2nd Year',
-        semester: '4th Semester',
-        cgpa: 9.1,
-        address: '456 Campus Drive, Dorm 5',
-        parentContact: '+1 (555) 444-6666',
-        status: 'Active',
-        admissionDate: '2022-08-15',
-      ),
     ];
   }
 
@@ -1313,23 +1204,12 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         studentName: 'Alex Thompson',
         type: 'Leave Application',
         title: 'Medical Leave Request',
-        description: 'Requesting 2 weeks medical leave due to surgery. Attached medical certificate.',
+        description:
+        'Requesting 2 weeks medical leave due to surgery. Attached medical certificate.',
         submittedDate: '2024-09-05',
         status: 'Pending',
         urgency: 'High',
         documents: ['medical_certificate.pdf'],
-      ),
-      ApprovalRequest(
-        id: '2',
-        studentId: '2',
-        studentName: 'Brian Foster',
-        type: 'Event Participation',
-        title: 'Hackathon Approval',
-        description: 'Requesting approval to participate in the National Coding Hackathon from Oct 10-12.',
-        submittedDate: '2024-09-01',
-        status: 'Approved',
-        urgency: 'Medium',
-        documents: ['invitation.pdf'],
       ),
     ];
   }
@@ -1373,14 +1253,14 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
       _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully');
     } catch (e) {
-      // Temporary local update for demonstration/error handling
       setState(() {
         final index = approvalRequests.indexWhere((r) => r.id == requestId);
         if (index != -1) {
           approvalRequests[index].status = newStatus;
         }
       });
-      _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully (local update)');
+      _showSuccessSnackbar(
+          'Request ${newStatus.toLowerCase()} successfully (local update)');
       print('Error updating approval status: $e');
     }
   }
@@ -1406,7 +1286,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 ),
                 filled: true,
                 fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                contentPadding:
+                const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
               ),
             ),
           ),
@@ -1422,13 +1303,15 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   }
 
   void _showFilterOptions(BuildContext context) {
-    String currentTab = ['Faculty', 'Students', 'Approvals'][_tabController.index];
-    // Generic dialog for filter options
+    String currentTab =
+    ['Faculty', 'Students', 'Approvals'][_tabController.index];
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Filter $currentTab'),
-        content: Text('Implement specific filtering options for the $currentTab tab here. Current Search Term: $searchTerm'),
+        content: Text(
+            'Implement specific filtering options for the $currentTab tab here. Current Search Term: $searchTerm'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
