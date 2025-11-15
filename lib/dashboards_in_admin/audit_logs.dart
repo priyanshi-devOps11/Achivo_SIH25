@@ -37,30 +37,29 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
   Future<void> _loadAuditLogs() async {
     setState(() => isLoading = true);
     try {
-      // Since there's no audit_logs table in schema, we'll create activity logs
-      // from the activities table and recent profile updates
       final List<Map<String, dynamic>> logs = [];
 
       // Get activity logs with student info
       try {
         final activities = await supabase
             .from('activities')
-            .select('*, students(first_name, last_name, email, roll_number)')
+            .select('*, students!inner(first_name, last_name, email, roll_number)')
             .order('created_at', ascending: false)
             .limit(50);
 
         for (var activity in activities) {
+          final student = activity['students'];
           logs.add({
             'id': activity['id'],
             'action': _getActivityAction(activity['status']),
             'table_name': 'activities',
             'record_id': activity['id'].toString(),
-            'user_email': activity['students']?['email'] ?? 'Unknown',
+            'user_email': student?['email'] ?? 'Unknown',
             'user_name':
-            '${activity['students']?['first_name'] ?? ''} ${activity['students']?['last_name'] ?? ''}'
+            '${student?['first_name'] ?? ''} ${student?['last_name'] ?? ''}'
                 .trim(),
             'description': _getActivityDescription(activity),
-            'timestamp': activity['created_at'],
+            'timestamp': activity['created_at'] ?? DateTime.now().toIso8601String(),
             'details': {
               'title': activity['title'],
               'category': activity['category'],
@@ -88,10 +87,10 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
               'action': 'UPDATE',
               'table_name': 'profiles',
               'record_id': profile['id'].toString(),
-              'user_email': profile['email'],
-              'user_name': '${profile['first_name']} ${profile['last_name']}',
+              'user_email': profile['email'] ?? 'Unknown',
+              'user_name': '${profile['first_name'] ?? ''} ${profile['last_name'] ?? ''}'.trim(),
               'description': 'Profile updated',
-              'timestamp': profile['updated_at'],
+              'timestamp': profile['updated_at'] ?? DateTime.now().toIso8601String(),
               'details': {
                 'role': profile['role'],
                 'is_active': profile['is_active'],
@@ -117,10 +116,10 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
             'action': 'CREATE',
             'table_name': 'students',
             'record_id': student['id'].toString(),
-            'user_email': student['email'],
-            'user_name': '${student['first_name']} ${student['last_name']}',
+            'user_email': student['email'] ?? 'Unknown',
+            'user_name': '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim(),
             'description': 'Student enrolled',
-            'timestamp': student['created_at'],
+            'timestamp': student['created_at'] ?? DateTime.now().toIso8601String(),
             'details': {
               'roll_number': student['roll_number'],
               'year': student['year'],
@@ -526,8 +525,7 @@ class _AuditLogsPageState extends State<AuditLogsPage> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _getActionColor(log['action'])
-                          .withValues(alpha: 0.1),
+                      color: _getActionColor(log['action']).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
