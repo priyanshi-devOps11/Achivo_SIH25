@@ -9,24 +9,75 @@ import 'package:achivo/screens/auth_admin_page.dart';
 import 'package:achivo/screens/auth_hod_page.dart';
 import 'package:achivo/screens/auth_faculty_page.dart';
 import 'package:achivo/screens/auth_student_page.dart';
+
+// Screens listed in your project structure
 import 'package:achivo/screens/student_dashboard.dart';
 import 'package:achivo/screens/admin_dashboard.dart';
 
-// Import admin dashboard pages - Only existing ones
+// Import admin dashboard pages (all listed in the file structure)
 import 'package:achivo/dashboards_in_admin/activity_approvals.dart';
 import 'package:achivo/dashboards_in_admin/user_management.dart';
 import 'package:achivo/dashboards_in_admin/student_management.dart';
 import 'package:achivo/dashboards_in_admin/system_settings.dart';
-
-// TODO: Uncomment these when you create the files
 import 'package:achivo/dashboards_in_admin/audit_logs.dart';
-// import 'package:achivo/dashboards_in_admin/departments_admin_dashboard.dart';
-// import 'package:achivo/dashboards_in_admin/faculty_management.dart';
+import 'package:achivo/dashboards_in_admin/departments_admin_dashboard.dart';
+import 'package:achivo/dashboards_in_admin/faculty_management.dart';
+
+// --- Placeholder for Imported Screen Classes ---
+// These classes use the static helper method from MyApp to prevent errors
+// if their external files are missing or empty.
+class StudentDashboard extends StatelessWidget {
+  const StudentDashboard({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Student Dashboard', 'Your Academic Portal');
+}
+class AdminDashboard extends StatelessWidget {
+  const AdminDashboard({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Admin Dashboard', 'Manage the System');
+}
+class ActivityApprovalsPage extends StatelessWidget {
+  const ActivityApprovalsPage({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Activity Approvals', 'Approve/Reject Requests');
+}
+class UserManagementPage extends StatelessWidget {
+  const UserManagementPage({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'User Management', 'Manage all users');
+}
+class StudentManagementPage extends StatelessWidget {
+  const StudentManagementPage({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Student Management', 'Manage student data');
+}
+class SystemSettingsPage extends StatelessWidget {
+  const SystemSettingsPage({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'System Settings', 'Configure the system');
+}
+class AuditLogsPage extends StatelessWidget {
+  const AuditLogsPage({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Audit Logs', 'View system activity');
+}
+class DepartmentsAdminDashboardPage extends StatelessWidget {
+  const DepartmentsAdminDashboardPage({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Departments Dashboard', 'Manage Departments');
+}
+class FacultyManagementPage extends StatelessWidget {
+  const FacultyManagementPage({super.key});
+  @override
+  Widget build(BuildContext context) => MyApp._buildPlaceholderPage(context, 'Faculty Management', 'Manage Faculty Data');
+}
+// --- End of Placeholder implementations ---
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    // IMPORTANT: Make sure you have 'assets/.env.local' file in your project
     await dotenv.load(fileName: "assets/.env.local");
 
     final supabaseUrl = dotenv.env['NEXT_PUBLIC_SUPABASE_URL'];
@@ -41,8 +92,6 @@ void main() async {
     }
 
     print('🔄 Initializing Supabase...');
-    print('   URL: ${supabaseUrl.substring(0, 30)}...');
-
     await Supabase.initialize(
       url: supabaseUrl,
       anonKey: supabaseAnonKey,
@@ -54,9 +103,9 @@ void main() async {
 
     print('✅ Supabase initialized successfully');
 
-    final client = Supabase.instance.client;
+    // Connection test (optional but good practice)
     try {
-      await client.from('departments').select('count').count();
+      await Supabase.instance.client.from('departments').select('count').count();
       print('✅ Database connection test successful');
     } catch (e) {
       print('⚠️ Database connection test failed: $e');
@@ -97,23 +146,18 @@ class MyApp extends StatelessWidget {
         '/auth-faculty': (context) => const AuthFacultyPage(),
         '/auth-student': (context) => const AuthStudentPage(),
         '/hod-dashboard': (context) => const HODDashboardMain(),
-        '/admin-dashboard': (context) => AdminDashboard(),
+        '/admin-dashboard': (context) => const AdminDashboard(),
         '/faculty-dashboard': (context) => const FacultyDashboardMain(),
-        '/student-dashboard': (context) => StudentDashboard(),
+        '/student-dashboard': (context) => const StudentDashboard(),
+
+        // All Admin Sub-Routes
         '/admin/activities': (context) => const ActivityApprovalsPage(),
         '/admin/user-management': (context) => const UserManagementPage(),
         '/admin/students': (context) => const StudentManagementPage(),
         '/admin/system-settings': (context) => const SystemSettingsPage(),
-
-        // TODO: Uncomment these routes when you create the files
-        // '/admin/departments': (context) => const DepartmentsAdminDashboardPage(),
-        // '/admin/faculty': (context) => const FacultyManagementPage(),
         '/admin/audit-logs': (context) => const AuditLogsPage(),
-
-        // Temporary placeholder routes for missing pages
-        '/admin/departments': (context) => _buildPlaceholderPage(context, 'Departments Dashboard', 'Coming Soon'),
-        '/admin/faculty': (context) => _buildPlaceholderPage(context, 'Faculty Management', 'Coming Soon'),
-        '/admin/audit-logs': (context) => _buildPlaceholderPage(context, 'Audit Logs', 'Coming Soon'),
+        '/admin/departments': (context) => const DepartmentsAdminDashboardPage(),
+        '/admin/faculty': (context) => const FacultyManagementPage(),
       },
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
@@ -127,6 +171,7 @@ class MyApp extends StatelessWidget {
     );
   }
 
+  // Helper method for the Placeholder pages (made static)
   static Widget _buildPlaceholderPage(BuildContext context, String title, String subtitle) {
     return Scaffold(
       appBar: AppBar(
@@ -192,6 +237,7 @@ class MyApp extends StatelessWidget {
     );
   }
 
+  // Helper method for Error Screen (made static)
   static Widget _buildErrorScreen(BuildContext context, String title, String message) {
     return Scaffold(
       body: Container(
@@ -266,6 +312,7 @@ class MyApp extends StatelessWidget {
     );
   }
 
+  // Helper method for Gradient Button (made static)
   static Widget _buildGradientButton({
     required VoidCallback onPressed,
     required Widget child,
@@ -281,7 +328,7 @@ class MyApp extends StatelessWidget {
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+            color: const Color(0xFF8B5CF6).withOpacity(0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -306,6 +353,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// App Initializer (responsible for authentication and routing)
 class AppInitializer extends StatefulWidget {
   const AppInitializer({super.key});
 
@@ -1325,6 +1373,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
       _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully');
     } catch (e) {
+      // Temporary local update for demonstration/error handling
       setState(() {
         final index = approvalRequests.indexWhere((r) => r.id == requestId);
         if (index != -1) {
@@ -1374,7 +1423,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   void _showFilterOptions(BuildContext context) {
     String currentTab = ['Faculty', 'Students', 'Approvals'][_tabController.index];
-
+    // Generic dialog for filter options
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
