@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-// Note: Replace the admin_dashboard.dart file content with this updated version
-
 final supabase = Supabase.instance.client;
 
 class AdminDashboard extends StatefulWidget {
@@ -50,7 +48,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ]);
     } catch (error) {
       print('Error loading data: $error');
-      _loadSampleData();
+      _showSnackBar('Error loading data: ${error.toString()}', Colors.red);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -65,51 +63,51 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _loadDashboardStats() async {
     try {
+      // Total Departments
       final departmentsResponse = await supabase
           .from('departments')
           .select('id')
-          .count();
+          .count(CountOption.exact);
+      totalDepartments = departmentsResponse.count;
 
+      // Total Faculty
       final facultyResponse = await supabase
-          .from('profiles')
+          .from('faculty')
           .select('id')
-          .inFilter('role', ['faculty', 'hod'])
-          .eq('status', 'active')
-          .count();
+          .count(CountOption.exact);
+      totalFaculty = facultyResponse.count;
 
+      // Total Students
       final studentsResponse = await supabase
-          .from('profiles')
+          .from('students')
           .select('id')
-          .eq('role', 'student')
-          .eq('status', 'active')
-          .count();
+          .count(CountOption.exact);
+      totalStudents = studentsResponse.count;
 
+      // Pending Approvals
       final approvalsResponse = await supabase
           .from('activities')
           .select('id')
           .eq('status', 'pending')
-          .count();
+          .count(CountOption.exact);
+      pendingApprovals = approvalsResponse.count;
 
+      // Total Activities
       final activitiesResponse = await supabase
           .from('activities')
           .select('id')
-          .count();
+          .count(CountOption.exact);
+      totalActivities = activitiesResponse.count;
 
+      // Active Users (profiles updated in last 7 days)
       final activeUsersResponse = await supabase
           .from('profiles')
           .select('id')
           .gte('updated_at', DateTime.now().subtract(Duration(days: 7)).toIso8601String())
-          .count();
+          .count(CountOption.exact);
+      activeUsers = activeUsersResponse.count;
 
-      setState(() {
-        totalDepartments = departmentsResponse.count;
-        totalFaculty = facultyResponse.count;
-        totalStudents = studentsResponse.count;
-        pendingApprovals = approvalsResponse.count;
-        totalActivities = activitiesResponse.count;
-        activeUsers = activeUsersResponse.count;
-      });
-
+      setState(() {});
     } catch (error) {
       print('Error loading dashboard stats: $error');
     }
@@ -119,16 +117,36 @@ class _AdminDashboardState extends State<AdminDashboard> {
     try {
       final response = await supabase
           .from('departments')
-          .select('name, total_faculty, total_students');
+          .select('name, id');
 
       if (response != null && response is List) {
-        departmentData = response
-            .map<DepartmentData>((item) => DepartmentData(
-          name: item['name'] ?? 'Unknown',
-          students: item['total_students'] ?? 0,
-          faculty: item['total_faculty'] ?? 0,
-        ))
-            .toList();
+        List<DepartmentData> tempData = [];
+
+        for (var dept in response) {
+          // Count students for this department
+          final studentsCount = await supabase
+              .from('students')
+              .select('id')
+              .eq('department_id', dept['id'])
+              .count(CountOption.exact);
+
+          // Count faculty for this department
+          final facultyCount = await supabase
+              .from('faculty')
+              .select('id')
+              .eq('department_id', dept['id'])
+              .count(CountOption.exact);
+
+          tempData.add(DepartmentData(
+            name: dept['name'] ?? 'Unknown',
+            students: studentsCount.count,
+            faculty: facultyCount.count,
+          ));
+        }
+
+        setState(() {
+          departmentData = tempData;
+        });
       }
     } catch (error) {
       print('Error loading department stats: $error');
@@ -170,7 +188,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       setState(() {
         monthlyTrendData = trends;
       });
-
     } catch (error) {
       print('Error loading activities overview: $error');
     }
@@ -178,55 +195,88 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _loadSystemOverview() async {
     try {
+      // Recent Activities
       final recentActivitiesResponse = await supabase
           .from('activities')
-          .select('''
-            id,
-            title,
-            status,
-            activity_date,
-            profiles!student_id (full_name)
-          ''')
+          .select('id, title, status, date, student_id')
           .order('created_at', ascending: false)
           .limit(5);
 
       if (recentActivitiesResponse is List) {
-        recentActivities = recentActivitiesResponse
-            .map<RecentActivity>((item) => RecentActivity(
-          id: item['id'] ?? 0,
-          student: item['profiles']?['full_name'] ?? 'Unknown Student',
-          activity: item['title'] ?? 'Unknown Activity',
-          department: 'Various',
-          status: _parseActivityStatus(item['status']),
-          date: item['activity_date'] ?? DateTime.now().toIso8601String().substring(0, 10),
-        ))
-            .toList();
+        List<RecentActivity> tempActivities = [];
+
+        for (var item in recentActivitiesResponse) {
+          String studentName = 'Unknown Student';
+          String department = 'Unknown';
+
+          if (item['student_id'] != null) {
+            try {
+              final studentData = await supabase
+                  .from('students')
+                  .select('first_name, last_name, department_id')
+                  .eq('id', item['student_id'])
+                  .maybeSingle();
+
+              if (studentData != null) {
+                studentName = '${studentData['first_name'] ?? ''} ${studentData['last_name'] ?? ''}'.trim();
+
+                if (studentData['department_id'] != null) {
+                  final deptData = await supabase
+                      .from('departments')
+                      .select('name')
+                      .eq('id', studentData['department_id'])
+                      .maybeSingle();
+                  if (deptData != null) {
+                    department = deptData['name'] ?? 'Unknown';
+                  }
+                }
+              }
+            } catch (e) {
+              print('Error loading student data: $e');
+            }
+          }
+
+          tempActivities.add(RecentActivity(
+            id: item['id'] ?? 0,
+            student: studentName,
+            activity: item['title'] ?? 'Unknown Activity',
+            department: department,
+            status: _parseActivityStatus(item['status']),
+            date: item['date'] ?? DateTime.now().toIso8601String().substring(0, 10),
+          ));
+        }
+
+        setState(() {
+          recentActivities = tempActivities;
+        });
       }
 
+      // Activity Status Counts
       final approvedCount = await supabase
           .from('activities')
           .select('id')
           .eq('status', 'approved')
-          .count();
+          .count(CountOption.exact);
 
       final pendingCount = await supabase
           .from('activities')
           .select('id')
           .eq('status', 'pending')
-          .count();
+          .count(CountOption.exact);
 
       final rejectedCount = await supabase
           .from('activities')
           .select('id')
           .eq('status', 'rejected')
-          .count();
+          .count(CountOption.exact);
 
-      systemOverviewData = [
-        SystemOverviewData(name: "Approved", value: approvedCount.count, color: Colors.green.shade600),
-        SystemOverviewData(name: "Pending", value: pendingCount.count, color: Colors.orange.shade600),
-        SystemOverviewData(name: "Rejected", value: rejectedCount.count, color: Colors.red.shade600),
-      ];
-
+      setState(() {
+        systemOverviewData = [
+          SystemOverviewData(name: "Approved", value: approvedCount.count, color: Colors.green.shade600),
+          SystemOverviewData(name: "Pending", value: pendingCount.count, color: Colors.orange.shade600),
+          SystemOverviewData(name: "Rejected", value: rejectedCount.count, color: Colors.red.shade600),
+        ];
+      });
     } catch (error) {
       print('Error loading system overview: $error');
     }
@@ -247,57 +297,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       default:
         return ActivityStatus.pending;
     }
-  }
-
-  void _loadSampleData() {
-    departmentData = [
-      DepartmentData(name: "Computer Science", students: 145, faculty: 12),
-      DepartmentData(name: "Electronics", students: 98, faculty: 8),
-      DepartmentData(name: "Mechanical", students: 112, faculty: 10),
-      DepartmentData(name: "Civil", students: 87, faculty: 7),
-      DepartmentData(name: "Business", students: 134, faculty: 9),
-    ];
-
-    monthlyTrendData = [
-      MonthlyTrendData(month: "Jan", activities: 45, approvals: 38),
-      MonthlyTrendData(month: "Feb", activities: 52, approvals: 45),
-      MonthlyTrendData(month: "Mar", activities: 48, approvals: 41),
-      MonthlyTrendData(month: "Apr", activities: 61, approvals: 55),
-      MonthlyTrendData(month: "May", activities: 58, approvals: 52),
-      MonthlyTrendData(month: "Jun", activities: 67, approvals: 61),
-    ];
-
-    recentActivities = [
-      RecentActivity(
-        id: 1,
-        student: "Alice Johnson",
-        activity: "Research Paper Publication",
-        department: "Computer Science",
-        status: ActivityStatus.pending,
-        date: "2024-01-15",
-      ),
-      RecentActivity(
-        id: 2,
-        student: "Bob Smith",
-        activity: "Hackathon Winner",
-        department: "Electronics",
-        status: ActivityStatus.approved,
-        date: "2024-01-14",
-      ),
-    ];
-
-    systemOverviewData = [
-      SystemOverviewData(name: "Approved", value: 65, color: Colors.green.shade600),
-      SystemOverviewData(name: "Pending", value: 25, color: Colors.orange.shade600),
-      SystemOverviewData(name: "Rejected", value: 10, color: Colors.red.shade600),
-    ];
-
-    totalDepartments = 5;
-    totalFaculty = 46;
-    totalStudents = 576;
-    pendingApprovals = 23;
-    totalActivities = 156;
-    activeUsers = 89;
   }
 
   void _showSnackBar(String message, Color color) {
@@ -325,8 +324,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   void _navigateToPage(String route) {
-    Navigator.pop(context); // Close drawer
-    Navigator.pushNamed(context, route);
+    Navigator.pop(context);
+    _showSnackBar('Navigation to $route - Coming soon', Colors.blue);
   }
 
   @override
@@ -761,42 +760,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _buildStatCard(
           title: "Total Departments",
           value: totalDepartments.toString(),
-          change: "+1 this month",
+          change: "Active",
           icon: Icons.business,
           color: Colors.blue.shade600,
         ),
         _buildStatCard(
           title: "Total Faculty",
           value: totalFaculty.toString(),
-          change: "+3 this month",
+          change: "Active",
           icon: Icons.people,
           color: Colors.green.shade600,
         ),
         _buildStatCard(
           title: "Total Students",
           value: totalStudents.toString(),
-          change: "+24 this month",
+          change: "Enrolled",
           icon: Icons.school,
           color: Colors.purple.shade600,
         ),
         _buildStatCard(
           title: "Pending Approvals",
           value: pendingApprovals.toString(),
-          change: "-5 from yesterday",
+          change: "Awaiting review",
           icon: Icons.access_time,
           color: Colors.orange.shade600,
         ),
         _buildStatCard(
           title: "Total Activities",
           value: totalActivities.toString(),
-          change: "+12 this week",
+          change: "Submitted",
           icon: Icons.verified,
           color: Colors.teal.shade600,
         ),
         _buildStatCard(
           title: "Active Users",
           value: activeUsers.toString(),
-          change: "+8 today",
+          change: "Last 7 days",
           icon: Icons.people_alt,
           color: Colors.indigo.shade600,
         ),
@@ -811,7 +810,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     required IconData icon,
     required Color color,
   }) {
-    bool isPositiveChange = change.startsWith('+') || change.contains('from yesterday');
     return Card(
       elevation: 2,
       child: Padding(
@@ -825,19 +823,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
                 Flexible(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isPositiveChange ? Colors.green.shade50 : Colors.orange.shade50,
+                      color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       change,
                       style: TextStyle(
                         fontSize: 9,
-                        color: isPositiveChange ? Colors.green.shade600 : Colors.orange.shade600,
+                        color: Colors.grey.shade700,
                         fontWeight: FontWeight.w500,
                       ),
                       overflow: TextOverflow.ellipsis,
@@ -964,19 +961,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       color: Colors.blue.shade600,
                       barWidth: 2,
                       dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: Colors.blue.shade100,
-                      ),
-                    ),
-                    LineChartBarData(
-                      spots: monthlyTrendData.asMap().entries.map((entry) {
-                        return FlSpot(entry.key.toDouble(), entry.value.activities.toDouble());
-                      }).toList(),
-                      isCurved: true,
-                      color: Colors.green.shade600,
-                      barWidth: 2,
-                      dotData: const FlDotData(show: false),
                     ),
                   ],
                 ),
@@ -1061,9 +1045,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ...recentActivities.take(3).map((activity) => _buildActivityItem(activity))
                 else
                   Center(
-                    child: Text(
-                      'No recent activities',
-                      style: TextStyle(color: Colors.grey[600]),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Text(
+                        'No recent activities',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
                     ),
                   ),
               ],
@@ -1084,11 +1071,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'User Management',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                          const Expanded(
+                            child: Text(
+                              'User Management',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           TextButton(
@@ -1125,11 +1114,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'System Analytics',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                          const Expanded(
+                            child: Text(
+                              'System Analytics',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           TextButton(
@@ -1197,13 +1188,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
         children: [
           CircleAvatar(
             radius: 16,
-            backgroundColor: Colors.grey[300],
+            backgroundColor: Colors.blue.shade100,
             child: Text(
-              activity.student.isNotEmpty ? activity.student[0] : '',
-              style: const TextStyle(
+              activity.student.isNotEmpty ? activity.student[0].toUpperCase() : '?',
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.white,
+                color: Colors.blue.shade700,
               ),
             ),
           ),
@@ -1239,6 +1230,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ],
             ),
           ),
+          const SizedBox(width: 8),
           _buildStatusBadge(activity.status),
         ],
       ),
