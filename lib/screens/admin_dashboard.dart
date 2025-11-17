@@ -323,9 +323,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  // FIXED: Proper navigation method
   void _navigateToPage(String route) {
+    // Close the drawer first
     Navigator.pop(context);
-    _showSnackBar('Navigation to $route - Coming soon', Colors.blue);
+
+    // Navigate to the route with error handling
+    Navigator.pushNamed(context, route).catchError((error) {
+      _showSnackBar('Navigation error: ${error.toString()}', Colors.red);
+      print('Navigation error to $route: $error');
+    });
   }
 
   @override
