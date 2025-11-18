@@ -15,11 +15,34 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
   bool isLoading = true;
   String filterStatus = 'all';
   String searchQuery = '';
+  RealtimeChannel? _realtimeChannel;
 
   @override
   void initState() {
     super.initState();
     _loadActivities();
+    _setupRealtimeSubscription();
+  }
+
+  @override
+  void dispose() {
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  void _setupRealtimeSubscription() {
+    _realtimeChannel = supabase
+        .channel('activities_changes')
+        .onPostgresChanges(
+      event: PostgresChangeEvent.all,
+      schema: 'public',
+      table: 'activities',
+      callback: (payload) {
+        debugPrint('Real-time update received: ${payload.eventType}');
+        _loadActivities();
+      },
+    )
+        .subscribe();
   }
 
   Future<void> _loadActivities() async {
@@ -54,7 +77,7 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
       }).eq('id', activityId);
 
       _showSnackBar('Activity $status successfully', Colors.green);
-      _loadActivities();
+      // Real-time will handle the refresh automatically
     } catch (e) {
       _showSnackBar('Error updating activity: $e', Colors.red);
     }
@@ -126,14 +149,24 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Fixed: Using SingleChildScrollView to prevent overflow
                 Row(
                   children: [
                     const Text('Filter: ', style: TextStyle(fontWeight: FontWeight.w600)),
                     const SizedBox(width: 8),
-                    _buildFilterChip('all', 'All'),
-                    _buildFilterChip('pending', 'Pending'),
-                    _buildFilterChip('approved', 'Approved'),
-                    _buildFilterChip('rejected', 'Rejected'),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildFilterChip('all', 'All'),
+                            _buildFilterChip('pending', 'Pending'),
+                            _buildFilterChip('approved', 'Approved'),
+                            _buildFilterChip('rejected', 'Rejected'),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -156,13 +189,16 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
                 ],
               ),
             )
-                : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: filteredActivities.length,
-              itemBuilder: (context, index) {
-                final activity = filteredActivities[index];
-                return _buildActivityCard(activity);
-              },
+                : RefreshIndicator(
+              onRefresh: _loadActivities,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: filteredActivities.length,
+                itemBuilder: (context, index) {
+                  final activity = filteredActivities[index];
+                  return _buildActivityCard(activity);
+                },
+              ),
             ),
           ),
         ],
@@ -231,7 +267,7 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(status).withValues(alpha: 0.2),
+                    color: _getStatusColor(status).withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -258,27 +294,42 @@ class _ActivityApprovalsPageState extends State<ActivityApprovalsPage> {
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
               children: [
-                Icon(Icons.category, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  activity['category'] ?? 'N/A',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.category, size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      activity['category'] ?? 'N/A',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  activity['date'] ?? 'N/A',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      activity['date'] ?? 'N/A',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Icon(Icons.stars, size: 16, color: Colors.grey.shade600),
-                const SizedBox(width: 4),
-                Text(
-                  '${activity['points'] ?? 0} points',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.stars, size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${activity['points'] ?? 0} points',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    ),
+                  ],
                 ),
               ],
             ),
