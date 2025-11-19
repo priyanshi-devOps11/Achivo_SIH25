@@ -323,10 +323,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  // FIXED: Proper navigation method
   void _navigateToPage(String route) {
-    // Close the drawer first
-    Navigator.pop(context);
+    // Close the drawer if open
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
 
     // Navigate to the route with error handling
     Navigator.pushNamed(context, route).catchError((error) {
@@ -817,64 +818,89 @@ class _AdminDashboardState extends State<AdminDashboard> {
     required IconData icon,
     required Color color,
   }) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(icon, color: color, size: 20),
-                Flexible(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      change,
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500,
+    // Determine the route based on the title
+    String? route;
+    switch (title) {
+      case "Total Departments":
+        route = '/admin/departments';
+        break;
+      case "Total Faculty":
+        route = '/admin/faculty';
+        break;
+      case "Total Students":
+        route = '/admin/students';
+        break;
+      case "Pending Approvals":
+      case "Total Activities":
+        route = '/admin/activities';
+        break;
+      case "Active Users":
+        route = '/admin/user-management';
+        break;
+    }
+
+    return InkWell(
+      onTap: route != null ? () => _navigateToPage(route!) : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, color: color, size: 20),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(4),
                       ),
-                      overflow: TextOverflow.ellipsis,
+                      child: Text(
+                        change,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
