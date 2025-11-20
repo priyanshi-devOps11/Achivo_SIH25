@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({Key? key, required Null Function() onNext}) : super(key: key);
+  const WelcomeScreen({Key? key}) : super(key: key);
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
@@ -60,17 +60,29 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   void initState() {
     super.initState();
     // Initialize all controllers and animations
-    _backgroundController = AnimationController(duration: const Duration(seconds: 2), vsync: this);
-    _contentController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
-    _floatingController = AnimationController(duration: const Duration(seconds: 2), vsync: this);
-    _iconsController = AnimationController(duration: const Duration(seconds: 3), vsync: this);
-    _transitionController = AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
+    _backgroundController = AnimationController(
+        duration: const Duration(seconds: 2), vsync: this);
+    _contentController = AnimationController(
+        duration: const Duration(milliseconds: 1200), vsync: this);
+    _floatingController = AnimationController(
+        duration: const Duration(seconds: 2), vsync: this);
+    _iconsController = AnimationController(
+        duration: const Duration(seconds: 3), vsync: this);
+    _transitionController = AnimationController(
+        duration: const Duration(milliseconds: 600), vsync: this);
 
-    _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
-    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
-    _floatingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _floatingController, curve: Curves.easeInOut));
-    _iconsAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _iconsController, curve: Curves.easeOut));
-    _slideAnimation = Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(CurvedAnimation(parent: _transitionController, curve: Curves.easeInOut));
+    _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+        CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
+    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
+    _floatingAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _floatingController, curve: Curves.easeInOut));
+    _iconsAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _iconsController, curve: Curves.easeOut));
+    _slideAnimation = Tween<Offset>(
+        begin: const Offset(1.0, 0.0), end: Offset.zero)
+        .animate(CurvedAnimation(
+        parent: _transitionController, curve: Curves.easeInOut));
 
     _backgroundController.forward();
     _contentController.forward();
@@ -117,8 +129,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   Future<void> _fetchCountries() async {
     if (!mounted) return;
     try {
-      setState(() { isLoadingCountries = true; });
-      final response = await supabase.from('countries').select('id, name').order('name');
+      setState(() {
+        isLoadingCountries = true;
+      });
+      final response = await supabase
+          .from('countries')
+          .select('id, name')
+          .order('name');
       if (mounted) {
         setState(() {
           countries = List<Map<String, dynamic>>.from(response as List);
@@ -128,8 +145,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     } catch (e) {
       print('Error fetching countries: $e');
       if (mounted) {
-        setState(() { isLoadingCountries = false; });
-        _showSnackBar("Error loading countries. Please check your database schema.", isError: true);
+        setState(() {
+          isLoadingCountries = false;
+        });
+        _showSnackBar(
+            "Error loading countries. Please check your database schema.",
+            isError: true);
       }
     }
   }
@@ -140,12 +161,20 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       setState(() {
         isLoadingStates = true;
         states.clear();
-        selectedState = null; selectedStateName = null; selectedStateId = null;
+        selectedState = null;
+        selectedStateName = null;
+        selectedStateId = null;
         institutes.clear();
-        selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
+        selectedInstitute = null;
+        selectedInstituteName = null;
+        selectedInstituteId = null;
       });
 
-      final response = await supabase.from('states').select('id, name').eq('country_id', int.parse(countryId)).order('name');
+      final response = await supabase
+          .from('states')
+          .select('id, name')
+          .eq('country_id', int.parse(countryId))
+          .order('name');
 
       if (mounted) {
         setState(() {
@@ -156,7 +185,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     } catch (e) {
       print('Error fetching states: $e');
       if (mounted) {
-        setState(() { isLoadingStates = false; });
+        setState(() {
+          isLoadingStates = false;
+        });
         _showSnackBar("Error loading states: ${e.toString()}", isError: true);
       }
     }
@@ -168,10 +199,16 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       setState(() {
         isLoadingInstitutes = true;
         institutes.clear();
-        selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
+        selectedInstitute = null;
+        selectedInstituteName = null;
+        selectedInstituteId = null;
       });
 
-      final response = await supabase.from('institutes').select('id, name').eq('state_id', int.parse(stateId)).order('name');
+      final response = await supabase
+          .from('institutes')
+          .select('id, name')
+          .eq('state_id', int.parse(stateId))
+          .order('name');
 
       if (mounted) {
         setState(() {
@@ -182,8 +219,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     } catch (e) {
       print('Error fetching institutes: $e');
       if (mounted) {
-        setState(() { isLoadingInstitutes = false; });
-        _showSnackBar("Error loading institutes: ${e.toString()}", isError: true);
+        setState(() {
+          isLoadingInstitutes = false;
+        });
+        _showSnackBar("Error loading institutes: ${e.toString()}",
+            isError: true);
       }
     }
   }
@@ -261,7 +301,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.purple.shade500),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.purple.shade500),
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -336,7 +377,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
           // Profile doesn't exist or error occurred, sign out and show form
           await supabase.auth.signOut();
-          _showSnackBar('Session expired or profile error. Please sign in again.', isError: true);
+          _showSnackBar('Session expired or profile error. Please sign in again.',
+              isError: true);
           _navigateToWelcomeForm();
         }
       } else {
@@ -419,7 +461,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: Stack(
             children: [
-              // Animated gradient blobs (keeping existing design)
+              // Animated gradient blobs
               Positioned(
                 top: -MediaQuery.of(context).size.height * 0.25,
                 left: -MediaQuery.of(context).size.width * 0.25,
@@ -469,7 +511,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 child: Text(
                                   'Achivo',
                                   style: TextStyle(
-                                    fontSize: MediaQuery.of(context).size.width * 0.18,
+                                    fontSize:
+                                    MediaQuery.of(context).size.width * 0.18,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                     letterSpacing: -2,
@@ -521,7 +564,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       child: Transform.translate(
                         offset: Offset(0, -4 * _floatingAnimation.value),
                         child: GestureDetector(
-                          onTap: _isCheckingSession ? null : _checkExistingSessionAndNavigate,
+                          onTap: _isCheckingSession
+                              ? null
+                              : _checkExistingSessionAndNavigate,
                           child: Container(
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(30),
@@ -545,8 +590,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 borderRadius: BorderRadius.circular(30),
                                 gradient: LinearGradient(
                                   colors: _isCheckingSession
-                                      ? [Colors.grey.shade400, Colors.grey.shade500]
-                                      : [Colors.purple.shade500, Colors.blue.shade500],
+                                      ? [
+                                    Colors.grey.shade400,
+                                    Colors.grey.shade500
+                                  ]
+                                      : [
+                                    Colors.purple.shade500,
+                                    Colors.blue.shade500
+                                  ],
                                 ),
                               ),
                               child: Row(
@@ -558,7 +609,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                       height: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        valueColor:
+                                        AlwaysStoppedAnimation<Color>(
+                                            Colors.white),
                                       ),
                                     )
                                   else
@@ -605,7 +658,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         ),
                         SizedBox(width: 8),
@@ -789,13 +843,18 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             value: selectedCountry,
             onChanged: (value) {
               if (value != null && countries.isNotEmpty) {
-                final country = countries.firstWhere((c) => c['id'].toString() == value);
+                final country =
+                countries.firstWhere((c) => c['id'].toString() == value);
                 setState(() {
                   selectedCountry = value;
                   selectedCountryName = country['name'];
                   selectedCountryId = country['id'];
-                  selectedState = null; selectedStateName = null; selectedStateId = null;
-                  selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
+                  selectedState = null;
+                  selectedStateName = null;
+                  selectedStateId = null;
+                  selectedInstitute = null;
+                  selectedInstituteName = null;
+                  selectedInstituteId = null;
                   states.clear();
                   institutes.clear();
                 });
@@ -803,7 +862,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               }
             },
             decoration: InputDecoration(
-              hintText: isLoadingCountries ? 'Loading countries...' : 'Select country',
+              hintText: isLoadingCountries
+                  ? 'Loading countries...'
+                  : 'Select country',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: Colors.white.withOpacity(0.8),
@@ -819,7 +880,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: Colors.purple.shade300),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             items: countries.map((country) {
               return DropdownMenuItem(
@@ -859,15 +921,20 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: DropdownButtonFormField<String>(
             value: selectedState,
-            onChanged: selectedCountry != null && !isLoadingStates && states.isNotEmpty
+            onChanged: selectedCountry != null &&
+                !isLoadingStates &&
+                states.isNotEmpty
                 ? (value) {
               if (value != null) {
-                final state = states.firstWhere((s) => s['id'].toString() == value);
+                final state = states
+                    .firstWhere((s) => s['id'].toString() == value);
                 setState(() {
                   selectedState = value;
                   selectedStateName = state['name'];
                   selectedStateId = state['id'];
-                  selectedInstitute = null; selectedInstituteName = null; selectedInstituteId = null;
+                  selectedInstitute = null;
+                  selectedInstituteName = null;
+                  selectedInstituteId = null;
                   institutes.clear();
                 });
                 _fetchInstitutes(value);
@@ -893,7 +960,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: Colors.purple.shade300),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             items: states.map((state) {
               return DropdownMenuItem(
@@ -933,10 +1001,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: DropdownButtonFormField<String>(
             value: selectedInstitute,
-            onChanged: selectedState != null && !isLoadingInstitutes && institutes.isNotEmpty
+            onChanged: selectedState != null &&
+                !isLoadingInstitutes &&
+                institutes.isNotEmpty
                 ? (value) {
               if (value != null) {
-                final institute = institutes.firstWhere((i) => i['id'].toString() == value);
+                final institute = institutes
+                    .firstWhere((i) => i['id'].toString() == value);
                 setState(() {
                   selectedInstitute = value;
                   selectedInstituteName = institute['name'];
@@ -946,7 +1017,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             }
                 : null,
             decoration: InputDecoration(
-              hintText: isLoadingInstitutes ? 'Loading institutes...' : 'Select institute',
+              hintText: isLoadingInstitutes
+                  ? 'Loading institutes...'
+                  : 'Select institute',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
               fillColor: selectedState != null
@@ -964,7 +1037,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide(color: Colors.purple.shade300),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             items: institutes.map((institute) {
               return DropdownMenuItem(
@@ -1015,7 +1089,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   });
                 },
                 activeColor: Colors.purple.shade600,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               );
             }).toList(),
           ),
@@ -1042,7 +1117,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       child: ElevatedButton(
         onPressed: isFormComplete ? handleContinue : null,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isFormComplete ? Colors.purple.shade500 : Colors.grey.shade400,
+          backgroundColor:
+          isFormComplete ? Colors.purple.shade500 : Colors.grey.shade400,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
           shape: RoundedRectangleBorder(
