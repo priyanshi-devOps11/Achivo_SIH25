@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({Key? key}) : super(key: key);
+  const WelcomeScreen({Key? key, required Null Function() onNext}) : super(key: key);
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
