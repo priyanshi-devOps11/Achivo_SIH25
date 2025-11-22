@@ -540,7 +540,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                       Row(
                         children: [
                           IconButton(
-                            onPressed: () => Navigator.pop(context),
+                            // 💡 FIX APPLIED HERE: Use pushReplacementNamed to go back to the welcome route
+                            onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
                           ),
@@ -713,7 +714,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                           ),
                           const SizedBox(height: 20),
 
-                          // Department Dropdown <-- ADDED HERE
+                          // Department Dropdown
                           if (!_departmentsLoaded)
                             _buildInputField(
                               controller: TextEditingController(text: 'Loading departments...'),
