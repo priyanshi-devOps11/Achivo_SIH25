@@ -430,7 +430,8 @@ class _AuthAdminPageState extends State<AuthAdminPage>
                       Row(
                         children: [
                           IconButton(
-                            onPressed: () => Navigator.pop(context),
+                            // 💡 FIXED: Navigate back to the WelcomeScreen route
+                            onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
                           ),
