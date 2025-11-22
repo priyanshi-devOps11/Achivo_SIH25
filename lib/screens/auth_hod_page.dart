@@ -539,7 +539,8 @@ class _AuthHodPageState extends State<AuthHodPage>
                       Row(
                         children: [
                           IconButton(
-                            onPressed: () => Navigator.pop(context),
+                            // 💡 FIX APPLIED HERE: Use pushReplacementNamed to go back to the welcome route
+                            onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
                           ),
