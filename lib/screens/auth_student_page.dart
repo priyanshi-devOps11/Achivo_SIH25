@@ -58,17 +58,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   final List<String> genders = ['Male', 'Female', 'Other'];
 
-  // NOTE: Hardcoded department list removed. Now loaded dynamically.
-  // final List<String> departments = [
-  //   'Computer Science',
-  //   'Information Technology',
-  //   'Electronics & Communication',
-  //   'Electrical & Instrumentation',
-  //   'Agricultural Engineering',
-  //   'Chemical Engineering',
-  //   'Mechanical Engineering'
-  // ];
-
   @override
   void initState() {
     super.initState();
@@ -340,7 +329,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       if (authResponse.user != null) {
         _showSuccessMessage('Login successful!');
-        Navigator.pushReplacementNamed(context, '/student-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Login failed: Invalid credentials or account not confirmed.');
@@ -414,7 +403,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         });
 
         _showSuccessMessage('Account created successfully!');
-        Navigator.pushReplacementNamed(context, '/student-dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Registration failed: ${e.message}');
@@ -472,7 +461,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                       Row(
                         children: [
                           IconButton(
-                            onPressed: () => Navigator.pop(context),
+                            // 💡 FIX APPLIED HERE: Use pushReplacementNamed to go back to the welcome route
+                            onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
                           ),
@@ -847,7 +837,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                                 'Forgot password?',
                                 style: TextStyle(
                                   color: Color(0xFF8B5CF6),
-                                  fontSize: 14,
                                   decoration: TextDecoration.none,
                                 ),
                               ),
