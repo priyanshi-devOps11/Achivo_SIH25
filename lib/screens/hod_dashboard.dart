@@ -253,10 +253,16 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         if (mounted) {
           setState(() {
             faculty = data.map((d) => Faculty.fromMap(d)).toList();
+            print('Faculty loaded: ${faculty.length} records');
           });
         }
       }, onError: (error) {
         print('Faculty stream error: $error');
+        if (mounted) {
+          setState(() {
+            faculty = []; // Clear on error, don't load sample data
+          });
+        }
       });
 
       // Students Real-Time Stream
@@ -272,10 +278,17 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             studentNamesMap = {
               for (var student in students) student.id: student.name
             };
+            print('Students loaded: ${students.length} records');
           });
         }
       }, onError: (error) {
         print('Students stream error: $error');
+        if (mounted) {
+          setState(() {
+            students = []; // Clear on error, don't load sample data
+            studentNamesMap = {};
+          });
+        }
       });
 
       // Activities Real-Time Stream
@@ -291,16 +304,31 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               final studentName = studentNamesMap[studentId] ?? 'Unknown Student';
               return ApprovalRequest.fromMap(d, studentName);
             }).toList();
+            print('Activities loaded: ${approvalRequests.length} records');
           });
         }
       }, onError: (error) {
         print('Activities stream error: $error');
+        if (mounted) {
+          setState(() {
+            approvalRequests = []; // Clear on error, don't load sample data
+          });
+        }
       });
 
       // Wait a moment for initial data
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 1000));
     } catch (e) {
       print('Error setting up Real-Time subscriptions: $e');
+      // Don't load sample data on error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error connecting to database: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
