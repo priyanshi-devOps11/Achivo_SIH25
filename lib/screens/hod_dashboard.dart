@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
-// Initialize Supabase
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -40,7 +39,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Data Models
 class Faculty {
   final String id;
   final String name;
@@ -69,7 +67,6 @@ class Faculty {
   });
 
   factory Faculty.fromMap(Map<String, dynamic> map) {
-    // Handle subjects array
     final subjectsData = map['subjects'];
     List<String> subjectsList;
     if (subjectsData is List) {
@@ -80,7 +77,6 @@ class Faculty {
       subjectsList = [];
     }
 
-    // Combine first_name and last_name from DB
     final firstName = map['first_name'] ?? '';
     final lastName = map['last_name'] ?? '';
     final fullName = '$firstName $lastName'.trim();
@@ -90,12 +86,12 @@ class Faculty {
       name: fullName.isNotEmpty ? fullName : 'Unknown',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
-      department: map['department']?.toString() ?? '',
+      department: map['department_id']?.toString() ?? '',
       designation: map['designation'] ?? '',
       experience: map['experience_years'] ?? 0,
       subjects: subjectsList,
       joiningDate: map['joining_date'] ?? '',
-      status: 'Active', // Derive from user activity or set default
+      status: 'Active',
       qualification: map['qualification'] ?? '',
     );
   }
@@ -195,7 +191,6 @@ class ApprovalRequest {
   }
 }
 
-// HOD Dashboard Implementation
 class HODDashboardMain extends StatefulWidget {
   const HODDashboardMain({super.key});
 
@@ -213,13 +208,12 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   List<ApprovalRequest> approvalRequests = [];
   bool isLoading = true;
   bool isRefreshing = false;
+  String diagnosticMessage = '';
 
-  // Create a map for quick student lookup
   Map<String, String> studentNamesMap = {};
 
   final SupabaseClient supabase = Supabase.instance.client;
 
-  // Real-time Subscriptions
   StreamSubscription<List<Map<String, dynamic>>>? _facultySubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _studentsSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _requestsSubscription;
@@ -227,8 +221,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _setupRealTimeSubscriptions();
+    _tabController = TabController(length: 4, vsync: this); // Added 4th tab for diagnostics
+    _checkAuthAndSetupData();
   }
 
   @override
@@ -240,10 +234,82 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     super.dispose();
   }
 
-  Future<void> _setupRealTimeSubscriptions() async {
+  Future<void> _checkAuthAndSetupData() async {
     setState(() => isLoading = true);
 
     try {
+      // Check authentication status
+      final session = supabase.auth.currentSession;
+      final user = supabase.auth.currentUser;
+
+      if (user == null) {
+        setState(() {
+          diagnosticMessage = '⚠️ NOT AUTHENTICATED\n\n'
+              'No user is logged in. You need to sign in first.\n\n'
+              'This is likely why you\'re not seeing real data.';
+          isLoading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        diagnosticMessage = '✅ AUTHENTICATED\n'
+            'User ID: ${user.id}\n'
+            'Email: ${user.email}\n\n'
+            'Loading data...';
+      });
+
+      // Try direct query first to test RLS policies
+      await _testDirectQueries();
+
+      // Then setup real-time subscriptions
+      await _setupRealTimeSubscriptions();
+
+    } catch (e) {
+      setState(() {
+        diagnosticMessage += '\n\n❌ ERROR:\n$e';
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _testDirectQueries() async {
+    try {
+      // Test Faculty query
+      final facultyResponse = await supabase.from('faculty').select().limit(5);
+      setState(() {
+        diagnosticMessage += '\n\n✅ Faculty Query Successful\n'
+            'Found ${facultyResponse.length} records';
+      });
+
+      // Test Students query
+      final studentsResponse = await supabase.from('students').select().limit(5);
+      setState(() {
+        diagnosticMessage += '\n\n✅ Students Query Successful\n'
+            'Found ${studentsResponse.length} records';
+      });
+
+      // Test Activities query
+      final activitiesResponse = await supabase.from('activities').select().limit(5);
+      setState(() {
+        diagnosticMessage += '\n\n✅ Activities Query Successful\n'
+            'Found ${activitiesResponse.length} records';
+      });
+
+    } catch (e) {
+      setState(() {
+        diagnosticMessage += '\n\n❌ Direct Query Failed:\n$e\n\n'
+            'This suggests RLS policies are blocking access.';
+      });
+    }
+  }
+
+  Future<void> _setupRealTimeSubscriptions() async {
+    try {
+      setState(() {
+        diagnosticMessage += '\n\n🔄 Setting up Real-Time Subscriptions...';
+      });
+
       // Faculty Real-Time Stream
       _facultySubscription = supabase
           .from('faculty')
@@ -253,14 +319,16 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         if (mounted) {
           setState(() {
             faculty = data.map((d) => Faculty.fromMap(d)).toList();
-            print('Faculty loaded: ${faculty.length} records');
+            diagnosticMessage += '\n📊 Faculty stream: ${faculty.length} records';
+            print('✅ Faculty loaded: ${faculty.length} records');
           });
         }
       }, onError: (error) {
-        print('Faculty stream error: $error');
+        print('❌ Faculty stream error: $error');
         if (mounted) {
           setState(() {
-            faculty = []; // Clear on error, don't load sample data
+            faculty = [];
+            diagnosticMessage += '\n❌ Faculty stream error: $error';
           });
         }
       });
@@ -274,19 +342,20 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         if (mounted) {
           setState(() {
             students = data.map((d) => Student.fromMap(d)).toList();
-            // Update student names map for activities lookup
             studentNamesMap = {
               for (var student in students) student.id: student.name
             };
-            print('Students loaded: ${students.length} records');
+            diagnosticMessage += '\n📊 Students stream: ${students.length} records';
+            print('✅ Students loaded: ${students.length} records');
           });
         }
       }, onError: (error) {
-        print('Students stream error: $error');
+        print('❌ Students stream error: $error');
         if (mounted) {
           setState(() {
-            students = []; // Clear on error, don't load sample data
+            students = [];
             studentNamesMap = {};
+            diagnosticMessage += '\n❌ Students stream error: $error';
           });
         }
       });
@@ -304,30 +373,33 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               final studentName = studentNamesMap[studentId] ?? 'Unknown Student';
               return ApprovalRequest.fromMap(d, studentName);
             }).toList();
-            print('Activities loaded: ${approvalRequests.length} records');
+            diagnosticMessage += '\n📊 Activities stream: ${approvalRequests.length} records';
+            print('✅ Activities loaded: ${approvalRequests.length} records');
           });
         }
       }, onError: (error) {
-        print('Activities stream error: $error');
+        print('❌ Activities stream error: $error');
         if (mounted) {
           setState(() {
-            approvalRequests = []; // Clear on error, don't load sample data
+            approvalRequests = [];
+            diagnosticMessage += '\n❌ Activities stream error: $error';
           });
         }
       });
 
-      // Wait a moment for initial data
-      await Future.delayed(const Duration(milliseconds: 1000));
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      setState(() {
+        diagnosticMessage += '\n\n✅ Setup Complete!\n'
+            'Check other tabs to see your data.';
+      });
+
     } catch (e) {
-      print('Error setting up Real-Time subscriptions: $e');
-      // Don't load sample data on error
+      print('❌ Error setting up Real-Time subscriptions: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error connecting to database: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        setState(() {
+          diagnosticMessage += '\n\n❌ Setup Error: $e';
+        });
       }
     } finally {
       if (mounted) {
@@ -338,24 +410,22 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   Future<void> _refreshData() async {
     if (isRefreshing) return;
-
     setState(() => isRefreshing = true);
 
     try {
-      // Cancel and restart subscriptions
       await _facultySubscription?.cancel();
       await _studentsSubscription?.cancel();
       await _requestsSubscription?.cancel();
 
-      await _setupRealTimeSubscriptions();
+      await _checkAuthAndSetupData();
 
       if (mounted) {
-        _showSuccessSnackbar('Data refreshed successfully');
+        _showSnackbar('Data refreshed successfully', Colors.green);
       }
     } catch (e) {
       print('Refresh error: $e');
       if (mounted) {
-        _showSuccessSnackbar('Failed to refresh data');
+        _showSnackbar('Failed to refresh data', Colors.red);
       }
     } finally {
       if (mounted) {
@@ -370,16 +440,15 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
       await supabase.from('activities').update({
         'status': statusValue,
-        'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', int.parse(requestId));
 
       if (mounted) {
-        _showSuccessSnackbar('Request $statusValue successfully');
+        _showSnackbar('Request $statusValue successfully', Colors.green);
       }
     } catch (e) {
       print('Error updating approval status: $e');
       if (mounted) {
-        _showSuccessSnackbar('Error updating status');
+        _showSnackbar('Error updating status: $e', Colors.red);
       }
     }
   }
@@ -639,18 +708,21 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     );
   }
 
-  void _showSuccessSnackbar(String message) {
+  void _showSnackbar(String message, Color color) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.white),
+            Icon(
+              color == Colors.green ? Icons.check_circle : Icons.error,
+              color: Colors.white,
+            ),
             const SizedBox(width: 8),
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: Colors.green,
+        backgroundColor: color,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -689,7 +761,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: const Color(0xFFF8F9FA),
@@ -714,11 +786,14 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               onPressed: () => _handleSignOut(context),
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
+          bottom: TabBar(
+            controller: _tabController,
+            isScrollable: true,
+            tabs: const [
               Tab(icon: Icon(Icons.people), text: 'Faculty'),
               Tab(icon: Icon(Icons.school), text: 'Students'),
               Tab(icon: Icon(Icons.assignment), text: 'Approvals'),
+              Tab(icon: Icon(Icons.bug_report), text: 'Debug'),
             ],
           ),
         ),
@@ -768,6 +843,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             ),
             Expanded(
               child: TabBarView(
+                controller: _tabController,
                 children: [
                   // Faculty Tab
                   faculty.isEmpty
@@ -846,6 +922,39 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                     itemBuilder: (context, index) {
                       return _buildApprovalCard(approvalRequests[index]);
                     },
+                  ),
+                  // Debug Tab
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          '🐛 Debug Information',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: SelectableText(
+                            diagnosticMessage.isEmpty
+                                ? 'No diagnostic information available yet.'
+                                : diagnosticMessage,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
