@@ -2,42 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await Supabase.initialize(
-    url: 'YOUR_SUPABASE_URL',
-    anonKey: 'YOUR_SUPABASE_ANON_KEY',
-  );
-
-  runApp(MyApp());
-}
-
+// Get Supabase client instance
 SupabaseClient get supabase => Supabase.instance.client;
 
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'HOD Dashboard',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.blue,
-          elevation: 2,
-          iconTheme: IconThemeData(color: Colors.white),
-          titleTextStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      home: HODDashboardMain(),
-    );
-  }
-}
+// ==============================
+// DATA MODELS
+// ==============================
 
 class Faculty {
   final String id;
@@ -67,16 +37,16 @@ class Faculty {
   });
 
   factory Faculty.fromMap(Map<String, dynamic> map) {
+    // Handle subjects array
     final subjectsData = map['subjects'];
-    List<String> subjectsList;
+    List<String> subjectsList = [];
     if (subjectsData is List) {
       subjectsList = List<String>.from(subjectsData);
     } else if (subjectsData is String) {
       subjectsList = [subjectsData];
-    } else {
-      subjectsList = [];
     }
 
+    // Build full name
     final firstName = map['first_name'] ?? '';
     final lastName = map['last_name'] ?? '';
     final fullName = '$firstName $lastName'.trim();
@@ -91,7 +61,7 @@ class Faculty {
       experience: map['experience_years'] ?? 0,
       subjects: subjectsList,
       joiningDate: map['joining_date'] ?? '',
-      status: 'Active',
+      status: 'Active', // Default status
       qualification: map['qualification'] ?? '',
     );
   }
@@ -142,7 +112,7 @@ class Student {
       cgpa: (map['cgpa'] ?? 0.0).toDouble(),
       address: map['address'] ?? 'N/A',
       parentContact: map['parent_phone'] ?? '',
-      status: 'Active',
+      status: 'Active', // Default status
       admissionDate: map['admission_date'] ?? '',
     );
   }
@@ -173,7 +143,8 @@ class ApprovalRequest {
     this.documents,
   });
 
-  factory ApprovalRequest.fromMap(Map<String, dynamic> map, String studentName) {
+  factory ApprovalRequest.fromMap(
+      Map<String, dynamic> map, String studentName) {
     return ApprovalRequest(
       id: map['id']?.toString() ?? '',
       studentId: map['student_id']?.toString() ?? '',
@@ -182,14 +153,20 @@ class ApprovalRequest {
       title: map['title'] ?? 'N/A',
       description: map['description'] ?? '',
       submittedDate: map['created_at'] != null
-          ? DateTime.parse(map['created_at']).toIso8601String().substring(0, 10)
+          ? DateTime.parse(map['created_at'])
+          .toIso8601String()
+          .substring(0, 10)
           : 'N/A',
       status: map['status'] ?? 'Pending',
-      urgency: 'Medium',
+      urgency: 'Medium', // Default urgency
       documents: [],
     );
   }
 }
+
+// ==============================
+// MAIN HOD DASHBOARD
+// ==============================
 
 class HODDashboardMain extends StatefulWidget {
   const HODDashboardMain({super.key});
@@ -203,17 +180,22 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   late TabController _tabController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  // Data lists
   List<Faculty> faculty = [];
   List<Student> students = [];
   List<ApprovalRequest> approvalRequests = [];
+
+  // Loading states
   bool isLoading = true;
   bool isRefreshing = false;
+
+  // Debug information
   String diagnosticMessage = '';
 
+  // Student names map for activities
   Map<String, String> studentNamesMap = {};
 
-  final SupabaseClient supabase = Supabase.instance.client;
-
+  // Real-time subscriptions
   StreamSubscription<List<Map<String, dynamic>>>? _facultySubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _studentsSubscription;
   StreamSubscription<List<Map<String, dynamic>>>? _requestsSubscription;
@@ -221,7 +203,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this); // Added 4th tab for diagnostics
+    _tabController = TabController(length: 4, vsync: this);
     _checkAuthAndSetupData();
   }
 
@@ -234,19 +216,22 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     super.dispose();
   }
 
+  // ==============================
+  // AUTHENTICATION & DATA SETUP
+  // ==============================
+
   Future<void> _checkAuthAndSetupData() async {
     setState(() => isLoading = true);
 
     try {
-      // Check authentication status
+      // Check authentication
       final session = supabase.auth.currentSession;
       final user = supabase.auth.currentUser;
 
       if (user == null) {
         setState(() {
           diagnosticMessage = '⚠️ NOT AUTHENTICATED\n\n'
-              'No user is logged in. You need to sign in first.\n\n'
-              'This is likely why you\'re not seeing real data.';
+              'No user is logged in. Please sign in first.';
           isLoading = false;
         });
         return;
@@ -259,12 +244,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             'Loading data...';
       });
 
-      // Try direct query first to test RLS policies
+      // Test direct queries
       await _testDirectQueries();
 
-      // Then setup real-time subscriptions
+      // Setup real-time subscriptions
       await _setupRealTimeSubscriptions();
-
     } catch (e) {
       setState(() {
         diagnosticMessage += '\n\n❌ ERROR:\n$e';
@@ -273,129 +257,153 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }
   }
 
+  // ==============================
+  // TEST DIRECT QUERIES
+  // ==============================
+
   Future<void> _testDirectQueries() async {
     try {
       // Test Faculty query
-      final facultyResponse = await supabase.from('faculty').select().limit(5);
+      final facultyResponse =
+      await supabase.from('faculty').select().limit(5);
       setState(() {
-        diagnosticMessage += '\n\n✅ Faculty Query Successful\n'
-            'Found ${facultyResponse.length} records';
+        diagnosticMessage += '\n\n✅ Faculty Query OK\n'
+            'Records: ${facultyResponse.length}';
       });
 
       // Test Students query
-      final studentsResponse = await supabase.from('students').select().limit(5);
+      final studentsResponse =
+      await supabase.from('students').select().limit(5);
       setState(() {
-        diagnosticMessage += '\n\n✅ Students Query Successful\n'
-            'Found ${studentsResponse.length} records';
+        diagnosticMessage += '\n\n✅ Students Query OK\n'
+            'Records: ${studentsResponse.length}';
       });
 
       // Test Activities query
-      final activitiesResponse = await supabase.from('activities').select().limit(5);
+      final activitiesResponse =
+      await supabase.from('activities').select().limit(5);
       setState(() {
-        diagnosticMessage += '\n\n✅ Activities Query Successful\n'
-            'Found ${activitiesResponse.length} records';
+        diagnosticMessage += '\n\n✅ Activities Query OK\n'
+            'Records: ${activitiesResponse.length}';
       });
-
     } catch (e) {
       setState(() {
-        diagnosticMessage += '\n\n❌ Direct Query Failed:\n$e\n\n'
-            'This suggests RLS policies are blocking access.';
+        diagnosticMessage += '\n\n❌ Query Failed:\n$e\n\n'
+            'Check RLS policies in Supabase.';
       });
     }
   }
 
+  // ==============================
+  // SETUP REAL-TIME SUBSCRIPTIONS
+  // ==============================
+
   Future<void> _setupRealTimeSubscriptions() async {
     try {
       setState(() {
-        diagnosticMessage += '\n\n🔄 Setting up Real-Time Subscriptions...';
+        diagnosticMessage += '\n\n🔄 Setting up real-time streams...';
       });
 
-      // Faculty Real-Time Stream
+      // Faculty Stream
       _facultySubscription = supabase
           .from('faculty')
           .stream(primaryKey: ['id'])
           .order('first_name', ascending: true)
-          .listen((List<Map<String, dynamic>> data) {
-        if (mounted) {
-          setState(() {
-            faculty = data.map((d) => Faculty.fromMap(d)).toList();
-            diagnosticMessage += '\n📊 Faculty stream: ${faculty.length} records';
-            print('✅ Faculty loaded: ${faculty.length} records');
-          });
-        }
-      }, onError: (error) {
-        print('❌ Faculty stream error: $error');
-        if (mounted) {
-          setState(() {
-            faculty = [];
-            diagnosticMessage += '\n❌ Faculty stream error: $error';
-          });
-        }
-      });
+          .listen(
+            (List<Map<String, dynamic>> data) {
+          if (mounted) {
+            setState(() {
+              faculty = data.map((d) => Faculty.fromMap(d)).toList();
+              diagnosticMessage +=
+              '\n📊 Faculty: ${faculty.length} records';
+              print('✅ Faculty loaded: ${faculty.length}');
+            });
+          }
+        },
+        onError: (error) {
+          print('❌ Faculty stream error: $error');
+          if (mounted) {
+            setState(() {
+              faculty = [];
+              diagnosticMessage += '\n❌ Faculty stream error: $error';
+            });
+          }
+        },
+      );
 
-      // Students Real-Time Stream
+      // Students Stream
       _studentsSubscription = supabase
           .from('students')
           .stream(primaryKey: ['id'])
           .order('roll_number', ascending: true)
-          .listen((List<Map<String, dynamic>> data) {
-        if (mounted) {
-          setState(() {
-            students = data.map((d) => Student.fromMap(d)).toList();
-            studentNamesMap = {
-              for (var student in students) student.id: student.name
-            };
-            diagnosticMessage += '\n📊 Students stream: ${students.length} records';
-            print('✅ Students loaded: ${students.length} records');
-          });
-        }
-      }, onError: (error) {
-        print('❌ Students stream error: $error');
-        if (mounted) {
-          setState(() {
-            students = [];
-            studentNamesMap = {};
-            diagnosticMessage += '\n❌ Students stream error: $error';
-          });
-        }
-      });
+          .listen(
+            (List<Map<String, dynamic>> data) {
+          if (mounted) {
+            setState(() {
+              students = data.map((d) => Student.fromMap(d)).toList();
+              studentNamesMap = {
+                for (var student in students) student.id: student.name
+              };
+              diagnosticMessage +=
+              '\n📊 Students: ${students.length} records';
+              print('✅ Students loaded: ${students.length}');
+            });
+          }
+        },
+        onError: (error) {
+          print('❌ Students stream error: $error');
+          if (mounted) {
+            setState(() {
+              students = [];
+              studentNamesMap = {};
+              diagnosticMessage += '\n❌ Students stream error: $error';
+            });
+          }
+        },
+      );
 
-      // Activities Real-Time Stream
+      // Activities Stream
       _requestsSubscription = supabase
           .from('activities')
           .stream(primaryKey: ['id'])
           .order('created_at', ascending: false)
-          .listen((List<Map<String, dynamic>> data) {
-        if (mounted) {
-          setState(() {
-            approvalRequests = data.map((d) {
-              final studentId = d['student_id']?.toString() ?? '';
-              final studentName = studentNamesMap[studentId] ?? 'Unknown Student';
-              return ApprovalRequest.fromMap(d, studentName);
-            }).toList();
-            diagnosticMessage += '\n📊 Activities stream: ${approvalRequests.length} records';
-            print('✅ Activities loaded: ${approvalRequests.length} records');
-          });
-        }
-      }, onError: (error) {
-        print('❌ Activities stream error: $error');
-        if (mounted) {
-          setState(() {
-            approvalRequests = [];
-            diagnosticMessage += '\n❌ Activities stream error: $error';
-          });
-        }
-      });
+          .listen(
+            (List<Map<String, dynamic>> data) {
+          if (mounted) {
+            setState(() {
+              approvalRequests = data.map((d) {
+                final studentId = d['student_id']?.toString() ?? '';
+                final studentName =
+                    studentNamesMap[studentId] ?? 'Unknown Student';
+                return ApprovalRequest.fromMap(d, studentName);
+              }).toList();
+              diagnosticMessage +=
+              '\n📊 Activities: ${approvalRequests.length} records';
+              print('✅ Activities loaded: ${approvalRequests.length}');
+            });
+          }
+        },
+        onError: (error) {
+          print('❌ Activities stream error: $error');
+          if (mounted) {
+            setState(() {
+              approvalRequests = [];
+              diagnosticMessage +=
+              '\n❌ Activities stream error: $error';
+            });
+          }
+        },
+      );
 
+      // Wait for initial data to load
       await Future.delayed(const Duration(milliseconds: 1500));
 
       setState(() {
-        diagnosticMessage += '\n\n✅ Setup Complete!\n'
-            'Check other tabs to see your data.';
+        diagnosticMessage +=
+        '\n\n✅ Setup Complete!\nCheck other tabs for your data.';
       });
-
     } catch (e) {
-      print('❌ Error setting up Real-Time subscriptions: $e');
+      print('❌ Error setting up streams: $e');
       if (mounted) {
         setState(() {
           diagnosticMessage += '\n\n❌ Setup Error: $e';
@@ -407,6 +415,10 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       }
     }
   }
+
+  // ==============================
+  // REFRESH DATA
+  // ==============================
 
   Future<void> _refreshData() async {
     if (isRefreshing) return;
@@ -434,7 +446,12 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }
   }
 
-  Future<void> _updateApprovalStatus(String requestId, String newStatus) async {
+  // ==============================
+  // UPDATE APPROVAL STATUS
+  // ==============================
+
+  Future<void> _updateApprovalStatus(
+      String requestId, String newStatus) async {
     try {
       final statusValue = newStatus.toLowerCase();
 
@@ -453,6 +470,10 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }
   }
 
+  // ==============================
+  // HELPER METHODS
+  // ==============================
+
   Color getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'active':
@@ -462,10 +483,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       case 'inactive':
       case 'suspended':
         return Colors.red;
-      case 'graduated':
-        return Colors.blue;
-      case 'dropped':
-        return Colors.grey;
       case 'pending':
         return Colors.orange;
       case 'approved':
@@ -477,7 +494,32 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  void _showSnackbar(String message, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              color == Colors.green ? Icons.check_circle : Icons.error,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // ==============================
+  // UI BUILDERS
+  // ==============================
+
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -528,7 +570,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     );
   }
 
-  Widget _buildSimpleCard(String name, String subtitle, String status, IconData leadingIcon) {
+  Widget _buildSimpleCard(
+      String name, String subtitle, String status, IconData leadingIcon) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
@@ -619,7 +662,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: getStatusColor(request.status).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -672,7 +716,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _updateApprovalStatus(request.id, 'Approved'),
+                      onPressed: () =>
+                          _updateApprovalStatus(request.id, 'Approved'),
                       icon: const Icon(Icons.check, size: 18),
                       label: const Text('Approve'),
                       style: ElevatedButton.styleFrom(
@@ -687,7 +732,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _updateApprovalStatus(request.id, 'Rejected'),
+                      onPressed: () =>
+                          _updateApprovalStatus(request.id, 'Rejected'),
                       icon: const Icon(Icons.close, size: 18),
                       label: const Text('Reject'),
                       style: ElevatedButton.styleFrom(
@@ -708,30 +754,16 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     );
   }
 
-  void _showSnackbar(String message, Color color) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              color == Colors.green ? Icons.check_circle : Icons.error,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
+  // ==============================
+  // MAIN BUILD METHOD
+  // ==============================
 
   @override
   Widget build(BuildContext context) {
-    final activeStudents = students.where((s) => s.status.toLowerCase() == 'active').length;
-    final pendingRequests = approvalRequests.where((r) => r.status.toLowerCase() == 'pending').length;
+    final activeStudents = students.length;
+    final pendingRequests = approvalRequests
+        .where((r) => r.status.toLowerCase() == 'pending')
+        .length;
 
     if (isLoading) {
       return Scaffold(
@@ -775,7 +807,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  valueColor:
+                  AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               )
                   : const Icon(Icons.refresh),
@@ -799,6 +832,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         ),
         body: Column(
           children: [
+            // Stats Cards
             Container(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -841,6 +875,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 ],
               ),
             ),
+            // Tab Views
             Expanded(
               child: TabBarView(
                 controller: _tabController,
@@ -851,11 +886,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.people, size: 64, color: Colors.grey),
+                        Icon(Icons.people,
+                            size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
                           'No faculty members found',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                          style:
+                          TextStyle(fontSize: 16, color: Colors.grey),
                         ),
                       ],
                     ),
@@ -879,11 +916,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.school, size: 64, color: Colors.grey),
+                        Icon(Icons.school,
+                            size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
                           'No students found',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                          style:
+                          TextStyle(fontSize: 16, color: Colors.grey),
                         ),
                       ],
                     ),
@@ -907,11 +946,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.assignment, size: 64, color: Colors.grey),
+                        Icon(Icons.assignment,
+                            size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
                           'No approval requests found',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                          style:
+                          TextStyle(fontSize: 16, color: Colors.grey),
                         ),
                       ],
                     ),
@@ -920,7 +961,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: approvalRequests.length,
                     itemBuilder: (context, index) {
-                      return _buildApprovalCard(approvalRequests[index]);
+                      return _buildApprovalCard(
+                          approvalRequests[index]);
                     },
                   ),
                   // Debug Tab
@@ -945,7 +987,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                           ),
                           child: SelectableText(
                             diagnosticMessage.isEmpty
-                                ? 'No diagnostic information available yet.'
+                                ? 'No diagnostic information available.'
                                 : diagnosticMessage,
                             style: const TextStyle(
                               fontFamily: 'monospace',
@@ -965,6 +1007,10 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     );
   }
 }
+
+// ==============================
+// SIGN OUT HANDLER
+// ==============================
 
 Future<void> _handleSignOut(BuildContext context) async {
   try {
