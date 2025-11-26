@@ -29,6 +29,7 @@ class _FacultyManagementPageState extends State<FacultyManagementPage> {
       await Future.wait([
         _loadFaculty(),
         _loadDepartments(),
+        _loadDepartments(),
       ]);
     } catch (e) {
       _showSnackBar('Error loading data: $e', Colors.red);
