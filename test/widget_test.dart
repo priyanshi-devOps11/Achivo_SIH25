@@ -10,7 +10,7 @@ void main() {
     // Build the app
     await tester.pumpWidget(const MyApp());
 
-    // Verify app title or main text exists
+   
     expect(find.text('Achivo'), findsOneWidget);
 
     // Verify Next button exists
@@ -20,12 +20,10 @@ void main() {
   testWidgets('Tapping Next navigates forward', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    // Tap the Next button
+   
     await tester.tap(find.text('Next'));
     await tester.pumpAndSettle();
 
-    // After tapping, check if it navigates to next screen
-    // (replace "WelcomeForm" with whatever screen appears after Next)
     expect(find.text('WelcomeForm'), findsOneWidget);
   });
 }
