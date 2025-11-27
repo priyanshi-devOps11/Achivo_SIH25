@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
 // Get Supabase client instance
+// NOTE: Ensure Supabase is initialized in your main application (e.g., main.dart)
 SupabaseClient get supabase => Supabase.instance.client;
 
 // ==============================
@@ -14,7 +15,7 @@ class Faculty {
   final String name;
   final String email;
   final String phone;
-  final String department;
+  final BigInt departmentId; // Changed to BigInt to match DB type
   final String designation;
   final int experience;
   final List<String> subjects;
@@ -27,7 +28,7 @@ class Faculty {
     required this.name,
     required this.email,
     required this.phone,
-    required this.department,
+    required this.departmentId,
     required this.designation,
     required this.experience,
     required this.subjects,
@@ -37,31 +38,31 @@ class Faculty {
   });
 
   factory Faculty.fromMap(Map<String, dynamic> map) {
-    // Handle subjects array
     final subjectsData = map['subjects'];
     List<String> subjectsList = [];
     if (subjectsData is List) {
-      subjectsList = List<String>.from(subjectsData);
-    } else if (subjectsData is String) {
-      subjectsList = [subjectsData];
+      subjectsList = List<String>.from(subjectsData.map((e) => e.toString()));
     }
 
-    // Build full name
     final firstName = map['first_name'] ?? '';
     final lastName = map['last_name'] ?? '';
     final fullName = '$firstName $lastName'.trim();
+
+    // Safely parse department_id as BigInt
+    final deptId = map['department_id'];
+    final departmentBigInt = deptId is int ? BigInt.from(deptId) : (deptId is BigInt ? deptId : BigInt.zero);
 
     return Faculty(
       id: map['id']?.toString() ?? '',
       name: fullName.isNotEmpty ? fullName : 'Unknown',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
-      department: map['department_id']?.toString() ?? '',
+      departmentId: departmentBigInt,
       designation: map['designation'] ?? '',
       experience: map['experience_years'] ?? 0,
       subjects: subjectsList,
       joiningDate: map['joining_date'] ?? '',
-      status: 'Active', // Default status
+      status: map['is_active'] == false ? 'Inactive' : 'Active', // Derive status from DB
       qualification: map['qualification'] ?? '',
     );
   }
@@ -74,9 +75,9 @@ class Student {
   final String phone;
   final String rollNumber;
   final String year;
-  final String semester;
+  final String branch;
   final double cgpa;
-  final String address;
+  final BigInt departmentId; // Changed to BigInt to match DB type
   final String parentContact;
   final String status;
   final String admissionDate;
@@ -88,9 +89,9 @@ class Student {
     required this.phone,
     required this.rollNumber,
     required this.year,
-    required this.semester,
+    required this.branch,
     required this.cgpa,
-    required this.address,
+    required this.departmentId,
     required this.parentContact,
     required this.status,
     required this.admissionDate,
@@ -101,18 +102,22 @@ class Student {
     final lastName = map['last_name'] ?? '';
     final fullName = '$firstName $lastName'.trim();
 
+    // Safely parse department_id as BigInt
+    final deptId = map['department_id'];
+    final departmentBigInt = deptId is int ? BigInt.from(deptId) : (deptId is BigInt ? deptId : BigInt.zero);
+
     return Student(
       id: map['id']?.toString() ?? '',
       name: fullName.isNotEmpty ? fullName : 'Unknown',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
       rollNumber: map['roll_number'] ?? '',
-      year: map['year'] ?? '',
-      semester: map['semester'] ?? 'N/A',
+      year: map['year'] ?? 'N/A',
+      branch: map['branch'] ?? 'N/A',
       cgpa: (map['cgpa'] ?? 0.0).toDouble(),
-      address: map['address'] ?? 'N/A',
+      departmentId: departmentBigInt,
       parentContact: map['parent_phone'] ?? '',
-      status: 'Active', // Default status
+      status: map['is_active'] == false ? 'Inactive' : 'Active', // Derive status
       admissionDate: map['admission_date'] ?? '',
     );
   }
@@ -127,8 +132,7 @@ class ApprovalRequest {
   final String description;
   final String submittedDate;
   String status;
-  final String urgency;
-  final List<String>? documents;
+  final int points;
 
   ApprovalRequest({
     required this.id,
@@ -139,8 +143,7 @@ class ApprovalRequest {
     required this.description,
     required this.submittedDate,
     required this.status,
-    required this.urgency,
-    this.documents,
+    required this.points,
   });
 
   factory ApprovalRequest.fromMap(
@@ -153,13 +156,10 @@ class ApprovalRequest {
       title: map['title'] ?? 'N/A',
       description: map['description'] ?? '',
       submittedDate: map['created_at'] != null
-          ? DateTime.parse(map['created_at'])
-          .toIso8601String()
-          .substring(0, 10)
+          ? DateTime.parse(map['created_at']).toIso8601String().substring(0, 10)
           : 'N/A',
-      status: map['status'] ?? 'Pending',
-      urgency: 'Medium', // Default urgency
-      documents: [],
+      status: map['status'] ?? 'pending',
+      points: map['points'] ?? 0,
     );
   }
 }
@@ -184,6 +184,10 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   List<Faculty> faculty = [];
   List<Student> students = [];
   List<ApprovalRequest> approvalRequests = [];
+
+  // Authentication and department state
+  BigInt? _hodDepartmentId;
+  bool isAuthReady = false;
 
   // Loading states
   bool isLoading = true;
@@ -223,16 +227,19 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   Future<void> _checkAuthAndSetupData() async {
     setState(() => isLoading = true);
 
+    // Cancel existing subscriptions before starting fresh setup
+    await _facultySubscription?.cancel();
+    await _studentsSubscription?.cancel();
+    await _requestsSubscription?.cancel();
+
     try {
-      // Check authentication
-      final session = supabase.auth.currentSession;
       final user = supabase.auth.currentUser;
 
       if (user == null) {
         setState(() {
-          diagnosticMessage = '⚠️ NOT AUTHENTICATED\n\n'
-              'No user is logged in. Please sign in first.';
+          diagnosticMessage = '⚠️ NOT AUTHENTICATED. User is null.';
           isLoading = false;
+          isAuthReady = false;
         });
         return;
       }
@@ -241,19 +248,51 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         diagnosticMessage = '✅ AUTHENTICATED\n'
             'User ID: ${user.id}\n'
             'Email: ${user.email}\n\n'
-            'Loading data...';
+            'Fetching HOD profile...';
       });
 
-      // Test direct queries
-      await _testDirectQueries();
+      // --- 1. FETCH HOD'S DEPARTMENT ID ---
+      final profileResponse = await supabase
+          .from('profiles')
+          .select('department_id')
+          .eq('id', user.id)
+          .single();
 
-      // Setup real-time subscriptions
-      await _setupRealTimeSubscriptions();
+      final departmentData = profileResponse['department_id'];
+
+      if (departmentData != null) {
+        // Handle BigInt conversion from database
+        _hodDepartmentId = departmentData is int
+            ? BigInt.from(departmentData)
+            : (departmentData is BigInt ? departmentData : BigInt.zero);
+
+        setState(() {
+          diagnosticMessage +=
+          '\n\n✅ HOD Department ID: $_hodDepartmentId\n\nStarting data setup...';
+          isAuthReady = true;
+        });
+
+        // --- 2. SETUP REAL-TIME SUBSCRIPTIONS (Filtered) ---
+        await _testDirectQueries();
+        await _setupRealTimeSubscriptions();
+      } else {
+        setState(() {
+          diagnosticMessage += '\n\n❌ ERROR: HOD profile is missing department_id.';
+          isLoading = false;
+          isAuthReady = false;
+        });
+      }
     } catch (e) {
+      print('Setup Error: $e');
       setState(() {
-        diagnosticMessage += '\n\n❌ ERROR:\n$e';
+        diagnosticMessage += '\n\n❌ GENERAL ERROR:\n$e';
         isLoading = false;
+        isAuthReady = false;
       });
+    } finally {
+      if (mounted && isAuthReady) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -262,52 +301,63 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   // ==============================
 
   Future<void> _testDirectQueries() async {
+    if (_hodDepartmentId == null) return;
+    final departmentFilter = _hodDepartmentId!.toInt();
+
     try {
       // Test Faculty query
-      final facultyResponse =
-      await supabase.from('faculty').select().limit(5);
+      final facultyResponse = await supabase
+          .from('faculty')
+          .select()
+          .eq('department_id', departmentFilter)
+          .limit(1);
       setState(() {
-        diagnosticMessage += '\n\n✅ Faculty Query OK\n'
-            'Records: ${facultyResponse.length}';
+        diagnosticMessage += '\n\n✅ Faculty Query OK (Department Filter)';
       });
 
       // Test Students query
-      final studentsResponse =
-      await supabase.from('students').select().limit(5);
+      final studentsResponse = await supabase
+          .from('students')
+          .select()
+          .eq('department_id', departmentFilter)
+          .limit(1);
       setState(() {
-        diagnosticMessage += '\n\n✅ Students Query OK\n'
-            'Records: ${studentsResponse.length}';
+        diagnosticMessage += '\n✅ Students Query OK (Department Filter)';
       });
 
-      // Test Activities query
+      // Test Activities query (relying on RLS to filter by student_id/department)
       final activitiesResponse =
-      await supabase.from('activities').select().limit(5);
+      await supabase.from('activities').select().limit(1);
       setState(() {
-        diagnosticMessage += '\n\n✅ Activities Query OK\n'
-            'Records: ${activitiesResponse.length}';
+        diagnosticMessage += '\n✅ Activities Query OK (RLS assumed)';
       });
     } catch (e) {
       setState(() {
         diagnosticMessage += '\n\n❌ Query Failed:\n$e\n\n'
-            'Check RLS policies in Supabase.';
+            'Check RLS policies and table schema.';
       });
     }
   }
 
   // ==============================
-  // SETUP REAL-TIME SUBSCRIPTIONS
+  // SETUP REAL-TIME SUBSCRIPTIONS (FILTERED)
   // ==============================
 
   Future<void> _setupRealTimeSubscriptions() async {
+    if (_hodDepartmentId == null) return;
+
+    final departmentFilter = _hodDepartmentId!.toInt();
+
     try {
       setState(() {
-        diagnosticMessage += '\n\n🔄 Setting up real-time streams...';
+        diagnosticMessage += '\n\n🔄 Setting up real-time streams with filter $departmentFilter...';
       });
 
-      // Faculty Stream
+      // Faculty Stream: Filtered by HOD's department_id
       _facultySubscription = supabase
           .from('faculty')
           .stream(primaryKey: ['id'])
+          .eq('department_id', departmentFilter) // <-- REAL-TIME FILTER
           .order('first_name', ascending: true)
           .listen(
             (List<Map<String, dynamic>> data) {
@@ -315,7 +365,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             setState(() {
               faculty = data.map((d) => Faculty.fromMap(d)).toList();
               diagnosticMessage +=
-              '\n📊 Faculty: ${faculty.length} records';
+              '\n📊 Faculty: ${faculty.length} records (Real-time)';
               print('✅ Faculty loaded: ${faculty.length}');
             });
           }
@@ -324,17 +374,17 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           print('❌ Faculty stream error: $error');
           if (mounted) {
             setState(() {
-              faculty = [];
               diagnosticMessage += '\n❌ Faculty stream error: $error';
             });
           }
         },
       );
 
-      // Students Stream
+      // Students Stream: Filtered by HOD's department_id
       _studentsSubscription = supabase
           .from('students')
           .stream(primaryKey: ['id'])
+          .eq('department_id', departmentFilter) // <-- REAL-TIME FILTER
           .order('roll_number', ascending: true)
           .listen(
             (List<Map<String, dynamic>> data) {
@@ -345,7 +395,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 for (var student in students) student.id: student.name
               };
               diagnosticMessage +=
-              '\n📊 Students: ${students.length} records';
+              '\n📊 Students: ${students.length} records (Real-time)';
               print('✅ Students loaded: ${students.length}');
             });
           }
@@ -354,15 +404,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           print('❌ Students stream error: $error');
           if (mounted) {
             setState(() {
-              students = [];
-              studentNamesMap = {};
               diagnosticMessage += '\n❌ Students stream error: $error';
             });
           }
         },
       );
 
-      // Activities Stream
+      // Activities Stream: Not filtered on the query, relies on RLS and local student map
       _requestsSubscription = supabase
           .from('activities')
           .stream(primaryKey: ['id'])
@@ -371,14 +419,16 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             (List<Map<String, dynamic>> data) {
           if (mounted) {
             setState(() {
+              // Only map activities whose student ID is in our studentNamesMap
               approvalRequests = data.map((d) {
                 final studentId = d['student_id']?.toString() ?? '';
                 final studentName =
-                    studentNamesMap[studentId] ?? 'Unknown Student';
+                    studentNamesMap[studentId] ?? 'Unknown Student ($studentId)';
                 return ApprovalRequest.fromMap(d, studentName);
-              }).toList();
+              }).where((r) => r.studentName != 'Unknown Student (${r.studentId})').toList();
+
               diagnosticMessage +=
-              '\n📊 Activities: ${approvalRequests.length} records';
+              '\n📊 Activities: ${approvalRequests.length} records (Real-time)';
               print('✅ Activities loaded: ${approvalRequests.length}');
             });
           }
@@ -387,7 +437,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           print('❌ Activities stream error: $error');
           if (mounted) {
             setState(() {
-              approvalRequests = [];
               diagnosticMessage +=
               '\n❌ Activities stream error: $error';
             });
@@ -395,23 +444,19 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         },
       );
 
-      // Wait for initial data to load
+      // Wait for initial data to propagate
       await Future.delayed(const Duration(milliseconds: 1500));
 
       setState(() {
         diagnosticMessage +=
-        '\n\n✅ Setup Complete!\nCheck other tabs for your data.';
+        '\n\n✅ Setup Complete! All streams running.';
       });
     } catch (e) {
       print('❌ Error setting up streams: $e');
       if (mounted) {
         setState(() {
-          diagnosticMessage += '\n\n❌ Setup Error: $e';
+          diagnosticMessage += '\n\n❌ Stream Setup Error: $e';
         });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
       }
     }
   }
@@ -425,10 +470,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     setState(() => isRefreshing = true);
 
     try {
-      await _facultySubscription?.cancel();
-      await _studentsSubscription?.cancel();
-      await _requestsSubscription?.cancel();
-
+      // Re-run the entire setup, which cancels and re-establishes streams
       await _checkAuthAndSetupData();
 
       if (mounted) {
@@ -455,15 +497,33 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     try {
       final statusValue = newStatus.toLowerCase();
 
+      // Update the activities table
       await supabase.from('activities').update({
         'status': statusValue,
       }).eq('id', int.parse(requestId));
 
+      // Optional: Add entry to activity_approvals table if needed by schema
+      // This is often good practice for audit trail
+      final currentUserId = supabase.auth.currentUser!.id;
+      final isApproved = statusValue == 'approved';
+
+      await supabase.from('activity_approvals').insert({
+        'activity_id': int.parse(requestId),
+        'faculty_id': currentUserId, // Assuming HOD is also a faculty/profile in profiles table
+        'approved': isApproved,
+        'remarks': '$newStatus by HOD.',
+      });
+
       if (mounted) {
         _showSnackbar('Request $statusValue successfully', Colors.green);
       }
+    } on PostgrestException catch (e) {
+      print('Supabase Error updating approval status: $e');
+      if (mounted) {
+        _showSnackbar('Supabase Error: ${e.message}', Colors.red);
+      }
     } catch (e) {
-      print('Error updating approval status: $e');
+      print('General Error updating approval status: $e');
       if (mounted) {
         _showSnackbar('Error updating status: $e', Colors.red);
       }
@@ -477,18 +537,15 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   Color getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'active':
+      case 'approved':
         return Colors.green;
       case 'on leave':
-        return Colors.orange;
+        return Colors.blueGrey;
       case 'inactive':
-      case 'suspended':
+      case 'rejected':
         return Colors.red;
       case 'pending':
         return Colors.orange;
-      case 'approved':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
       default:
         return Colors.grey;
     }
@@ -526,7 +583,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: color.withOpacity(0.1),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -571,7 +628,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   }
 
   Widget _buildSimpleCard(
-      String name, String subtitle, String status, IconData leadingIcon) {
+      String name, String subtitle, String status, IconData leadingIcon, String department) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
@@ -604,7 +661,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    subtitle,
+                    '$subtitle | Dept ID: $department',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[600],
@@ -694,7 +751,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             ),
             const SizedBox(height: 4),
             Text(
-              'Type: ${request.type}',
+              'Type: ${request.type} | Points: ${request.points}',
               style: TextStyle(
                 color: Colors.grey[700],
                 fontSize: 14,
@@ -760,12 +817,12 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   @override
   Widget build(BuildContext context) {
-    final activeStudents = students.length;
+    final activeStudents = students.where((s) => s.status == 'Active').length;
     final pendingRequests = approvalRequests
         .where((r) => r.status.toLowerCase() == 'pending')
         .length;
 
-    if (isLoading) {
+    if (isLoading && !isAuthReady) {
       return Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         appBar: AppBar(
@@ -798,7 +855,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         key: _scaffoldKey,
         backgroundColor: const Color(0xFFF8F9FA),
         appBar: AppBar(
-          title: const Text('HOD Dashboard'),
+          title: Text('HOD Dashboard (Dept ID: ${_hodDepartmentId ?? 'N/A'})'),
           actions: [
             IconButton(
               icon: isRefreshing
@@ -890,7 +947,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                             size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
-                          'No faculty members found',
+                          'No faculty members found for this department',
                           style:
                           TextStyle(fontSize: 16, color: Colors.grey),
                         ),
@@ -907,6 +964,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                         '${member.designation} - ${member.email}',
                         member.status,
                         Icons.person,
+                        member.departmentId.toString(),
                       );
                     },
                   ),
@@ -920,7 +978,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                             size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
-                          'No students found',
+                          'No students found for this department',
                           style:
                           TextStyle(fontSize: 16, color: Colors.grey),
                         ),
@@ -937,6 +995,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                         '${student.rollNumber} - CGPA: ${student.cgpa}',
                         student.status,
                         Icons.school,
+                        student.departmentId.toString(),
                       );
                     },
                   ),
@@ -1016,6 +1075,8 @@ Future<void> _handleSignOut(BuildContext context) async {
   try {
     await supabase.auth.signOut();
     if (context.mounted) {
+      // In a real application, this would navigate to the login screen.
+      // Here, we just pop until the first route (assuming login is the first route).
       Navigator.popUntil(context, (route) => route.isFirst);
     }
   } catch (e) {
@@ -1029,4 +1090,3 @@ Future<void> _handleSignOut(BuildContext context) async {
     }
   }
 }
-//still working!!!
