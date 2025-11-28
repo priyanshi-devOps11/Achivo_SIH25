@@ -21,8 +21,6 @@ class SupabaseService {
             DateTime.now().add(Duration(minutes: 5)).toIso8601String(),
       });
 
-      // In a real app, you would send this OTP via email service
-      // For now, we'll just print it to console for testing
       print('OTP for $email: $otp');
 
       return true;
