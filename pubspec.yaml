@@ -61,7 +61,7 @@ flutter:
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/icon/achivologo.png"
+  image_path: "assets/icon/iconachivo.png"
   # Optional: For Android Adaptive Icons (recommended for Android 8.0+)
   # adaptive_icon_background: "#ffffff" # Solid color background
   # adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
