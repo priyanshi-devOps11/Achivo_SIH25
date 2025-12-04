@@ -1,10 +1,9 @@
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
-// Global Supabase client accessor (assuming it's defined in main.dart)
-// Make sure you have initialized Supabase in your main.dart like this:
-// await Supabase.initialize(url: 'YOUR_SUPABASE_URL', anonKey: 'YOUR_SUPABASE_ANON_KEY');
+import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+// Global Supabase client accessor
 SupabaseClient get supabase => Supabase.instance.client;
 
 class AuthHodPage extends StatefulWidget {
@@ -16,7 +15,6 @@ class AuthHodPage extends StatefulWidget {
 
 class _AuthHodPageState extends State<AuthHodPage>
     with TickerProviderStateMixin {
-
   late AnimationController _backgroundController;
   late AnimationController _contentController;
   late AnimationController _otpTimerController;
@@ -40,10 +38,8 @@ class _AuthHodPageState extends State<AuthHodPage>
   Map<String, int> _departmentIdMap = {};
   bool _departmentsLoaded = false;
 
-  // Store data from WelcomeScreen
+  // Data from WelcomeScreen (will be overridden by route args)
   Map<String, dynamic> _profileData = {
-    // ⚠️ MOCK DATA for testing if you don't navigate from another screen
-    // Replace these with actual data if you are navigating from a setup screen
     'institute_id': 1,
     'country_id': 1,
     'state_id': 1,
@@ -51,7 +47,8 @@ class _AuthHodPageState extends State<AuthHodPage>
   bool _isDataLoaded = false;
 
   final _formKey = GlobalKey<FormState>();
-  final _emailFormKey = GlobalKey<FormState>(); // Key for isolated email validation
+  final _emailFormKey = GlobalKey<FormState>();
+
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -95,19 +92,18 @@ class _AuthHodPageState extends State<AuthHodPage>
     _generateCaptcha();
     _fetchDepartments();
 
-    // Start animations
     _backgroundController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
       _contentController.forward();
     });
   }
 
-  // Get arguments from WelcomeScreen
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isDataLoaded) {
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final args =
+      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
         _profileData = args;
         _isDataLoaded = true;
@@ -133,10 +129,12 @@ class _AuthHodPageState extends State<AuthHodPage>
     super.dispose();
   }
 
-  // Fetch departments from DB
+  // ======================================================
+  // Data Fetch & Helpers
+  // ======================================================
+
   Future<void> _fetchDepartments() async {
     try {
-      // NOTE: You must have a 'departments' table in Supabase for this to work
       final response = await supabase
           .from('departments')
           .select('id, name')
@@ -146,7 +144,7 @@ class _AuthHodPageState extends State<AuthHodPage>
         final List<String> names = [];
         final Map<String, int> idMap = {};
 
-        for (var dept in response) {
+        for (final dept in response) {
           final name = dept['name'] as String;
           final id = dept['id'] as int;
           names.add(name);
@@ -157,7 +155,6 @@ class _AuthHodPageState extends State<AuthHodPage>
           _departmentNames = names;
           _departmentIdMap = idMap;
           _departmentsLoaded = true;
-          // Set a default selected department if the list is not empty
           if (_departmentNames.isNotEmpty) {
             selectedDepartment = _departmentNames.first;
           }
@@ -168,24 +165,37 @@ class _AuthHodPageState extends State<AuthHodPage>
         });
       }
     } catch (e) {
-      // Assuming a mock department list if DB fails for a full working example
+      // Fallback mock data so UI keeps working
       setState(() {
-        _departmentNames = ['Computer Science', 'Electrical Engineering', 'Mechanical Engineering'];
-        _departmentIdMap = {'Computer Science': 1, 'Electrical Engineering': 2, 'Mechanical Engineering': 3};
+        _departmentNames = [
+          'Computer Science',
+          'Information Technology',
+          'Electronics',
+        ];
+        _departmentIdMap = {
+          'Computer Science': 1,
+          'Information Technology': 2,
+          'Electronics': 3,
+        };
         selectedDepartment = _departmentNames.first;
         _departmentsLoaded = true;
       });
-      _showErrorMessage('Error loading departments. Using mock data for demo.');
+      _showErrorMessage(
+          'Error loading departments from DB. Using mock data for now.');
+      // ignore: avoid_print
       print('Department fetch error: $e');
     }
   }
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    Random random = Random();
+    final random = Random();
     setState(() {
       _captchaText = String.fromCharCodes(
-        Iterable.generate(6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
+        Iterable.generate(
+          6,
+              (_) => chars.codeUnitAt(random.nextInt(chars.length)),
+        ),
       );
     });
   }
@@ -206,9 +216,19 @@ class _AuthHodPageState extends State<AuthHodPage>
     });
   }
 
+  bool _isPasswordValid(String password) {
+    final passwordRegex = RegExp(
+        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
+    return passwordRegex.hasMatch(password);
+  }
+
+  // ======================================================
+  // OTP FLOW
+  // ======================================================
+
   Future<void> _sendOTP() async {
-    // 🔑 FIX: Only validate the email field using its dedicated form key
-    if (_emailFormKey.currentState == null || !_emailFormKey.currentState!.validate()) {
+    if (_emailFormKey.currentState == null ||
+        !_emailFormKey.currentState!.validate()) {
       _showErrorMessage('Please enter a valid email first.');
       return;
     }
@@ -218,6 +238,7 @@ class _AuthHodPageState extends State<AuthHodPage>
     });
 
     try {
+      // Check if email already registered as HOD
       final response = await supabase
           .from('hods')
           .select('email')
@@ -225,17 +246,16 @@ class _AuthHodPageState extends State<AuthHodPage>
           .maybeSingle();
 
       if (response != null && !_isLogin) {
-        _showErrorMessage('Email already registered. Please use login instead.');
+        _showErrorMessage(
+            'Email already registered as HOD. Please use login instead.');
         setState(() {
           _isLoading = false;
         });
         return;
       }
 
-      // Send OTP using Supabase Auth (This requires SMTP setup in Supabase)
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
-        // You might need to set up custom email templates for this to be reliable
       );
 
       setState(() {
@@ -244,8 +264,7 @@ class _AuthHodPageState extends State<AuthHodPage>
       });
 
       _startOtpTimer();
-      _showSuccessMessage('OTP sent successfully to your email');
-
+      _showSuccessMessage('OTP sent successfully to your email.');
     } on AuthException catch (error) {
       setState(() {
         _isLoading = false;
@@ -255,7 +274,7 @@ class _AuthHodPageState extends State<AuthHodPage>
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Failed to send OTP: ${error.toString()}');
+      _showErrorMessage('Failed to send OTP: $error');
     }
   }
 
@@ -288,10 +307,17 @@ class _AuthHodPageState extends State<AuthHodPage>
           _isOtpVerified = true;
           _otpTimerController.stop();
         });
-        // Sign out the temporary session created by verifyOTP
+
+        // End temp session created by verifyOTP
         await supabase.auth.signOut();
 
-        _showSuccessMessage('Email verified successfully! You can now complete registration.');
+        _showSuccessMessage(
+            'Email verified successfully! You can now complete registration.');
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+        _showErrorMessage('OTP verification failed. Please try again.');
       }
     } on AuthException catch (error) {
       setState(() {
@@ -302,30 +328,28 @@ class _AuthHodPageState extends State<AuthHodPage>
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('OTP verification failed: ${error.toString()}');
+      _showErrorMessage('OTP verification failed: $error');
     }
   }
 
-  bool _isPasswordValid(String password) {
-    RegExp passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
-    return passwordRegex.hasMatch(password);
-  }
+  // ======================================================
+  // SUBMIT / LOGIN / REGISTER
+  // ======================================================
 
   Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
       if (!_isLogin && !_isOtpVerified) {
-        _showErrorMessage('Please verify your email first');
+        _showErrorMessage('Please verify your email first.');
         return;
       }
 
-      // Captcha validation
+      // Captcha
       if (_captchaController.text.toUpperCase() != _captchaText) {
         _showErrorMessage('Incorrect captcha. Please try again.');
         _generateCaptcha();
         _captchaController.clear();
         return;
       }
-
 
       setState(() {
         _isLoading = true;
@@ -338,7 +362,8 @@ class _AuthHodPageState extends State<AuthHodPage>
           await _handleRegistration();
         }
       } catch (error) {
-        _showErrorMessage(error is Exception ? error.toString().replaceFirst('Exception: ', '') : 'An unexpected error occurred.');
+        final message = error.toString().replaceFirst('Exception: ', '');
+        _showErrorMessage(message);
       } finally {
         setState(() {
           _isLoading = false;
@@ -371,18 +396,28 @@ class _AuthHodPageState extends State<AuthHodPage>
 
       if (authResponse.user != null) {
         _showSuccessMessage('Login successful!');
-        if (mounted) Navigator.pushReplacementNamed(context, '/hod-dashboard');
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/hod-dashboard');
+        }
+      } else {
+        throw Exception('Login failed: Unable to create session.');
       }
     } on AuthException catch (e) {
-      throw Exception('Login failed: Invalid credentials or account not confirmed. (${e.message})');
+      throw Exception(
+          'Login failed: Invalid credentials or account not confirmed (${e.message}).');
     } catch (error) {
-      throw Exception('Login failed: ${error.toString()}');
+      throw Exception('Login failed: $error');
     }
   }
 
+  /// Registration flow that guarantees the foreign key:
+  /// 1. signUp -> returns userId
+  /// 2. upsert into `profiles` with that id (insert if missing, update if exists)
+  /// 3. insert into `hods` (FK to profiles.id is now satisfied)
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
-      throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
+      throw Exception(
+          'Institute data missing from initial setup. Please go back to the Welcome screen.');
     }
 
     final departmentName = selectedDepartment;
@@ -395,69 +430,82 @@ class _AuthHodPageState extends State<AuthHodPage>
       throw Exception('Department ID not found for selected department.');
     }
 
-    try {
-      final currentTime = DateTime.now().toIso8601String();
-      final instituteId = _profileData['institute_id'] as int;
-      final confirmationTime = DateTime.now().toIso8601String(); // Define confirmation time
+    final currentTime = DateTime.now().toIso8601String();
+    final instituteId = _profileData['institute_id'] as int?;
+    final countryId = _profileData['country_id'] as int?;
+    final stateId = _profileData['state_id'] as int?;
+    final confirmationTime = DateTime.now().toIso8601String();
 
-      // 1. Sign up with email and password, manually confirming the email
-      // since we already verified the OTP.
+    try {
+      // 1) Sign up the auth user
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
         data: {
+          'first_name': _firstNameController.text.trim(),
+          'last_name': _lastNameController.text.trim(),
+          'role': 'hod',
           'email_confirmed_at': confirmationTime,
           'email_verified': true,
         },
       );
 
-      if (authResponse.user != null) {
-        final userId = authResponse.user!.id;
+      final user = authResponse.user;
+      if (user == null) {
+        throw Exception(
+            'Registration failed: user is null. Check email confirmation settings in Supabase.');
+      }
 
-        // 2. Insert into 'profiles' (Central identity)
-        await supabase.from('profiles').insert({
-          'id': userId,
-          'role': 'hod',
-          'email': _emailController.text.trim(),
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'gender': selectedGender,
-          'department_id': departmentId,
-          'country_id': _profileData['country_id'],
-          'state_id': _profileData['state_id'],
-          'institute_id': instituteId,
-          'email_verified': true,
-          'created_at': currentTime,
-        });
+      final userId = user.id;
 
-        // 3. Insert into 'hods'
-        await supabase.from('hods').insert({
-          'user_id': userId,
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'father_name': _fatherNameController.text.trim(),
-          'gender': selectedGender,
-          'phone': _phoneController.text.trim(),
-          'hod_id': _hodIdController.text.trim(),
-          'department_id': departmentId,
-          'created_at': currentTime,
-        });
+      // 2) Ensure profile row exists and is populated (UPSERT!)
+      // This solves the foreign key issue even if the trigger didn't run.
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'first_name': _firstNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'role': 'hod',
+        'phone': _phoneController.text.trim(),
+        'gender': selectedGender,
+        'department_id': departmentId,
+        'country_id': countryId,
+        'state_id': stateId,
+        'institute_id': instituteId,
+        'email_verified': true,
+        'created_at': currentTime,
+        'updated_at': currentTime,
+      }, onConflict: 'id');
 
-        _showSuccessMessage('Account created successfully! Redirecting to dashboard...');
-        if (mounted) Navigator.pushReplacementNamed(context, '/hod-dashboard');
+      // 3) Insert into HODs (FK -> profiles.id)
+      await supabase.from('hods').insert({
+        'user_id': userId,
+        'first_name': _firstNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'father_name': _fatherNameController.text.trim(),
+        'gender': selectedGender,
+        'phone': _phoneController.text.trim(),
+        'hod_id': _hodIdController.text.trim(),
+        'department_id': departmentId,
+        'created_at': currentTime,
+      });
+
+      _showSuccessMessage(
+          'Account created successfully! Redirecting to dashboard...');
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/hod-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Registration failed: ${e.message}');
     } catch (error) {
-      throw Exception('Registration failed: ${error.toString()}');
+      throw Exception('Registration failed: $error');
     }
   }
 
   Future<void> _handleForgotPassword() async {
     if (_hodIdController.text.isEmpty) {
-      _showErrorMessage('Please enter your HOD ID first');
+      _showErrorMessage('Please enter your HOD ID first.');
       return;
     }
 
@@ -473,22 +521,25 @@ class _AuthHodPageState extends State<AuthHodPage>
           .maybeSingle();
 
       if (response != null) {
-        // Supabase sends a password reset email to the associated email
         await supabase.auth.resetPasswordForEmail(response['email']);
-        _showSuccessMessage('Password reset link sent to your email');
+        _showSuccessMessage('Password reset link sent to your email.');
       } else {
-        _showErrorMessage('No account found with this HOD ID');
+        _showErrorMessage('No account found with this HOD ID.');
       }
     } on AuthException catch (e) {
       _showErrorMessage('Failed to send reset link: ${e.message}');
     } catch (error) {
-      _showErrorMessage('Failed to send reset link: ${error.toString()}');
+      _showErrorMessage('Failed to send reset link: $error');
     } finally {
       setState(() {
         _isLoading = false;
       });
     }
   }
+
+  // ======================================================
+  // SNACKBARS
+  // ======================================================
 
   void _showSuccessMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -510,486 +561,47 @@ class _AuthHodPageState extends State<AuthHodPage>
     );
   }
 
+  // ======================================================
+  // BUILD
+  // ======================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF3E8FF),
-              Color(0xFFE0E7FF),
-              Color(0xFFDBEAFE),
-            ],
+      body: FadeTransition(
+        opacity: _backgroundAnimation,
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFF3E8FF),
+                Color(0xFFE0E7FF),
+                Color(0xFFDBEAFE),
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  const SizedBox(height: 60),
-
-                  // Header
-                  Column(
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: FadeTransition(
+                opacity: _contentAnimation,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
                     children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            // 💡 FIX APPLIED HERE: Use pushReplacementNamed to go back to the welcome route
-                            onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
-                            icon: const Icon(Icons.arrow_back, size: 24),
-                            color: Colors.black87,
-                          ),
-                          const Spacer(),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'HOD Portal',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Lead your department with Achivo',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
-                      ),
+                      const SizedBox(height: 60),
+                      _buildHeader(),
+                      const SizedBox(height: 40),
+                      _buildTabSelector(),
+                      const SizedBox(height: 32),
+                      _buildForm(),
+                      const SizedBox(height: 32),
+                      _buildFooter(),
+                      const SizedBox(height: 40),
                     ],
                   ),
-
-                  const SizedBox(height: 40),
-
-                  // Tab selector
-                  Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() {
-                              _isLogin = false;
-                              _isOtpSent = false;
-                              _isOtpVerified = false;
-                              _generateCaptcha();
-                            }),
-                            child: Container(
-                              margin: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                gradient: !_isLogin
-                                    ? const LinearGradient(
-                                  colors: [
-                                    Color(0xFF8B5CF6),
-                                    Color(0xFF3B82F6),
-                                  ],
-                                )
-                                    : null,
-                                borderRadius: BorderRadius.circular(21),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Register',
-                                  style: TextStyle(
-                                    color: !_isLogin
-                                        ? Colors.white
-                                        : Colors.grey[600],
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() {
-                              _isLogin = true;
-                              _isOtpSent = false;
-                              _isOtpVerified = false;
-                              _generateCaptcha();
-                            }),
-                            child: Container(
-                              margin: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                gradient: _isLogin
-                                    ? const LinearGradient(
-                                  colors: [
-                                    Color(0xFF8B5CF6),
-                                    Color(0xFF3B82F6),
-                                  ],
-                                )
-                                    : null,
-                                borderRadius: BorderRadius.circular(21),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    color: _isLogin
-                                        ? Colors.white
-                                        : Colors.grey[600],
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Form
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      children: [
-                        // Registration fields
-                        if (!_isLogin) ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildInputField(
-                                  controller: _firstNameController,
-                                  label: 'First Name',
-                                  placeholder: 'Enter first name',
-                                  icon: Icons.person_outline,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter first name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildInputField(
-                                  controller: _lastNameController,
-                                  label: 'Last Name',
-                                  placeholder: 'Enter last name',
-                                  icon: Icons.person_outline,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter last name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Email field with OTP
-                          _buildEmailFieldWithOTP(),
-                          const SizedBox(height: 20),
-
-                          // Father's Name field
-                          _buildInputField(
-                            controller: _fatherNameController,
-                            label: "Father's Name",
-                            placeholder: "Enter your father's name",
-                            icon: Icons.family_restroom_outlined,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return "Please enter your father's name";
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Gender field
-                          _buildDropdownField(
-                            label: 'Gender',
-                            value: selectedGender,
-                            items: genders,
-                            onChanged: (value) =>
-                                setState(() => selectedGender = value),
-                            hint: 'Select gender',
-                            icon: Icons.person_2_outlined,
-                            validator: (value) {
-                              if (value == null) {
-                                return 'Please select your gender';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Phone field
-                          _buildInputField(
-                            controller: _phoneController,
-                            label: 'Phone Number',
-                            placeholder: 'Enter your phone number',
-                            icon: Icons.phone_outlined,
-                            keyboardType: TextInputType.phone,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your phone number';
-                              }
-                              if (value.length < 10) {
-                                return 'Phone number must be at least 10 digits';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Department field
-                          if (!_departmentsLoaded)
-                            _buildInputField(
-                              controller: TextEditingController(text: 'Loading departments...'),
-                              label: 'Department',
-                              placeholder: 'Loading...',
-                              icon: Icons.business_outlined,
-                              enabled: false,
-                              validator: (_) => null,
-                            )
-                          else if (_departmentNames.isEmpty)
-                            _buildInputField(
-                              controller: TextEditingController(text: 'No departments found (Check DB)'),
-                              label: 'Department',
-                              placeholder: 'Check database connection or seeding',
-                              icon: Icons.error_outline,
-                              enabled: false,
-                              validator: (_) => 'Department list is empty.',
-                            )
-                          else
-                            _buildDropdownField(
-                              label: 'Department',
-                              value: selectedDepartment,
-                              items: _departmentNames,
-                              onChanged: (value) =>
-                                  setState(() => selectedDepartment = value),
-                              hint: 'Select department',
-                              icon: Icons.business_outlined,
-                              validator: (value) {
-                                if (value == null) {
-                                  return 'Please select your department';
-                                }
-                                return null;
-                              },
-                            ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // HOD ID field
-                        _buildInputField(
-                          controller: _hodIdController,
-                          label: 'HOD ID',
-                          placeholder: _isLogin
-                              ? 'Enter your HOD ID'
-                              : 'Create a unique HOD ID',
-                          icon: Icons.badge_outlined,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter HOD ID';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Password field with eye icon
-                        _buildInputField(
-                          controller: _passwordController,
-                          label: 'Password',
-                          placeholder: _isLogin
-                              ? 'Enter your password'
-                              : 'Create a password',
-                          icon: Icons.lock_outline,
-                          obscureText: !_passwordVisible,
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _passwordVisible ? Icons.visibility : Icons.visibility_off,
-                              color: Colors.grey[500],
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _passwordVisible = !_passwordVisible;
-                              });
-                            },
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your password';
-                            }
-                            if (!_isLogin) {
-                              if (!_isPasswordValid(value)) {
-                                return 'Password must be 8+ chars, with U/L case, digit, & special char';
-                              }
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Confirm Password field (only for registration)
-                        if (!_isLogin) ...[
-                          _buildInputField(
-                            controller: _confirmPasswordController,
-                            label: 'Confirm Password',
-                            placeholder: 'Confirm your password',
-                            icon: Icons.lock_outline,
-                            obscureText: !_confirmPasswordVisible,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _confirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                                color: Colors.grey[500],
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _confirmPasswordVisible = !_confirmPasswordVisible;
-                                });
-                              },
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please confirm your password';
-                              }
-                              if (value != _passwordController.text) {
-                                return 'Passwords do not match';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // Enhanced Captcha field
-                        _buildEnhancedCaptchaField(),
-                        const SizedBox(height: 20),
-
-                        // Forgot password (only for login)
-                        if (_isLogin) ...[
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _handleForgotPassword,
-                              child: const Text(
-                                'Forgot password?',
-                                style: TextStyle(
-                                  color: Color(0xFF8B5CF6),
-                                  fontSize: 14,
-                                  decoration: TextDecoration.none,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                        ] else
-                          const SizedBox(height: 20),
-
-                        // Submit button
-                        Container(
-                          width: double.infinity,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFF8B5CF6),
-                                Color(0xFF3B82F6),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                                : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _isLogin
-                                      ? 'Sign In as HOD'
-                                      : 'Create HOD Account',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.supervised_user_circle,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Footer
-                  Text.rich(
-                    TextSpan(
-                      text: 'By continuing, you agree to our ',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      children: const [
-                        TextSpan(
-                          text: 'Terms of Service',
-                          style: TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                        TextSpan(text: ' and '),
-                        TextSpan(
-                          text: 'Privacy Policy',
-                          style: TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-
-                  const SizedBox(height: 40),
-                ],
+                ),
               ),
             ),
           ),
@@ -998,9 +610,438 @@ class _AuthHodPageState extends State<AuthHodPage>
     );
   }
 
-  // -------------------------------------------------------------------
-  // Helper Widgets (ALL DEFINITIONS)
-  // -------------------------------------------------------------------
+  // ======================================================
+  // UI SECTIONS
+  // ======================================================
+
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/welcome'),
+              icon: const Icon(Icons.arrow_back, size: 24),
+              color: Colors.black87,
+            ),
+            const Spacer(),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'HOD Portal',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Lead your department with Achivo',
+          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabSelector() {
+    return Container(
+      height: 50,
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(25),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _isLogin = false;
+                _isOtpSent = false;
+                _isOtpVerified = false;
+                _generateCaptcha();
+              }),
+              child: Container(
+                margin: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  gradient: !_isLogin
+                      ? const LinearGradient(
+                    colors: [
+                      Color(0xFF8B5CF6),
+                      Color(0xFF3B82F6),
+                    ],
+                  )
+                      : null,
+                  borderRadius: BorderRadius.circular(21),
+                ),
+                child: Center(
+                  child: Text(
+                    'Register',
+                    style: TextStyle(
+                      color: !_isLogin ? Colors.white : Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _isLogin = true;
+                _isOtpSent = false;
+                _isOtpVerified = false;
+                _generateCaptcha();
+              }),
+              child: Container(
+                margin: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  gradient: _isLogin
+                      ? const LinearGradient(
+                    colors: [
+                      Color(0xFF8B5CF6),
+                      Color(0xFF3B82F6),
+                    ],
+                  )
+                      : null,
+                  borderRadius: BorderRadius.circular(21),
+                ),
+                child: Center(
+                  child: Text(
+                    'Login',
+                    style: TextStyle(
+                      color: _isLogin ? Colors.white : Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          if (!_isLogin) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInputField(
+                    controller: _firstNameController,
+                    label: 'First Name',
+                    placeholder: 'Enter first name',
+                    icon: Icons.person_outline,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter first name';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildInputField(
+                    controller: _lastNameController,
+                    label: 'Last Name',
+                    placeholder: 'Enter last name',
+                    icon: Icons.person_outline,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter last name';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildEmailFieldWithOTP(),
+            const SizedBox(height: 20),
+            _buildInputField(
+              controller: _fatherNameController,
+              label: "Father's Name",
+              placeholder: "Enter your father's name",
+              icon: Icons.family_restroom_outlined,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return "Please enter your father's name";
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            _buildDropdownField(
+              label: 'Gender',
+              value: selectedGender,
+              items: genders,
+              onChanged: (value) => setState(() => selectedGender = value),
+              hint: 'Select gender',
+              icon: Icons.person_2_outlined,
+              validator: (value) {
+                if (value == null) {
+                  return 'Please select your gender';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            _buildInputField(
+              controller: _phoneController,
+              label: 'Phone Number',
+              placeholder: 'Enter your phone number',
+              icon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your phone number';
+                }
+                if (value.length < 10) {
+                  return 'Phone number must be at least 10 digits';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            if (!_departmentsLoaded)
+              _buildInputField(
+                controller:
+                TextEditingController(text: 'Loading departments...'),
+                label: 'Department',
+                placeholder: 'Loading...',
+                icon: Icons.business_outlined,
+                enabled: false,
+                validator: (_) => null,
+              )
+            else if (_departmentNames.isEmpty)
+              _buildInputField(
+                controller: TextEditingController(
+                    text: 'No departments found (check DB)'),
+                label: 'Department',
+                placeholder: 'Check DB / seeding',
+                icon: Icons.error_outline,
+                enabled: false,
+                validator: (_) => 'Department list is empty.',
+              )
+            else
+              _buildDropdownField(
+                label: 'Department',
+                value: selectedDepartment,
+                items: _departmentNames,
+                onChanged: (value) =>
+                    setState(() => selectedDepartment = value),
+                hint: 'Select department',
+                icon: Icons.business_outlined,
+                validator: (value) {
+                  if (value == null) {
+                    return 'Please select your department';
+                  }
+                  return null;
+                },
+              ),
+            const SizedBox(height: 20),
+          ],
+          _buildInputField(
+            controller: _hodIdController,
+            label: 'HOD ID',
+            placeholder:
+            _isLogin ? 'Enter your HOD ID' : 'Create a unique HOD ID',
+            icon: Icons.badge_outlined,
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter HOD ID';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
+          _buildInputField(
+            controller: _passwordController,
+            label: 'Password',
+            placeholder:
+            _isLogin ? 'Enter your password' : 'Create a password',
+            icon: Icons.lock_outline,
+            obscureText: !_passwordVisible,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _passwordVisible ? Icons.visibility : Icons.visibility_off,
+                color: Colors.grey[500],
+              ),
+              onPressed: () {
+                setState(() {
+                  _passwordVisible = !_passwordVisible;
+                });
+              },
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your password';
+              }
+              if (!_isLogin && !_isPasswordValid(value)) {
+                return 'Password must be 8+ chars, with upper & lower case, digit, and special char.';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
+          if (!_isLogin) ...[
+            _buildInputField(
+              controller: _confirmPasswordController,
+              label: 'Confirm Password',
+              placeholder: 'Confirm your password',
+              icon: Icons.lock_outline,
+              obscureText: !_confirmPasswordVisible,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _confirmPasswordVisible
+                      ? Icons.visibility
+                      : Icons.visibility_off,
+                  color: Colors.grey[500],
+                ),
+                onPressed: () {
+                  setState(() {
+                    _confirmPasswordVisible = !_confirmPasswordVisible;
+                  });
+                },
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please confirm your password';
+                }
+                if (value != _passwordController.text) {
+                  return 'Passwords do not match';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+          _buildEnhancedCaptchaField(),
+          const SizedBox(height: 20),
+          if (_isLogin) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _handleForgotPassword,
+                child: const Text(
+                  'Forgot password?',
+                  style: TextStyle(
+                    color: Color(0xFF8B5CF6),
+                    fontSize: 14,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ] else
+            const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            height: 56,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF8B5CF6),
+                  Color(0xFF3B82F6),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _handleSubmit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+                  : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _isLogin
+                        ? 'Sign In as HOD'
+                        : 'Create HOD Account',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.supervised_user_circle,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Text.rich(
+      TextSpan(
+        text: 'By continuing, you agree to our ',
+        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        children: const [
+          TextSpan(
+            text: 'Terms of Service',
+            style: TextStyle(
+              color: Color(0xFF8B5CF6),
+              decoration: TextDecoration.underline,
+            ),
+          ),
+          TextSpan(text: ' and '),
+          TextSpan(
+            text: 'Privacy Policy',
+            style: TextStyle(
+              color: Color(0xFF8B5CF6),
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+    );
+  }
+
+  // ======================================================
+  // FIELD BUILDERS
+  // ======================================================
 
   Widget _buildInputField({
     required TextEditingController controller,
@@ -1139,7 +1180,6 @@ class _AuthHodPageState extends State<AuthHodPage>
             ),
           ),
         ),
-        // 🔑 The email field is wrapped in a separate Form for isolated validation
         Form(
           key: _emailFormKey,
           child: Container(
@@ -1171,8 +1211,8 @@ class _AuthHodPageState extends State<AuthHodPage>
               decoration: InputDecoration(
                 hintText: 'Enter your email',
                 hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
-                prefixIcon:
-                Icon(Icons.mail_outline, color: Colors.grey[500], size: 20),
+                prefixIcon: Icon(Icons.mail_outline,
+                    color: Colors.grey[500], size: 20),
                 suffixIcon: !_isLogin && !_isOtpVerified
                     ? TextButton(
                   onPressed: _isOtpSent ? null : _sendOTP,
@@ -1199,8 +1239,6 @@ class _AuthHodPageState extends State<AuthHodPage>
             ),
           ),
         ),
-
-        // Enhanced OTP Field (only for registration and when OTP is sent)
         if (!_isLogin && _isOtpSent && !_isOtpVerified) ...[
           const SizedBox(height: 16),
           _buildEnhancedOtpField(),
@@ -1280,7 +1318,8 @@ class _AuthHodPageState extends State<AuthHodPage>
                       ),
                       border: InputBorder.none,
                       counterText: '',
-                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                      contentPadding:
+                      const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
                 ),
@@ -1298,7 +1337,8 @@ class _AuthHodPageState extends State<AuthHodPage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
                   ),
                   child: const Text(
                     'Verify',
@@ -1392,13 +1432,11 @@ class _AuthHodPageState extends State<AuthHodPage>
                     ),
                     child: Stack(
                       children: [
-                        // Background pattern
                         Positioned.fill(
                           child: CustomPaint(
                             painter: CaptchaBackgroundPainter(),
                           ),
                         ),
-                        // Captcha text
                         Center(
                           child: Text(
                             _captchaText,
@@ -1438,7 +1476,8 @@ class _AuthHodPageState extends State<AuthHodPage>
                   style: TextStyle(color: Colors.grey[800], fontSize: 16),
                   decoration: InputDecoration(
                     hintText: 'Enter captcha',
-                    hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
+                    hintStyle:
+                    TextStyle(color: Colors.grey[500], fontSize: 16),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 20,
