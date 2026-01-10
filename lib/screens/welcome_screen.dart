@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
 class WelcomeScreen extends StatefulWidget {
-  const WelcomeScreen({Key? key, required Null Function() onNext}) : super(key: key);
+  const WelcomeScreen({Key? key}) : super(key: key);  // ✅ FIXED: Removed unused onNext parameter
 
   @override
   State<WelcomeScreen> createState() => _WelcomeScreenState();
@@ -90,18 +90,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     _floatingController.repeat(reverse: true);
 
     _isInitialized = true;
-  }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_isInitialized && countries.isEmpty && !isLoadingCountries) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && Supabase.instance.isInitialized) {
-          _fetchCountries();
-        }
-      });
-    }
+    // ✅ FIXED: Fetch countries immediately after initialization
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _fetchCountries();
+      }
+    });
   }
 
   @override
@@ -127,29 +122,44 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 
   Future<void> _fetchCountries() async {
-    if (!mounted) return;
+    if (!mounted || isLoadingCountries) return;  // ✅ FIXED: Prevent duplicate calls
+
+    print('🔍 Starting to fetch countries...');
+
     try {
       setState(() {
         isLoadingCountries = true;
       });
+
+      // ✅ FIXED: Added better error logging
       final response = await supabase
           .from('countries')
           .select('id, name')
           .order('name');
+
+      print('✅ Countries response: $response');
+
       if (mounted) {
+        final countriesList = List<Map<String, dynamic>>.from(response as List);
+        print('✅ Loaded ${countriesList.length} countries');
+
         setState(() {
-          countries = List<Map<String, dynamic>>.from(response as List);
+          countries = countriesList;
           isLoadingCountries = false;
         });
+
+        if (countries.isEmpty) {
+          _showSnackBar("No countries found in database. Please add seed data.", isError: true);
+        }
       }
     } catch (e) {
-      print('Error fetching countries: $e');
+      print('❌ Error fetching countries: $e');
       if (mounted) {
         setState(() {
           isLoadingCountries = false;
         });
         _showSnackBar(
-            "Error loading countries. Please check your database schema.",
+            "Error loading countries: ${e.toString()}",
             isError: true);
       }
     }
@@ -157,6 +167,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   Future<void> _fetchStates(String countryId) async {
     if (!mounted) return;
+
+    print('🔍 Fetching states for country ID: $countryId');
+
     try {
       setState(() {
         isLoadingStates = true;
@@ -176,14 +189,23 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           .eq('country_id', int.parse(countryId))
           .order('name');
 
+      print('✅ States response: $response');
+
       if (mounted) {
+        final statesList = List<Map<String, dynamic>>.from(response as List);
+        print('✅ Loaded ${statesList.length} states');
+
         setState(() {
-          states = List<Map<String, dynamic>>.from(response as List);
+          states = statesList;
           isLoadingStates = false;
         });
+
+        if (states.isEmpty) {
+          _showSnackBar("No states found for selected country", isError: true);
+        }
       }
     } catch (e) {
-      print('Error fetching states: $e');
+      print('❌ Error fetching states: $e');
       if (mounted) {
         setState(() {
           isLoadingStates = false;
@@ -195,6 +217,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   Future<void> _fetchInstitutes(String stateId) async {
     if (!mounted) return;
+
+    print('🔍 Fetching institutes for state ID: $stateId');
+
     try {
       setState(() {
         isLoadingInstitutes = true;
@@ -210,14 +235,23 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           .eq('state_id', int.parse(stateId))
           .order('name');
 
+      print('✅ Institutes response: $response');
+
       if (mounted) {
+        final institutesList = List<Map<String, dynamic>>.from(response as List);
+        print('✅ Loaded ${institutesList.length} institutes');
+
         setState(() {
-          institutes = List<Map<String, dynamic>>.from(response as List);
+          institutes = institutesList;
           isLoadingInstitutes = false;
         });
+
+        if (institutes.isEmpty) {
+          _showSnackBar("No institutes found for selected state", isError: true);
+        }
       }
     } catch (e) {
-      print('Error fetching institutes: $e');
+      print('❌ Error fetching institutes: $e');
       if (mounted) {
         setState(() {
           isLoadingInstitutes = false;
@@ -263,9 +297,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     });
   }
 
-  // ⭐ CRITICAL FIX: This function checks for existing session and redirects
   Future<void> _checkExistingSessionAndNavigate() async {
-    if (_isCheckingSession) return; // Prevent multiple calls
+    if (_isCheckingSession) return;
 
     setState(() {
       _isCheckingSession = true;
@@ -274,11 +307,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     try {
       final session = supabase.auth.currentSession;
 
-      // Check if user has an active session
       if (session != null) {
         print('✅ Found existing session for user: ${session.user.email}');
 
-        // Show loading dialog while checking role
         if (mounted) {
           showDialog(
             context: context,
@@ -326,7 +357,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         try {
           final user = session.user;
 
-          // Get user profile to determine role
           final profile = await supabase
               .from('profiles')
               .select('role')
@@ -336,10 +366,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           final role = profile['role'] as String?;
           print('✅ User role: $role');
 
-          // Close loading dialog if still open
           if (mounted) Navigator.of(context, rootNavigator: true).pop();
 
-          // Navigate based on role using pushReplacementNamed
           if (mounted) {
             String route;
             switch (role?.toLowerCase()) {
@@ -356,7 +384,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 route = '/student-dashboard';
                 break;
               default:
-              // Unknown role or null role, sign out and show form
                 print('⚠️ Unknown role: $role, signing out');
                 await supabase.auth.signOut();
                 _navigateToWelcomeForm();
@@ -368,27 +395,23 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           }
         } catch (e) {
           print('❌ Error fetching user profile: $e');
-          // Close loading dialog if open
           if (mounted) {
             try {
               Navigator.of(context, rootNavigator: true).pop();
             } catch (_) {}
           }
 
-          // Profile doesn't exist or error occurred, sign out and show form
           await supabase.auth.signOut();
           _showSnackBar('Session expired or profile error. Please sign in again.',
               isError: true);
           _navigateToWelcomeForm();
         }
       } else {
-        // No active session, user needs to sign in - show the form
         print('ℹ️ No active session found, showing welcome form');
         _navigateToWelcomeForm();
       }
     } catch (e) {
       print('❌ Error checking session: $e');
-      // On any error, show the form
       _showSnackBar('Unable to verify session. Please sign in.', isError: true);
       _navigateToWelcomeForm();
     } finally {
@@ -403,12 +426,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   void _navigateToWelcomeForm() {
     if (!mounted) return;
 
-    if (countries.isEmpty && !isLoadingCountries) {
-      _showSnackBar("Please wait while we load the data...", isError: true);
-      _fetchCountries();
-      return;
-    }
-
+    // ✅ FIXED: Simplified logic - just show the form
     setState(() {
       _showWelcomeForm = true;
     });
@@ -461,7 +479,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: Stack(
             children: [
-              // Animated gradient blobs
               Positioned(
                 top: -MediaQuery.of(context).size.height * 0.25,
                 left: -MediaQuery.of(context).size.width * 0.25,
@@ -484,7 +501,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 ),
               ),
 
-              // Main content
               SafeArea(
                 child: Center(
                   child: Padding(
@@ -493,7 +509,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // App Name
                         Transform.translate(
                           offset: Offset(0, 30 * (1 - _contentAnimation.value)),
                           child: Opacity(
@@ -525,7 +540,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           ),
                         ),
 
-                        // Tagline
                         Transform.translate(
                           offset: Offset(0, 20 * (1 - _contentAnimation.value)),
                           child: Opacity(
@@ -551,7 +565,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 ),
               ),
 
-              // ⭐ CRITICAL: Next Button with Session Check
               Positioned(
                 bottom: 48,
                 left: 0,
@@ -641,7 +654,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 ),
               ),
 
-              // Loading indicator
               if (isLoadingCountries)
                 Positioned(
                   bottom: 0,
@@ -693,7 +705,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       ),
       child: Stack(
         children: [
-          // Background decoration
           Positioned(
             top: -100,
             left: -100,
@@ -713,14 +724,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ),
           ),
 
-          // Main form content
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(24.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Back button
                   Align(
                     alignment: Alignment.topLeft,
                     child: IconButton(
@@ -740,7 +749,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                   const SizedBox(height: 20),
 
-                  // Welcome title
                   Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ShaderMask(
@@ -762,7 +770,6 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     ),
                   ),
 
-                  // Subtitle
                   Container(
                     margin: const EdgeInsets.only(bottom: 40),
                     child: Text(
@@ -776,30 +783,20 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     ),
                   ),
 
-                  // Form section
                   Expanded(
                     child: SingleChildScrollView(
                       child: Container(
                         constraints: const BoxConstraints(maxWidth: 350),
                         child: Column(
                           children: [
-                            // Country dropdown
                             _buildCountryDropdown(),
                             const SizedBox(height: 20),
-
-                            // State dropdown
                             _buildStateDropdown(),
                             const SizedBox(height: 20),
-
-                            // Institute dropdown
                             _buildInstituteDropdown(),
                             const SizedBox(height: 20),
-
-                            // Role selection
                             _buildRoleSelection(),
                             const SizedBox(height: 40),
-
-                            // Continue button
                             _buildContinueButton(),
                           ],
                         ),
@@ -841,8 +838,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           ),
           child: DropdownButtonFormField<String>(
             value: selectedCountry,
-            onChanged: (value) {
-              if (value != null && countries.isNotEmpty) {
+            onChanged: isLoadingCountries || countries.isEmpty  // ✅ FIXED: Better disabled check
+                ? null
+                : (value) {
+              if (value != null) {
                 final country =
                 countries.firstWhere((c) => c['id'].toString() == value);
                 setState(() {
@@ -864,6 +863,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             decoration: InputDecoration(
               hintText: isLoadingCountries
                   ? 'Loading countries...'
+                  : countries.isEmpty
+                  ? 'No countries available'
                   : 'Select country',
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
