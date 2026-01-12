@@ -415,91 +415,35 @@ class _AuthHodPageState extends State<AuthHodPage>
   /// 2. upsert into `profiles` with that id (insert if missing, update if exists)
   /// 3. insert into `hods` (FK to profiles.id is now satisfied)
   Future<void> _handleRegistration() async {
-    if (_profileData['institute_id'] == null) {
-      throw Exception(
-          'Institute data missing from initial setup. Please go back to the Welcome screen.');
-    }
-
-    final departmentName = selectedDepartment;
-    if (departmentName == null) {
-      throw Exception('Please select a department.');
-    }
-
-    final departmentId = _departmentIdMap[departmentName];
-    if (departmentId == null) {
-      throw Exception('Department ID not found for selected department.');
-    }
-
-    final currentTime = DateTime.now().toIso8601String();
-    final instituteId = _profileData['institute_id'] as int?;
-    final countryId = _profileData['country_id'] as int?;
-    final stateId = _profileData['state_id'] as int?;
-    final confirmationTime = DateTime.now().toIso8601String();
+    final departmentId = _departmentIdMap[selectedDepartment];
 
     try {
-      // 1) Sign up the auth user
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
-        data: {
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'role': 'hod',
-          'email_confirmed_at': confirmationTime,
-          'email_verified': true,
-        },
       );
 
-      final user = authResponse.user;
-      if (user == null) {
-        throw Exception(
-            'Registration failed: user is null. Check email confirmation settings in Supabase.');
+      if (authResponse.user != null) {
+        await supabase.rpc('register_hod_rpc', params: {
+          'p_user_id': authResponse.user!.id,
+          'p_email': _emailController.text.trim(),
+          'p_first_name': _firstNameController.text.trim(),
+          'p_last_name': _lastNameController.text.trim(),
+          'p_father_name': _fatherNameController.text.trim(),
+          'p_gender': selectedGender,
+          'p_phone': _phoneController.text.trim(),
+          'p_hod_id': _hodIdController.text.trim(),
+          'p_dept_id': departmentId,
+          'p_inst_id': _profileData['institute_id'],
+          'p_state_id': _profileData['state_id'],
+          'p_country_id': _profileData['country_id'],
+        });
+
+        _showSuccessMessage('HOD Account created successfully!');
+        if (mounted) Navigator.pushReplacementNamed(context, '/hod-dashboard');
       }
-
-      final userId = user.id;
-
-      // 2) Ensure profile row exists and is populated (UPSERT!)
-      // This solves the foreign key issue even if the trigger didn't run.
-      await supabase.from('profiles').upsert({
-        'id': userId,
-        'first_name': _firstNameController.text.trim(),
-        'last_name': _lastNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'role': 'hod',
-        'phone': _phoneController.text.trim(),
-        'gender': selectedGender,
-        'department_id': departmentId,
-        'country_id': countryId,
-        'state_id': stateId,
-        'institute_id': instituteId,
-        'email_verified': true,
-        'created_at': currentTime,
-        'updated_at': currentTime,
-      }, onConflict: 'id');
-
-      // 3) Insert into HODs (FK -> profiles.id)
-      await supabase.from('hods').insert({
-        'user_id': userId,
-        'first_name': _firstNameController.text.trim(),
-        'last_name': _lastNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'father_name': _fatherNameController.text.trim(),
-        'gender': selectedGender,
-        'phone': _phoneController.text.trim(),
-        'hod_id': _hodIdController.text.trim(),
-        'department_id': departmentId,
-        'created_at': currentTime,
-      });
-
-      _showSuccessMessage(
-          'Account created successfully! Redirecting to dashboard...');
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/hod-dashboard');
-      }
-    } on AuthException catch (e) {
-      throw Exception('Registration failed: ${e.message}');
     } catch (error) {
-      throw Exception('Registration failed: $error');
+      throw Exception('Registration Error: $error');
     }
   }
 
