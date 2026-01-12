@@ -391,68 +391,35 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   Future<void> _handleRegistration() async {
-    if (_profileData['institute_id'] == null) {
-      throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
-    }
-
-    final departmentName = selectedDepartment;
-    final departmentId = departmentName != null ? _departmentIdMap[departmentName] : null;
-
-    if (departmentId == null) {
-      throw Exception('Department ID not found or selected department is invalid.');
-    }
+    final departmentId = _departmentIdMap[selectedDepartment];
 
     try {
-      final currentTime = DateTime.now().toIso8601String();
-      final instituteId = _profileData['institute_id'] as int;
-
-      // 1. Sign up the user in Supabase Auth (Creates user ID and password hash)
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        final userId = authResponse.user!.id;
-
-        // 2. Insert profile/role information into 'profiles' table (Central identity)
-        await supabase.from('profiles').insert({
-          'id': userId,
-          'role': 'faculty',
-          'email': _emailController.text.trim(),
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'gender': selectedGender,
-          'department_id': departmentId,
-          'country_id': _profileData['country_id'],
-          'state_id': _profileData['state_id'],
-          'institute_id': instituteId,
-          'email_verified': true,
-          'created_at': currentTime,
+        await supabase.rpc('register_faculty_rpc', params: {
+          'p_user_id': authResponse.user!.id,
+          'p_email': _emailController.text.trim(),
+          'p_first_name': _firstNameController.text.trim(),
+          'p_last_name': _lastNameController.text.trim(),
+          'p_gender': selectedGender,
+          'p_phone': _phoneController.text.trim(),
+          'p_faculty_id': _facultyIdController.text.trim(),
+          'p_dept_id': departmentId,
+          'p_subjects': selectedSubjects, // Pass the List<String> directly
+          'p_inst_id': _profileData['institute_id'],
+          'p_state_id': _profileData['state_id'],
+          'p_country_id': _profileData['country_id'],
         });
 
-        // 3. Insert faculty-specific details into 'faculty' table
-        await supabase.from('faculty').insert({
-          'user_id': userId,
-          'faculty_id': _facultyIdController.text.trim(),
-          'subjects': selectedSubjects,
-          'department_id': departmentId,
-          'email': _emailController.text.trim(),
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'gender': selectedGender,
-          'joining_date': currentTime.substring(0, 10),
-        });
-
-        _showSuccessMessage('Account created successfully!');
+        _showSuccessMessage('Faculty Account created successfully!');
         if (mounted) Navigator.pushReplacementNamed(context, '/faculty-dashboard');
       }
-    } on AuthException catch (e) {
-      throw Exception('Registration failed: ${e.message}');
     } catch (error) {
-      throw Exception('Registration failed: ${error.toString()}');
+      throw Exception('Registration Error: $error');
     }
   }
 
