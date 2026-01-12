@@ -340,75 +340,45 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
-      throw Exception('Institute data missing from initial setup. Please go back to the Welcome screen.');
+      throw Exception('Institute data missing from setup.');
     }
 
-    // --- Start of Fix: Get Department ID from Map ---
-    final departmentName = selectedDepartment;
-    if (departmentName == null) {
-      throw Exception('Please select a department.');
-    }
-
-    final departmentId = _departmentIdMap[departmentName];
-    if (departmentId == null) {
-      // This should ideally not happen if departments were loaded correctly
-      throw Exception('Department ID not found for selected department.');
-    }
-    // --- End of Fix: Get Department ID from Map ---
+    final departmentId = _departmentIdMap[selectedDepartment];
+    if (departmentId == null) throw Exception('Please select a department.');
 
     try {
-      final currentTime = DateTime.now().toIso8601String();
-      final instituteId = _profileData['institute_id'] as int;
-
-      // 1. Sign up with email and password
+      // 1. Create the Auth User
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        final userId = authResponse.user!.id;
-
-        // 2. Insert student data into students table
-        await supabase.from('students').insert({
-          'user_id': userId,
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'father_name': _fatherNameController.text.trim(),
-          'gender': selectedGender,
-          'phone': _phoneController.text.trim(),
-          'student_id': _studentIdController.text.trim(),
-          'department_id': departmentId, // <-- FIXED: Use department_id (int)
-          'roll_number': _rollNoController.text.trim(),
-          'created_at': currentTime,
+        // 2. Execute Atomic Transaction via RPC
+        // This ensures the profile and student record are created at the same time
+        await supabase.rpc('register_student_rpc', params: {
+          'p_user_id': authResponse.user!.id,
+          'p_email': _emailController.text.trim(),
+          'p_first_name': _firstNameController.text.trim(),
+          'p_last_name': _lastNameController.text.trim(),
+          'p_father_name': _fatherNameController.text.trim(),
+          'p_gender': selectedGender,
+          'p_phone': _phoneController.text.trim(),
+          'p_student_id': _studentIdController.text.trim(),
+          'p_roll_number': _rollNoController.text.trim(),
+          'p_dept_id': departmentId,
+          'p_inst_id': _profileData['institute_id'],
+          'p_state_id': _profileData['state_id'],
+          'p_country_id': _profileData['country_id'],
         });
 
-        // 3. Create profile in the main 'profiles' table (Crucial step)
-        await supabase.from('profiles').insert({
-          'id': userId,
-          'role': 'student',
-          'email': _emailController.text.trim(),
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'gender': selectedGender,
-          'department_id': departmentId, // <-- FIXED: Use department_id (int)
-          // Removed redundant 'department' field: departmentName,
-          'country_id': _profileData['country_id'],
-          'state_id': _profileData['state_id'],
-          'institute_id': instituteId,
-          'email_verified': true,
-          'created_at': currentTime,
-        });
-
-        _showSuccessMessage('Account created successfully!');
+        _showSuccessMessage('Student Account created successfully!');
         if (mounted) Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
     } on AuthException catch (e) {
-      throw Exception('Registration failed: ${e.message}');
+      throw Exception('Auth error: ${e.message}');
     } catch (error) {
-      throw Exception('Registration failed: ${error.toString()}');
+      throw Exception('Registration Error: $error');
     }
   }
 
