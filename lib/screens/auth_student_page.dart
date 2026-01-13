@@ -13,7 +13,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     with TickerProviderStateMixin {
   late AnimationController _backgroundController;
   late AnimationController _contentController;
-
   late Animation<double> _backgroundAnimation;
   late Animation<double> _contentAnimation;
 
@@ -24,23 +23,19 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
   String? selectedGender;
-  String? selectedDepartment; // Stores department NAME
+  String? selectedDepartment;
+  String? selectedYear; // NEW: Year selection
   String _captchaText = '';
   int _otpCountdown = 0;
   late AnimationController _otpTimerController;
 
-  // --- State for dynamic department loading ---
-  List<String> _departmentNames = []; // List for Dropdown names
-  Map<String, int> _departmentIdMap = {}; // Map: Name -> ID
-  bool _departmentsLoaded = false; // New state to track loading status
-  // --- End of Fix ---
+  List<String> _departmentNames = [];
+  Map<String, int> _departmentIdMap = {};
+  bool _departmentsLoaded = false;
 
-  // Store data from WelcomeScreen
   Map<String, dynamic> _profileData = {};
   bool _isDataLoaded = false;
 
-
-  // Supabase client
   final SupabaseClient supabase = Supabase.instance.client;
 
   final _formKey = GlobalKey<FormState>();
@@ -57,32 +52,38 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   final _captchaController = TextEditingController();
 
   final List<String> genders = ['Male', 'Female', 'Other'];
+  final List<String> years = ['I', 'II', 'III', 'IV', 'V']; // NEW: Roman numerals
 
   @override
   void initState() {
     super.initState();
 
-    _backgroundController = AnimationController(duration: const Duration(milliseconds: 2000), vsync: this);
-    _contentController = AnimationController(duration: const Duration(milliseconds: 1200), vsync: this);
-    _otpTimerController = AnimationController(duration: const Duration(seconds: 60), vsync: this);
+    _backgroundController = AnimationController(
+        duration: const Duration(milliseconds: 2000), vsync: this);
+    _contentController = AnimationController(
+        duration: const Duration(milliseconds: 1200), vsync: this);
+    _otpTimerController =
+        AnimationController(duration: const Duration(seconds: 60), vsync: this);
 
-    _backgroundAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
-    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
+    _backgroundAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
+    _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
 
     _generateCaptcha();
-    _fetchDepartments(); // Add initial department data load
+    _fetchDepartments();
     _backgroundController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
       _contentController.forward();
     });
   }
 
-  // Get arguments from WelcomeScreen
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isDataLoaded) {
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final args =
+      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
         _profileData = args;
         _isDataLoaded = true;
@@ -109,13 +110,12 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     super.dispose();
   }
 
-  // --- Updated: Fetch departments from DB ---
   Future<void> _fetchDepartments() async {
     try {
       final response = await supabase
           .from('departments')
           .select('id, name')
-          .order('name', ascending: true); // Order by name for cleaner UI
+          .order('name', ascending: true);
 
       if (response is List) {
         final List<String> names = [];
@@ -131,29 +131,29 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         setState(() {
           _departmentNames = names;
           _departmentIdMap = idMap;
-          _departmentsLoaded = true; // Mark as loaded
+          _departmentsLoaded = true;
         });
       } else {
         setState(() {
-          _departmentsLoaded = true; // Mark as loaded even if empty response
+          _departmentsLoaded = true;
         });
       }
     } catch (e) {
       _showErrorMessage('Error loading departments. Please check your network.');
       print('Department fetch error: $e');
       setState(() {
-        _departmentsLoaded = true; // Important: mark as loaded on error
+        _departmentsLoaded = true;
       });
     }
   }
-  // --- End of Update: Fetch departments from DB ---
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     Random random = Random();
     setState(() {
       _captchaText = String.fromCharCodes(
-        Iterable.generate(6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
+        Iterable.generate(
+            6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
       );
     });
   }
@@ -174,7 +174,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
   }
 
-  // Uses Supabase's built-in signInWithOtp for student email verification
   Future<void> _sendOTP() async {
     if (_emailController.text.isEmpty || !_formKey.currentState!.validate()) {
       _showErrorMessage('Please enter a valid email first.');
@@ -193,17 +192,16 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           .maybeSingle();
 
       if (response != null && !_isLogin) {
-        _showErrorMessage('Email already registered. Please use login instead.');
+        _showErrorMessage(
+            'Email already registered. Please use login instead.');
         setState(() {
           _isLoading = false;
         });
         return;
       }
 
-      // Send OTP using Supabase Auth
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
-        // Note: You must enable "Email OTP Signups" in Supabase Auth settings
       );
 
       setState(() {
@@ -213,7 +211,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       _startOtpTimer();
       _showSuccessMessage('OTP sent successfully to your email');
-
     } on AuthException catch (error) {
       setState(() {
         _isLoading = false;
@@ -244,7 +241,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
-      // Verify OTP with Supabase
       final response = await supabase.auth.verifyOTP(
         email: _emailController.text.trim(),
         token: _otpController.text.trim(),
@@ -274,7 +270,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   bool _isPasswordValid(String password) {
-    RegExp passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
+    RegExp passwordRegex = RegExp(
+        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
     return passwordRegex.hasMatch(password);
   }
 
@@ -296,7 +293,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           await _handleRegistration();
         }
       } catch (error) {
-        _showErrorMessage(error is Exception ? error.toString().replaceFirst('Exception: ', '') : 'An unexpected error occurred.');
+        _showErrorMessage(error is Exception
+            ? error.toString().replaceFirst('Exception: ', '')
+            : 'An unexpected error occurred.');
       } finally {
         setState(() {
           _isLoading = false;
@@ -329,10 +328,12 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       if (authResponse.user != null) {
         _showSuccessMessage('Login successful!');
-        if (mounted) Navigator.pushReplacementNamed(context, '/student-dashboard');
+        if (mounted)
+          Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
     } on AuthException catch (e) {
-      throw Exception('Login failed: Invalid credentials or account not confirmed.');
+      throw Exception(
+          'Login failed: Invalid credentials or account not confirmed.');
     } catch (error) {
       throw Exception('Login failed: ${error.toString()}');
     }
@@ -346,6 +347,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     final departmentId = _departmentIdMap[selectedDepartment];
     if (departmentId == null) throw Exception('Please select a department.');
 
+    if (selectedYear == null) throw Exception('Please select your year.');
+
     try {
       // 1. Create the Auth User
       final authResponse = await supabase.auth.signUp(
@@ -354,8 +357,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       );
 
       if (authResponse.user != null) {
-        // 2. Execute Atomic Transaction via RPC
-        // This ensures the profile and student record are created at the same time
+        // 2. Execute Atomic Transaction via RPC with YEAR field
         await supabase.rpc('register_student_rpc', params: {
           'p_user_id': authResponse.user!.id,
           'p_email': _emailController.text.trim(),
@@ -366,6 +368,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           'p_phone': _phoneController.text.trim(),
           'p_student_id': _studentIdController.text.trim(),
           'p_roll_number': _rollNoController.text.trim(),
+          'p_year': selectedYear, // NEW: Send year to RPC
           'p_dept_id': departmentId,
           'p_inst_id': _profileData['institute_id'],
           'p_state_id': _profileData['state_id'],
@@ -373,7 +376,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         });
 
         _showSuccessMessage('Student Account created successfully!');
-        if (mounted) Navigator.pushReplacementNamed(context, '/student-dashboard');
+        if (mounted)
+          Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
     } on AuthException catch (e) {
       throw Exception('Auth error: ${e.message}');
@@ -431,8 +435,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                       Row(
                         children: [
                           IconButton(
-                            // 💡 FIX APPLIED HERE: Use pushReplacementNamed to go back to the welcome route
-                            onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
+                            onPressed: () => Navigator.pushReplacementNamed(
+                                context, '/welcome'),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
                           ),
@@ -642,6 +646,24 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                           ),
                           const SizedBox(height: 20),
 
+                          // NEW: Year field (Roman numerals)
+                          _buildDropdownField(
+                            label: 'Year',
+                            value: selectedYear,
+                            items: years,
+                            onChanged: (value) =>
+                                setState(() => selectedYear = value),
+                            hint: 'Select year',
+                            icon: Icons.calendar_today_outlined,
+                            validator: (value) {
+                              if (value == null) {
+                                return 'Please select your year';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 20),
+
                           // Student ID field
                           _buildInputField(
                             controller: _studentIdController,
@@ -657,10 +679,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                           ),
                           const SizedBox(height: 20),
 
-                          // Department field (Conditional rendering)
+                          // Department field
                           if (!_departmentsLoaded)
                             _buildInputField(
-                              controller: TextEditingController(text: 'Loading departments...'),
+                              controller: TextEditingController(
+                                  text: 'Loading departments...'),
                               label: 'Department',
                               placeholder: 'Loading...',
                               icon: Icons.business_outlined,
@@ -669,9 +692,12 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                             )
                           else if (_departmentNames.isEmpty)
                             _buildInputField(
-                              controller: TextEditingController(text: 'No departments found (Check DB)'),
+                              controller: TextEditingController(
+                                  text:
+                                  'No departments found (Check DB)'),
                               label: 'Department',
-                              placeholder: 'Check database connection or seeding',
+                              placeholder:
+                              'Check database connection or seeding',
                               icon: Icons.error_outline,
                               enabled: false,
                               validator: (_) => 'Department list is empty.',
@@ -738,7 +764,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                           obscureText: !_passwordVisible,
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _passwordVisible ? Icons.visibility : Icons.visibility_off,
+                              _passwordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                               color: Colors.grey[500],
                             ),
                             onPressed: () {
@@ -771,12 +799,15 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                             obscureText: !_confirmPasswordVisible,
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _confirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                _confirmPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                                 color: Colors.grey[500],
                               ),
                               onPressed: () {
                                 setState(() {
-                                  _confirmPasswordVisible = !_confirmPasswordVisible;
+                                  _confirmPasswordVisible =
+                                  !_confirmPasswordVisible;
                                 });
                               },
                             ),
@@ -830,7 +861,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                             borderRadius: BorderRadius.circular(28),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                                color:
+                                const Color(0xFF8B5CF6).withOpacity(0.3),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -924,7 +956,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       _showErrorMessage('Please enter your roll number first');
       return;
     }
-
     setState(() {
       _isLoading = true;
     });
