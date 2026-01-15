@@ -205,7 +205,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
         return;
       }
 
-      // Captcha validation
       if (_captchaController.text.toUpperCase() != _captchaText) {
         _showErrorMessage('Incorrect captcha. Please try again.');
         _generateCaptcha();
@@ -236,12 +235,10 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     }
   }
 
-  // Two-step lookup for BIGINT ID to fix the previous data type error
   Future<void> _handleLogin() async {
     try {
       final instituteCode = _instituteIdController.text.trim();
 
-      // 1. Find the Institute ID (BIGINT) using the Institute Code (String)
       final instituteResponse = await supabase
           .from('institutes')
           .select('id')
@@ -254,11 +251,10 @@ class _AuthAdminPageState extends State<AuthAdminPage>
 
       final instituteBigIntId = instituteResponse['id'] as int;
 
-      // 2. Find the admin's profile (which contains the email) using the BIGINT ID
       final adminProfile = await supabase
           .from('profiles')
           .select('email, first_name')
-          .eq('institute_id', instituteBigIntId) // Filter by the BIGINT ID
+          .eq('institute_id', instituteBigIntId)
           .eq('role', 'admin')
           .maybeSingle();
 
@@ -268,14 +264,12 @@ class _AuthAdminPageState extends State<AuthAdminPage>
 
       final adminEmail = adminProfile['email'] as String;
 
-      // 3. Sign in with the retrieved email and the provided password
       final authResponse = await supabase.auth.signInWithPassword(
         email: adminEmail,
         password: _passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        // 4. Update profile for consistency (optional)
         await supabase.from('profiles').update({
           'last_login': DateTime.now().toIso8601String(),
         }).eq('id', authResponse.user!.id);
@@ -290,7 +284,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     }
   }
 
-  // >>>>>>>>>>>>>> FIX APPLIED HERE: REMOVED PASSWORD FROM INSERTION MAPS <<<<<<<<<<<<<<
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
       throw Exception('Institute data missing from initial setup.');
@@ -301,7 +294,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
       final instituteCode = _instituteIdController.text.trim();
       final initialInstituteId = _profileData['institute_id'] as int;
 
-      // 1. Find the Institute ID (BIGINT) using the Institute Code (String)
       final instituteResponse = await supabase
           .from('institutes')
           .select('id, state_id, country_id')
@@ -316,11 +308,10 @@ class _AuthAdminPageState extends State<AuthAdminPage>
       final stateId = instituteResponse['state_id'] as int;
       final countryId = instituteResponse['country_id'] as int;
 
-      // 2. Check if an admin already exists for this institute_id (BIGINT)
       final existingAdmin = await supabase
           .from('profiles')
           .select('id')
-          .eq('institute_id', instituteBigIntId) // Filter by the BIGINT ID
+          .eq('institute_id', instituteBigIntId)
           .eq('role', 'admin')
           .maybeSingle();
 
@@ -328,7 +319,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
         throw Exception('An admin is already registered for this Institute ID.');
       }
 
-      // 3. Sign up with email and password (Creates the user and password hash in auth.users)
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -337,20 +327,16 @@ class _AuthAdminPageState extends State<AuthAdminPage>
       if (authResponse.user != null) {
         final userId = authResponse.user!.id;
 
-        // 4. Insert admin data into admins table
-        // NOTE: 'password' REMOVED to match corrected schema and prevent NOT NULL error
         await supabase.from('admins').insert({
           'user_id': userId,
           'first_name': _firstNameController.text.trim(),
           'last_name': _lastNameController.text.trim(),
           'email': _emailController.text.trim(),
           'phone': _phoneController.text.trim(),
-          'institute_id': instituteBigIntId, // Use the BIGINT ID
+          'institute_id': instituteBigIntId,
           'created_at': currentTime,
         });
 
-        // 5. Create profile in the main 'profiles' table
-        // NOTE: 'password' REMOVED to match corrected schema and prevent NOT NULL error
         await supabase.from('profiles').insert({
           'id': userId,
           'role': 'admin',
@@ -359,17 +345,12 @@ class _AuthAdminPageState extends State<AuthAdminPage>
           'last_name': _lastNameController.text.trim(),
           'phone': _phoneController.text.trim(),
           'email_verified': true,
-
-          // Use IDs retrieved from step 1
-          'institute_id': instituteBigIntId, // Use the BIGINT ID
+          'institute_id': instituteBigIntId,
           'state_id': stateId,
           'country_id': countryId,
-
-          // Using data from initial screen state (optional, for consistency)
           'country': _profileData['country_name'],
           'state': _profileData['state_name'],
           'institute': _profileData['institute_name'],
-
           'created_at': currentTime,
         });
 
@@ -403,6 +384,390 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     );
   }
 
+  // NEW: Show Terms and Conditions Dialog
+  void _showTermsAndConditions() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  Colors.purple.shade50,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.description, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Terms and Conditions',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTermsSection(
+                          'Last Updated: January 15, 2026',
+                          '',
+                          isDate: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTermsSection(
+                          '1. Acceptance of Terms',
+                          'By accessing and using the Achivo Admin Portal, you accept and agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our services.',
+                        ),
+                        _buildTermsSection(
+                          '2. Admin Account Registration',
+                          'You agree to provide accurate, current, and complete information during the registration process. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.',
+                        ),
+                        _buildTermsSection(
+                          '3. Authorized Use',
+                          'Admin accounts are intended solely for authorized personnel of educational institutions. You may not share your login credentials with unauthorized individuals or use the portal for any unlawful purposes.',
+                        ),
+                        _buildTermsSection(
+                          '4. Data Privacy and Security',
+                          'We take data security seriously. All personal and institutional data is encrypted and stored securely. You acknowledge that you are responsible for maintaining the confidentiality of student and institutional information accessed through the portal.',
+                        ),
+                        _buildTermsSection(
+                          '5. Intellectual Property',
+                          'All content, features, and functionality of the Achivo platform are owned by Achivo and are protected by international copyright, trademark, and other intellectual property laws.',
+                        ),
+                        _buildTermsSection(
+                          '6. Prohibited Activities',
+                          'You agree not to:\n• Attempt to gain unauthorized access to any portion of the portal\n• Use the platform to transmit malicious code or viruses\n• Interfere with or disrupt the integrity or performance of the platform\n• Attempt to decipher, decompile, or reverse engineer any software',
+                        ),
+                        _buildTermsSection(
+                          '7. Service Availability',
+                          'While we strive to maintain continuous service availability, we do not guarantee uninterrupted access. We reserve the right to modify, suspend, or discontinue any aspect of the service with or without notice.',
+                        ),
+                        _buildTermsSection(
+                          '8. Limitation of Liability',
+                          'Achivo shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use or inability to use the service.',
+                        ),
+                        _buildTermsSection(
+                          '9. Governing Law',
+                          'These Terms shall be governed by and construed in accordance with the laws of India, without regard to its conflict of law provisions.',
+                        ),
+                        _buildTermsSection(
+                          '10. Changes to Terms',
+                          'We reserve the right to modify these terms at any time. Continued use of the platform after changes constitutes acceptance of the modified terms.',
+                        ),
+                        _buildTermsSection(
+                          '11. Contact Information',
+                          'For questions about these Terms and Conditions, please contact us at:\n\nEmail: support@achivo.com\nPhone: +91-XXX-XXX-XXXX',
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.blue.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'By clicking "Create Admin Account" or "Sign In as Admin", you acknowledge that you have read and agree to these Terms and Conditions.',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Footer Button
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Understand',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // NEW: Show Privacy Policy Dialog
+  void _showPrivacyPolicy() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  Colors.blue.shade50,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.privacy_tip, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Privacy Policy',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTermsSection(
+                          'Effective Date: January 15, 2026',
+                          '',
+                          isDate: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTermsSection(
+                          '1. Information We Collect',
+                          'We collect information that you provide directly to us, including:\n• Personal identification (name, email, phone number)\n• Institute details and credentials\n• Account authentication data\n• Usage data and preferences',
+                        ),
+                        _buildTermsSection(
+                          '2. How We Use Your Information',
+                          'We use the collected information to:\n• Provide and maintain our services\n• Authenticate and authorize admin access\n• Communicate important updates and notifications\n• Improve our platform and user experience\n• Comply with legal obligations',
+                        ),
+                        _buildTermsSection(
+                          '3. Data Security',
+                          'We implement industry-standard security measures to protect your data:\n• End-to-end encryption for sensitive information\n• Secure authentication protocols (OTP verification)\n• Regular security audits and updates\n• Restricted access to authorized personnel only',
+                        ),
+                        _buildTermsSection(
+                          '4. Data Sharing and Disclosure',
+                          'We do not sell or rent your personal information. We may share data only:\n• With your explicit consent\n• To comply with legal requirements\n• To protect our rights and prevent fraud\n• With trusted service providers under strict confidentiality',
+                        ),
+                        _buildTermsSection(
+                          '5. Cookies and Tracking',
+                          'We use cookies and similar technologies to enhance user experience, maintain sessions, and analyze platform usage. You can control cookie preferences through your browser settings.',
+                        ),
+                        _buildTermsSection(
+                          '6. Data Retention',
+                          'We retain your information for as long as your account is active or as needed to provide services. You may request account deletion at any time, subject to legal retention requirements.',
+                        ),
+                        _buildTermsSection(
+                          '7. Your Rights',
+                          'You have the right to:\n• Access your personal data\n• Correct inaccurate information\n• Request data deletion\n• Opt-out of marketing communications\n• Export your data in a portable format',
+                        ),
+                        _buildTermsSection(
+                          '8. Children\'s Privacy',
+                          'Our admin portal is not intended for individuals under 18 years of age. We do not knowingly collect personal information from minors.',
+                        ),
+                        _buildTermsSection(
+                          '9. International Data Transfers',
+                          'Your data may be transferred and processed in countries other than your own. We ensure appropriate safeguards are in place to protect your information.',
+                        ),
+                        _buildTermsSection(
+                          '10. Changes to Privacy Policy',
+                          'We may update this Privacy Policy periodically. We will notify you of significant changes via email or platform notification.',
+                        ),
+                        _buildTermsSection(
+                          '11. Contact Us',
+                          'For privacy-related inquiries:\n\nEmail: privacy@achivo.com\nPhone: +91-XXX-XXX-XXXX\nAddress: Achivo Headquarters, India',
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.verified_user, color: Colors.green.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Your privacy is important to us. We are committed to protecting your personal information and maintaining transparency.',
+                                  style: TextStyle(
+                                    color: Colors.green.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Footer Button
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B82F6),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Understand',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTermsSection(String title, String content, {bool isDate = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isDate ? 12 : 16,
+              fontWeight: isDate ? FontWeight.w500 : FontWeight.bold,
+              color: isDate ? Colors.grey[600] : Colors.grey[800],
+            ),
+          ),
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              content,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
+                height: 1.6,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -430,7 +795,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
                       Row(
                         children: [
                           IconButton(
-                            // 💡 FIXED: Navigate back to the WelcomeScreen route
                             onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
@@ -641,7 +1005,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
                         ],
 
                         // Password field
-                        // Only show password fields if email is verified OR if it's a login attempt
                         if (_isOtpVerified || _isLogin) ...[
                           _buildInputField(
                             controller: _passwordController,
@@ -823,25 +1186,37 @@ class _AuthAdminPageState extends State<AuthAdminPage>
 
                   const SizedBox(height: 32),
 
-                  // Footer
+                  // Footer - UPDATED WITH CLICKABLE LINKS
                   Text.rich(
                     TextSpan(
                       text: 'By continuing, you agree to our ',
                       style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      children: const [
-                        TextSpan(
-                          text: 'Terms of Service',
-                          style: TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            decoration: TextDecoration.underline,
+                      children: [
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: _showTermsAndConditions,
+                            child: const Text(
+                              'Terms of Service',
+                              style: TextStyle(
+                                color: Color(0xFF8B5CF6),
+                                decoration: TextDecoration.underline,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
                         ),
-                        TextSpan(text: ' and '),
-                        TextSpan(
-                          text: 'Privacy Policy',
-                          style: TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            decoration: TextDecoration.underline,
+                        const TextSpan(text: ' and '),
+                        WidgetSpan(
+                          child: GestureDetector(
+                            onTap: _showPrivacyPolicy,
+                            child: const Text(
+                              'Privacy Policy',
+                              style: TextStyle(
+                                color: Color(0xFF8B5CF6),
+                                decoration: TextDecoration.underline,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -952,13 +1327,12 @@ class _AuthAdminPageState extends State<AuthAdminPage>
               if (value == null || value.isEmpty) {
                 return 'Please enter your institute email';
               }
-              // Relaxed Regex for general validation
-              if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+              if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})
                   .hasMatch(value)) {
-                return 'Please enter a valid email address';
+              return 'Please enter a valid email address';
               }
               return null;
-            },
+              },
             style: TextStyle(color: Colors.grey[800], fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Enter your institute email',
@@ -990,7 +1364,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
           ),
         ),
 
-        // OTP Field (only shows when OTP is sent and not verified, and not on login)
         if (_isOtpSent && !_isOtpVerified && !_isLogin) ...[
           const SizedBox(height: 16),
           _buildEnhancedOtpField(),
@@ -1202,7 +1575,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
                     if (value == null || value.isEmpty) {
                       return 'Please enter captcha';
                     }
-                    // Captcha validation is handled in _handleSubmit for better UX
                     return null;
                   },
                   style: TextStyle(color: Colors.grey[800], fontSize: 16),
