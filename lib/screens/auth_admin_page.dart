@@ -1327,12 +1327,13 @@ class _AuthAdminPageState extends State<AuthAdminPage>
               if (value == null || value.isEmpty) {
                 return 'Please enter your institute email';
               }
-              if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})
-                  .hasMatch(value)) {
-              return 'Please enter a valid email address';
+              // Corrected RegExp and logical flow
+              final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+              if (!emailRegex.hasMatch(value)) {
+                return 'Please enter a valid email address';
               }
               return null;
-              },
+            },
             style: TextStyle(color: Colors.grey[800], fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Enter your institute email',
