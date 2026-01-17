@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
+SupabaseClient get supabase => Supabase.instance.client;
+
 class AuthStudentPage extends StatefulWidget {
   const AuthStudentPage({Key? key}) : super(key: key);
 
@@ -13,6 +15,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     with TickerProviderStateMixin {
   late AnimationController _backgroundController;
   late AnimationController _contentController;
+  late AnimationController _otpTimerController;
+
   late Animation<double> _backgroundAnimation;
   late Animation<double> _contentAnimation;
 
@@ -22,12 +26,12 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   bool _isOtpVerified = false;
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
+  bool _showEmailVerificationPending = false;
   String? selectedGender;
   String? selectedDepartment;
-  String? selectedYear; // NEW: Year selection
+  String? selectedYear;
   String _captchaText = '';
   int _otpCountdown = 0;
-  late AnimationController _otpTimerController;
 
   List<String> _departmentNames = [];
   Map<String, int> _departmentIdMap = {};
@@ -35,8 +39,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   Map<String, dynamic> _profileData = {};
   bool _isDataLoaded = false;
-
-  final SupabaseClient supabase = Supabase.instance.client;
 
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
@@ -52,7 +54,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   final _captchaController = TextEditingController();
 
   final List<String> genders = ['Male', 'Female', 'Other'];
-  final List<String> years = ['I', 'II', 'III', 'IV', 'V']; // NEW: Roman numerals
+  final List<String> years = ['I', 'II', 'III', 'IV', 'V'];
 
   @override
   void initState() {
@@ -65,7 +67,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     _otpTimerController =
         AnimationController(duration: const Duration(seconds: 60), vsync: this);
 
-    _backgroundAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
         CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
     _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
         CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
@@ -139,7 +141,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         });
       }
     } catch (e) {
-      _showErrorMessage('Error loading departments. Please check your network.');
       print('Department fetch error: $e');
       setState(() {
         _departmentsLoaded = true;
@@ -149,7 +150,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    Random random = Random();
+    Random random = Random.secure(); // ✅ Use secure random
     setState(() {
       _captchaText = String.fromCharCodes(
         Iterable.generate(
@@ -175,8 +176,21 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   Future<void> _sendOTP() async {
-    if (_emailController.text.isEmpty || !_formKey.currentState!.validate()) {
+    if (_emailController.text.isEmpty) {
       _showErrorMessage('Please enter a valid email first.');
+      return;
+    }
+
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+        .hasMatch(_emailController.text.trim())) {
+      _showErrorMessage('Please enter a valid email address.');
+      return;
+    }
+
+    if (_captchaController.text.toUpperCase() != _captchaText) {
+      _showErrorMessage('Incorrect captcha. Please re-enter.');
+      _generateCaptcha();
+      _captchaController.clear();
       return;
     }
 
@@ -185,15 +199,14 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
-      final response = await supabase
-          .from('students')
+      final profileResponse = await supabase
+          .from('profiles')
           .select('email')
           .eq('email', _emailController.text.trim())
           .maybeSingle();
 
-      if (response != null && !_isLogin) {
-        _showErrorMessage(
-            'Email already registered. Please use login instead.');
+      if (profileResponse != null && !_isLogin) {
+        _showErrorMessage('Email already registered. Please use login instead.');
         setState(() {
           _isLoading = false;
         });
@@ -202,6 +215,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
+        emailRedirectTo: 'achivo://email-verified',
       );
 
       setState(() {
@@ -210,17 +224,17 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       });
 
       _startOtpTimer();
-      _showSuccessMessage('OTP sent successfully to your email');
+      _showSuccessMessage('Verification code sent to your email! Check your inbox.');
     } on AuthException catch (error) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Failed to send OTP: ${error.message}');
+      _showErrorMessage('Failed to send verification code: ${error.message}');
     } catch (error) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Failed to send OTP: ${error.toString()}');
+      _showErrorMessage('Failed to send verification code: ${error.toString()}');
     }
   }
 
@@ -232,7 +246,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
-      _showErrorMessage('Please enter the 6-digit OTP.');
+      _showErrorMessage('Please enter the 6-digit verification code.');
       return;
     }
 
@@ -248,24 +262,26 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       );
 
       if (response.user != null) {
+        await supabase.auth.signOut();
+
         setState(() {
           _isLoading = false;
           _isOtpVerified = true;
           _otpTimerController.stop();
         });
 
-        _showSuccessMessage('Email verified successfully!');
+        _showSuccessMessage('Email verified successfully! You can now complete registration.');
       }
     } on AuthException catch (error) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Invalid OTP: ${error.message}');
+      _showErrorMessage('Invalid verification code: ${error.message}');
     } catch (error) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('OTP verification failed: ${error.toString()}');
+      _showErrorMessage('Verification failed: ${error.toString()}');
     }
   }
 
@@ -279,6 +295,13 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     if (_formKey.currentState!.validate()) {
       if (!_isLogin && !_isOtpVerified) {
         _showErrorMessage('Please verify your email first');
+        return;
+      }
+
+      if (_captchaController.text.toUpperCase() != _captchaText) {
+        _showErrorMessage('Incorrect captcha. Please refresh and try again.');
+        _generateCaptcha();
+        _captchaController.clear();
         return;
       }
 
@@ -311,9 +334,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   Future<void> _handleLogin() async {
     try {
+      print('🔐 Starting login for roll number: ${_rollNoController.text}');
+
       final studentResponse = await supabase
           .from('students')
-          .select('email')
+          .select('email, is_active')
           .eq('roll_number', _rollNoController.text.trim())
           .maybeSingle();
 
@@ -321,68 +346,182 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         throw Exception('Student not found. Please check your roll number.');
       }
 
+      final email = studentResponse['email'] as String;
+      final isActive = studentResponse['is_active'] as bool?;
+
+      print('📧 Found student email: $email, Active: $isActive');
+
+      if (isActive == false) {
+        throw Exception(
+          'Your account is not activated. Please verify your email first. '
+              'Check your inbox for the verification link.',
+        );
+      }
+
       final authResponse = await supabase.auth.signInWithPassword(
-        email: studentResponse['email'],
+        email: email,
         password: _passwordController.text.trim(),
       );
 
-      if (authResponse.user != null) {
-        _showSuccessMessage('Login successful!');
-        if (mounted)
-          Navigator.pushReplacementNamed(context, '/student-dashboard');
+      print('👤 Auth response user: ${authResponse.user?.id}');
+      print('✅ Email confirmed at: ${authResponse.user?.emailConfirmedAt}');
+
+      if (authResponse.user == null) {
+        throw Exception('Login failed: Invalid credentials.');
+      }
+
+      if (authResponse.user!.emailConfirmedAt == null) {
+        await supabase.auth.signOut();
+        throw Exception(
+          'Please verify your email before logging in. '
+              'Check your inbox for the verification link.',
+        );
+      }
+
+      await supabase.from('profiles').update({
+        'last_login': DateTime.now().toIso8601String(),
+      }).eq('id', authResponse.user!.id);
+
+      print('✅ Login successful!');
+      _showSuccessMessage('Login successful!');
+
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
     } on AuthException catch (e) {
-      throw Exception(
-          'Login failed: Invalid credentials or account not confirmed.');
+      print('❌ Auth Exception: ${e.message}');
+      String errorMessage = 'Login failed: ';
+
+      if (e.message.toLowerCase().contains('invalid') ||
+          e.message.toLowerCase().contains('credentials')) {
+        errorMessage += 'Incorrect roll number or password.';
+      } else if (e.message.toLowerCase().contains('email')) {
+        errorMessage += 'Please verify your email first.';
+      } else {
+        errorMessage += e.message;
+      }
+
+      throw Exception(errorMessage);
     } catch (error) {
+      print('❌ General Error: $error');
       throw Exception('Login failed: ${error.toString()}');
     }
   }
 
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
-      throw Exception('Institute data missing from setup.');
+      throw Exception('Institute data missing from initial setup.');
     }
 
     final departmentId = _departmentIdMap[selectedDepartment];
-    if (departmentId == null) throw Exception('Please select a department.');
-
-    if (selectedYear == null) throw Exception('Please select your year.');
 
     try {
-      // 1. Create the Auth User
+      print('📝 Starting registration for: ${_emailController.text}');
+
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
+        emailRedirectTo: 'achivo://email-verified',
       );
 
-      if (authResponse.user != null) {
-        // 2. Execute Atomic Transaction via RPC with YEAR field
-        await supabase.rpc('register_student_rpc', params: {
-          'p_user_id': authResponse.user!.id,
-          'p_email': _emailController.text.trim(),
-          'p_first_name': _firstNameController.text.trim(),
-          'p_last_name': _lastNameController.text.trim(),
-          'p_father_name': _fatherNameController.text.trim(),
-          'p_gender': selectedGender,
-          'p_phone': _phoneController.text.trim(),
-          'p_student_id': _studentIdController.text.trim(),
-          'p_roll_number': _rollNoController.text.trim(),
-          'p_year': selectedYear, // NEW: Send year to RPC
-          'p_dept_id': departmentId,
-          'p_inst_id': _profileData['institute_id'],
-          'p_state_id': _profileData['state_id'],
-          'p_country_id': _profileData['country_id'],
-        });
+      if (authResponse.user == null) {
+        throw Exception('Failed to create account. Please try again.');
+      }
 
-        _showSuccessMessage('Student Account created successfully!');
-        if (mounted)
-          Navigator.pushReplacementNamed(context, '/student-dashboard');
+      print('✅ User created: ${authResponse.user!.id}');
+      print('📧 Email confirmed: ${authResponse.user!.emailConfirmedAt}');
+
+      await supabase.rpc('register_student_rpc', params: {
+        'p_user_id': authResponse.user!.id,
+        'p_email': _emailController.text.trim(),
+        'p_first_name': _firstNameController.text.trim(),
+        'p_last_name': _lastNameController.text.trim(),
+        'p_father_name': _fatherNameController.text.trim(),
+        'p_gender': selectedGender,
+        'p_phone': _phoneController.text.trim(),
+        'p_student_id': _studentIdController.text.trim(),
+        'p_roll_number': _rollNoController.text.trim(),
+        'p_year': selectedYear,
+        'p_dept_id': departmentId,
+        'p_inst_id': _profileData['institute_id'],
+        'p_state_id': _profileData['state_id'],
+        'p_country_id': _profileData['country_id'],
+      });
+
+      print('✅ Student record created');
+
+      await supabase.auth.signOut();
+
+      setState(() {
+        _showEmailVerificationPending = true;
+      });
+
+      _showSuccessMessage(
+        'Account created! Please check your email to verify your account.',
+      );
+    } on AuthException catch (e) {
+      print('❌ Auth Error: ${e.message}');
+      throw Exception('Registration failed: ${e.message}');
+    } catch (error) {
+      print('❌ Registration Error: $error');
+      throw Exception('Registration Error: $error');
+    }
+  }
+
+  Future<void> _handleForgotPassword() async {
+    if (_rollNoController.text.isEmpty) {
+      _showErrorMessage('Please enter your roll number first');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final response = await supabase
+          .from('students')
+          .select('email')
+          .eq('roll_number', _rollNoController.text.trim())
+          .maybeSingle();
+
+      if (response != null) {
+        await supabase.auth.resetPasswordForEmail(
+          response['email'],
+          redirectTo: 'achivo://reset-password',
+        );
+        _showSuccessMessage('Password reset link sent to your email');
+      } else {
+        _showErrorMessage('No account found with this roll number');
       }
     } on AuthException catch (e) {
-      throw Exception('Auth error: ${e.message}');
+      _showErrorMessage('Failed to send reset link: ${e.message}');
     } catch (error) {
-      throw Exception('Registration Error: $error');
+      _showErrorMessage('Failed to send reset link: ${error.toString()}');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _resendVerificationEmail() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await supabase.auth.resend(
+        type: OtpType.signup,
+        email: _emailController.text.trim(),
+      );
+      _showSuccessMessage('Verification email sent! Check your inbox.');
+    } catch (e) {
+      _showErrorMessage('Failed to resend email: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -406,8 +545,406 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
+  // ✅ NEW: Show Terms and Conditions Dialog
+  void _showTermsAndConditions() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  Colors.purple.shade50,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.description, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Terms and Conditions',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTermsSection(
+                          'Last Updated: January 15, 2026',
+                          '',
+                          isDate: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTermsSection(
+                          '1. Acceptance of Terms',
+                          'By creating a student account on Achivo, you accept and agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.',
+                        ),
+                        _buildTermsSection(
+                          '2. Student Account Registration',
+                          'You agree to provide accurate, current, and complete information during registration. You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account.',
+                        ),
+                        _buildTermsSection(
+                          '3. Educational Use Only',
+                          'Student accounts are intended solely for educational purposes within your registered institution. You may not use the platform for commercial purposes or any unlawful activities.',
+                        ),
+                        _buildTermsSection(
+                          '4. Achievement Tracking & Records',
+                          'All achievements, certificates, and records submitted through Achivo must be genuine and verifiable. Submitting false or fraudulent information may result in account suspension or termination.',
+                        ),
+                        _buildTermsSection(
+                          '5. Data Privacy and Security',
+                          'We are committed to protecting your personal information. All student data is encrypted and stored securely. You acknowledge that your academic records and achievements may be accessed by authorized institute administrators.',
+                        ),
+                        _buildTermsSection(
+                          '6. Intellectual Property',
+                          'All content, features, and functionality of the Achivo platform are owned by Achivo and protected by international copyright, trademark, and intellectual property laws.',
+                        ),
+                        _buildTermsSection(
+                          '7. Prohibited Activities',
+                          'You agree not to:\n• Share your login credentials with others\n• Upload malicious code or viruses\n• Attempt unauthorized access to other accounts\n• Misrepresent your identity or achievements\n• Use the platform to harass or harm others',
+                        ),
+                        _buildTermsSection(
+                          '8. Content Ownership',
+                          'You retain ownership of content you upload (certificates, projects, achievements). By uploading, you grant Achivo a license to display and process this content for platform functionality.',
+                        ),
+                        _buildTermsSection(
+                          '9. Service Availability',
+                          'While we strive for continuous availability, we do not guarantee uninterrupted access. We reserve the right to modify, suspend, or discontinue any aspect of the service with or without notice.',
+                        ),
+                        _buildTermsSection(
+                          '10. Account Termination',
+                          'We reserve the right to suspend or terminate accounts that violate these terms. You may request account deletion at any time, subject to institutional record-keeping requirements.',
+                        ),
+                        _buildTermsSection(
+                          '11. Limitation of Liability',
+                          'Achivo shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use or inability to use the platform.',
+                        ),
+                        _buildTermsSection(
+                          '12. Governing Law',
+                          'These Terms shall be governed by the laws of India, without regard to conflict of law provisions.',
+                        ),
+                        _buildTermsSection(
+                          '13. Changes to Terms',
+                          'We may modify these terms at any time. Continued use after changes constitutes acceptance of modified terms.',
+                        ),
+                        _buildTermsSection(
+                          '14. Contact Information',
+                          'For questions about these Terms:\n\nEmail: student-support@achivo.com\nPhone: +91-XXX-XXX-XXXX',
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.blue.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'By clicking "Create Student Account" or "Sign In as Student", you acknowledge that you have read and agree to these Terms and Conditions.',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Understand',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ✅ NEW: Show Privacy Policy Dialog
+  void _showPrivacyPolicy() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  Colors.blue.shade50,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.privacy_tip, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Privacy Policy',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTermsSection(
+                          'Effective Date: January 15, 2026',
+                          '',
+                          isDate: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTermsSection(
+                          '1. Information We Collect',
+                          'We collect information you provide during registration:\n• Personal details (name, email, phone, gender)\n• Academic information (student ID, roll number, department, year)\n• Parent/guardian information (father\'s name)\n• Achievement records and certificates\n• Usage data and preferences',
+                        ),
+                        _buildTermsSection(
+                          '2. How We Use Your Information',
+                          'We use collected information to:\n• Create and manage your student account\n• Track and verify your academic achievements\n• Facilitate communication with your institution\n• Improve platform functionality and user experience\n• Generate reports for authorized administrators\n• Comply with educational and legal requirements',
+                        ),
+                        _buildTermsSection(
+                          '3. Data Security',
+                          'We implement robust security measures:\n• End-to-end encryption for sensitive data\n• Secure OTP-based email verification\n• Regular security audits and updates\n• Password protection with strong requirements\n• Restricted access to authorized personnel only',
+                        ),
+                        _buildTermsSection(
+                          '4. Data Sharing',
+                          'We share your data only:\n• With your educational institution\'s administrators\n• With your explicit consent\n• To comply with legal obligations\n• With trusted service providers under strict confidentiality\n\nWe NEVER sell your personal information to third parties.',
+                        ),
+                        _buildTermsSection(
+                          '5. Student Rights Under FERPA',
+                          'If applicable, your educational records are protected under the Family Educational Rights and Privacy Act (FERPA). You have the right to access and request corrections to your records.',
+                        ),
+                        _buildTermsSection(
+                          '6. Cookies and Tracking',
+                          'We use cookies to enhance user experience, maintain sessions, and analyze platform usage. You can manage cookie preferences through your browser settings.',
+                        ),
+                        _buildTermsSection(
+                          '7. Data Retention',
+                          'We retain your information for the duration of your enrollment and as required by institutional policies. You may request data deletion after graduation, subject to legal retention requirements.',
+                        ),
+                        _buildTermsSection(
+                          '8. Your Privacy Rights',
+                          'You have the right to:\n• Access your personal data\n• Correct inaccurate information\n• Request data portability\n• Opt-out of non-essential communications\n• Request account deletion (subject to institutional requirements)',
+                        ),
+                        _buildTermsSection(
+                          '9. Parental Access',
+                          'If you are under 18, your parents/guardians may have rights to access your educational records as permitted by law and institutional policy.',
+                        ),
+                        _buildTermsSection(
+                          '10. Third-Party Services',
+                          'Our platform may integrate with third-party services (e.g., email verification). These services have their own privacy policies, which we encourage you to review.',
+                        ),
+                        _buildTermsSection(
+                          '11. International Data Transfers',
+                          'Your data may be processed in countries other than your own. We ensure appropriate safeguards are in place to protect your information.',
+                        ),
+                        _buildTermsSection(
+                          '12. Changes to Privacy Policy',
+                          'We may update this Privacy Policy periodically. We will notify you of significant changes via email or platform notification.',
+                        ),
+                        _buildTermsSection(
+                          '13. Contact Us',
+                          'For privacy-related inquiries:\n\nEmail: privacy@achivo.com\nStudent Support: student-support@achivo.com\nPhone: +91-XXX-XXX-XXXX',
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.verified_user, color: Colors.green.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Your privacy is our priority. We are committed to protecting your personal information and being transparent about how we use it.',
+                                  style: TextStyle(
+                                    color: Colors.green.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B82F6),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Understand',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTermsSection(String title, String content, {bool isDate = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isDate ? 12 : 16,
+              fontWeight: isDate ? FontWeight.w500 : FontWeight.bold,
+              color: isDate ? Colors.grey[600] : Colors.grey[800],
+            ),
+          ),
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              content,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
+                height: 1.6,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_showEmailVerificationPending) {
+      return _buildEmailVerificationPendingScreen();
+    }
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -428,519 +965,13 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               child: Column(
                 children: [
                   const SizedBox(height: 60),
-
-                  // Header
-                  Column(
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => Navigator.pushReplacementNamed(
-                                context, '/welcome'),
-                            icon: const Icon(Icons.arrow_back, size: 24),
-                            color: Colors.black87,
-                          ),
-                          const Spacer(),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Student Portal',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Begin your achievement journey with Achivo',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-
+                  _buildHeader(),
                   const SizedBox(height: 40),
-
-                  // Tab selector
-                  Container(
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() {
-                              _isLogin = false;
-                              _isOtpSent = false;
-                              _isOtpVerified = false;
-                              _generateCaptcha();
-                            }),
-                            child: Container(
-                              margin: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                gradient: !_isLogin
-                                    ? const LinearGradient(
-                                  colors: [
-                                    Color(0xFF8B5CF6),
-                                    Color(0xFF3B82F6),
-                                  ],
-                                )
-                                    : null,
-                                borderRadius: BorderRadius.circular(21),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Register',
-                                  style: TextStyle(
-                                    color: !_isLogin
-                                        ? Colors.white
-                                        : Colors.grey[600],
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() {
-                              _isLogin = true;
-                              _isOtpSent = false;
-                              _isOtpVerified = false;
-                              _generateCaptcha();
-                            }),
-                            child: Container(
-                              margin: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                gradient: _isLogin
-                                    ? const LinearGradient(
-                                  colors: [
-                                    Color(0xFF8B5CF6),
-                                    Color(0xFF3B82F6),
-                                  ],
-                                )
-                                    : null,
-                                borderRadius: BorderRadius.circular(21),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    color: _isLogin
-                                        ? Colors.white
-                                        : Colors.grey[600],
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
+                  _buildTabSelector(),
                   const SizedBox(height: 32),
-
-                  // Form
-                  Form(
-                    key: _formKey,
-                    child: Column(
-                      children: [
-                        // Registration fields
-                        if (!_isLogin) ...[
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildInputField(
-                                  controller: _firstNameController,
-                                  label: 'First Name',
-                                  placeholder: 'Enter first name',
-                                  icon: Icons.person_outline,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter first name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildInputField(
-                                  controller: _lastNameController,
-                                  label: 'Last Name',
-                                  placeholder: 'Enter last name',
-                                  icon: Icons.person_outline,
-                                  validator: (value) {
-                                    if (value == null || value.isEmpty) {
-                                      return 'Please enter last name';
-                                    }
-                                    return null;
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Email field with OTP
-                          _buildEmailFieldWithOTP(),
-                          const SizedBox(height: 20),
-
-                          // Father's Name field
-                          _buildInputField(
-                            controller: _fatherNameController,
-                            label: "Father's Name",
-                            placeholder: "Enter your father's name",
-                            icon: Icons.family_restroom_outlined,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return "Please enter your father's name";
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Gender field
-                          _buildDropdownField(
-                            label: 'Gender',
-                            value: selectedGender,
-                            items: genders,
-                            onChanged: (value) =>
-                                setState(() => selectedGender = value),
-                            hint: 'Select gender',
-                            icon: Icons.person_2_outlined,
-                            validator: (value) {
-                              if (value == null) {
-                                return 'Please select your gender';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Phone field
-                          _buildInputField(
-                            controller: _phoneController,
-                            label: 'Phone Number',
-                            placeholder: 'Enter your phone number',
-                            icon: Icons.phone_outlined,
-                            keyboardType: TextInputType.phone,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your phone number';
-                              }
-                              if (value.length < 10) {
-                                return 'Phone number must be at least 10 digits';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // NEW: Year field (Roman numerals)
-                          _buildDropdownField(
-                            label: 'Year',
-                            value: selectedYear,
-                            items: years,
-                            onChanged: (value) =>
-                                setState(() => selectedYear = value),
-                            hint: 'Select year',
-                            icon: Icons.calendar_today_outlined,
-                            validator: (value) {
-                              if (value == null) {
-                                return 'Please select your year';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Student ID field
-                          _buildInputField(
-                            controller: _studentIdController,
-                            label: 'Student ID',
-                            placeholder: 'Enter Student ID',
-                            icon: Icons.badge_outlined,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter Student ID';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Department field
-                          if (!_departmentsLoaded)
-                            _buildInputField(
-                              controller: TextEditingController(
-                                  text: 'Loading departments...'),
-                              label: 'Department',
-                              placeholder: 'Loading...',
-                              icon: Icons.business_outlined,
-                              enabled: false,
-                              validator: (_) => null,
-                            )
-                          else if (_departmentNames.isEmpty)
-                            _buildInputField(
-                              controller: TextEditingController(
-                                  text:
-                                  'No departments found (Check DB)'),
-                              label: 'Department',
-                              placeholder:
-                              'Check database connection or seeding',
-                              icon: Icons.error_outline,
-                              enabled: false,
-                              validator: (_) => 'Department list is empty.',
-                            )
-                          else
-                            _buildDropdownField(
-                              label: 'Department',
-                              value: selectedDepartment,
-                              items: _departmentNames,
-                              onChanged: (value) =>
-                                  setState(() => selectedDepartment = value),
-                              hint: 'Select department',
-                              icon: Icons.business_outlined,
-                              validator: (value) {
-                                if (value == null) {
-                                  return 'Please select your department';
-                                }
-                                return null;
-                              },
-                            ),
-                          const SizedBox(height: 20),
-
-                          // Roll Number field
-                          _buildInputField(
-                            controller: _rollNoController,
-                            label: 'Roll Number',
-                            placeholder: 'Enter Roll Number',
-                            icon: Icons.numbers_outlined,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter Roll Number';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // Roll Number field (only for login)
-                        if (_isLogin) ...[
-                          _buildInputField(
-                            controller: _rollNoController,
-                            label: 'Roll Number',
-                            placeholder: 'Enter Roll Number',
-                            icon: Icons.numbers_outlined,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your roll number';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // Password field with eye icon
-                        _buildInputField(
-                          controller: _passwordController,
-                          label: 'Password',
-                          placeholder: _isLogin
-                              ? 'Enter your password'
-                              : 'Create a password',
-                          icon: Icons.lock_outline,
-                          obscureText: !_passwordVisible,
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _passwordVisible
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                              color: Colors.grey[500],
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _passwordVisible = !_passwordVisible;
-                              });
-                            },
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your password';
-                            }
-                            if (!_isLogin) {
-                              if (!_isPasswordValid(value)) {
-                                return 'Password must contain uppercase, lowercase, digit & special character';
-                              }
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Confirm Password field (only for registration)
-                        if (!_isLogin) ...[
-                          _buildInputField(
-                            controller: _confirmPasswordController,
-                            label: 'Confirm Password',
-                            placeholder: 'Confirm your password',
-                            icon: Icons.lock_outline,
-                            obscureText: !_confirmPasswordVisible,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _confirmPasswordVisible
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
-                                color: Colors.grey[500],
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _confirmPasswordVisible =
-                                  !_confirmPasswordVisible;
-                                });
-                              },
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please confirm your password';
-                              }
-                              if (value != _passwordController.text) {
-                                return 'Passwords do not match';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // Enhanced Captcha field
-                        _buildEnhancedCaptchaField(),
-                        const SizedBox(height: 20),
-
-                        // Forgot password (only for login)
-                        if (_isLogin) ...[
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _handleForgotPassword,
-                              child: const Text(
-                                'Forgot password?',
-                                style: TextStyle(
-                                  color: Color(0xFF8B5CF6),
-                                  decoration: TextDecoration.none,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                        ] else
-                          const SizedBox(height: 20),
-
-                        // Submit button
-                        Container(
-                          width: double.infinity,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [
-                                Color(0xFF8B5CF6),
-                                Color(0xFF3B82F6),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                const Color(0xFF8B5CF6).withOpacity(0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleSubmit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                                : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _isLogin
-                                      ? 'Sign In as Student'
-                                      : 'Create Student Account',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.school_outlined,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
+                  _buildForm(),
                   const SizedBox(height: 32),
-
-                  // Footer
-                  Text.rich(
-                    TextSpan(
-                      text: 'By continuing, you agree to our ',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      children: const [
-                        TextSpan(
-                          text: 'Terms of Service',
-                          style: TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                        TextSpan(text: ' and '),
-                        TextSpan(
-                          text: 'Privacy Policy',
-                          style: TextStyle(
-                            color: Color(0xFF8B5CF6),
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-
+                  _buildFooter(),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -951,37 +982,624 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
-  Future<void> _handleForgotPassword() async {
-    if (_rollNoController.text.isEmpty) {
-      _showErrorMessage('Please enter your roll number first');
-      return;
-    }
-    setState(() {
-      _isLoading = true;
-    });
+  Widget _buildEmailVerificationPendingScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFF3E8FF),
+              Color(0xFFE0E7FF),
+              Color(0xFFDBEAFE),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.mark_email_unread,
+                      size: 80,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'Verify Your Email',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'We\'ve sent a verification link to:',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _emailController.text,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue.shade700),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Click the link in your email to activate your account',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[800],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Don\'t see the email? Check your spam folder',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _resendVerificationEmail,
+                    icon: _isLoading
+                        ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                        : const Icon(Icons.refresh),
+                    label: const Text('Resend Verification Email'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _showEmailVerificationPending = false;
+                      });
+                      Navigator.pushReplacementNamed(context, '/welcome');
+                    },
+                    child: const Text('Back to Login'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-    try {
-      final response = await supabase
-          .from('students')
-          .select('email')
-          .eq('roll_number', _rollNoController.text.trim())
-          .maybeSingle();
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/welcome'),
+              icon: const Icon(Icons.arrow_back, size: 24),
+              color: Colors.black87,
+            ),
+            const Spacer(),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'Student Portal',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Begin your achievement journey with Achivo',
+          style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
 
-      if (response != null) {
-        await supabase.auth.resetPasswordForEmail(response['email']);
-        _showSuccessMessage('Password reset link sent to your email');
-      } else {
-        _showErrorMessage('No account found with this roll number');
-      }
-    } on AuthException catch (e) {
-      _showErrorMessage('Failed to send reset link: ${e.message}');
-    } catch (error) {
-      _showErrorMessage('Failed to send reset link: ${error.toString()}');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
+  Widget _buildTabSelector() {
+    return Container(
+      height: 50,
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(25),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _isLogin = false;
+                _isOtpSent = false;
+                _isOtpVerified = false;
+                _generateCaptcha();
+              }),
+              child: Container(
+                margin: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  gradient: !_isLogin
+                      ? const LinearGradient(
+                    colors: [
+                      Color(0xFF8B5CF6),
+                      Color(0xFF3B82F6),
+                    ],
+                  )
+                      : null,
+                  borderRadius: BorderRadius.circular(21),
+                ),
+                child: Center(
+                  child: Text(
+                    'Register',
+                    style: TextStyle(
+                      color: !_isLogin ? Colors.white : Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _isLogin = true;
+                _isOtpSent = false;
+                _isOtpVerified = false;
+                _generateCaptcha();
+              }),
+              child: Container(
+                margin: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  gradient: _isLogin
+                      ? const LinearGradient(
+                    colors: [
+                      Color(0xFF8B5CF6),
+                      Color(0xFF3B82F6),
+                    ],
+                  )
+                      : null,
+                  borderRadius: BorderRadius.circular(21),
+                ),
+                child: Center(
+                  child: Text(
+                    'Login',
+                    style: TextStyle(
+                      color: _isLogin ? Colors.white : Colors.grey[600],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          if (!_isLogin) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInputField(
+                    controller: _firstNameController,
+                    label: 'First Name',
+                    placeholder: 'Enter first name',
+                    icon: Icons.person_outline,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter first name';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildInputField(
+                    controller: _lastNameController,
+                    label: 'Last Name',
+                    placeholder: 'Enter last name',
+                    icon: Icons.person_outline,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter last name';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildEmailFieldWithOTP(),
+            const SizedBox(height: 20),
+            _buildInputField(
+              controller: _fatherNameController,
+              label: "Father's Name",
+              placeholder: "Enter your father's name",
+              icon: Icons.family_restroom_outlined,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return "Please enter your father's name";
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            _buildDropdownField(
+              label: 'Gender',
+              value: selectedGender,
+              items: genders,
+              onChanged: (value) => setState(() => selectedGender = value),
+              hint: 'Select gender',
+              icon: Icons.person_2_outlined,
+              validator: (value) {
+                if (value == null) {
+                  return 'Please select your gender';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            _buildInputField(
+              controller: _phoneController,
+              label: 'Phone Number',
+              placeholder: 'Enter your phone number',
+              icon: Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your phone number';
+                }
+                if (value.length < 10) {
+                  return 'Phone number must be at least 10 digits';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            _buildDropdownField(
+              label: 'Year',
+              value: selectedYear,
+              items: years,
+              onChanged: (value) => setState(() => selectedYear = value),
+              hint: 'Select year',
+              icon: Icons.calendar_today_outlined,
+              validator: (value) {
+                if (value == null) {
+                  return 'Please select your year';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            _buildInputField(
+              controller: _studentIdController,
+              label: 'Student ID',
+              placeholder: 'Enter Student ID',
+              icon: Icons.badge_outlined,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter Student ID';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+            if (!_departmentsLoaded)
+              _buildInputField(
+                controller:
+                TextEditingController(text: 'Loading departments...'),
+                label: 'Department',
+                placeholder: 'Loading...',
+                icon: Icons.business_outlined,
+                enabled: false,
+                validator: (_) => null,
+              )
+            else if (_departmentNames.isEmpty)
+              _buildInputField(
+                controller: TextEditingController(
+                    text: 'No departments found (Check DB)'),
+                label: 'Department',
+                placeholder: 'Check database connection or seeding',
+                icon: Icons.error_outline,
+                enabled: false,
+                validator: (_) => 'Department list is empty.',
+              )
+            else
+              _buildDropdownField(
+                label: 'Department',
+                value: selectedDepartment,
+                items: _departmentNames,
+                onChanged: (value) =>
+                    setState(() => selectedDepartment = value),
+                hint: 'Select department',
+                icon: Icons.business_outlined,
+                validator: (value) {
+                  if (value == null) {
+                    return 'Please select your department';
+                  }
+                  return null;
+                },
+              ),
+            const SizedBox(height: 20),
+            _buildInputField(
+              controller: _rollNoController,
+              label: 'Roll Number',
+              placeholder: 'Enter Roll Number',
+              icon: Icons.numbers_outlined,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter Roll Number';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+          if (_isLogin) ...[
+            _buildInputField(
+              controller: _rollNoController,
+              label: 'Roll Number',
+              placeholder: 'Enter Roll Number',
+              icon: Icons.numbers_outlined,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your roll number';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+          _buildInputField(
+            controller: _passwordController,
+            label: 'Password',
+            placeholder:
+            _isLogin ? 'Enter your password' : 'Create a password',
+            icon: Icons.lock_outline,
+            obscureText: !_passwordVisible,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _passwordVisible ? Icons.visibility : Icons.visibility_off,
+                color: Colors.grey[500],
+              ),
+              onPressed: () {
+                setState(() {
+                  _passwordVisible = !_passwordVisible;
+                });
+              },
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter your password';
+              }
+              if (!_isLogin) {
+                if (!_isPasswordValid(value)) {
+                  return 'Password must contain uppercase, lowercase, digit & special character';
+                }
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 20),
+          if (!_isLogin) ...[
+            _buildInputField(
+              controller: _confirmPasswordController,
+              label: 'Confirm Password',
+              placeholder: 'Confirm your password',
+              icon: Icons.lock_outline,
+              obscureText: !_confirmPasswordVisible,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _confirmPasswordVisible
+                      ? Icons.visibility
+                      : Icons.visibility_off,
+                  color: Colors.grey[500],
+                ),
+                onPressed: () {
+                  setState(() {
+                    _confirmPasswordVisible = !_confirmPasswordVisible;
+                  });
+                },
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please confirm your password';
+                }
+                if (value != _passwordController.text) {
+                  return 'Passwords do not match';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+          _buildEnhancedCaptchaField(),
+          const SizedBox(height: 20),
+          if (_isLogin) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _handleForgotPassword,
+                child: const Text(
+                  'Forgot password?',
+                  style: TextStyle(
+                    color: Color(0xFF8B5CF6),
+                    fontSize: 14,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ] else
+            const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            height: 56,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF8B5CF6),
+                  Color(0xFF3B82F6),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _handleSubmit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+                  : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _isLogin
+                        ? 'Sign In as Student'
+                        : 'Create Student Account',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(
+                    Icons.school_outlined,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter() {
+    return Text.rich(
+      TextSpan(
+        text: 'By continuing, you agree to our ',
+        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        children: [
+          WidgetSpan(
+            child: GestureDetector(
+              onTap: _showTermsAndConditions,
+              child: const Text(
+                'Terms of Service',
+                style: TextStyle(
+                  color: Color(0xFF8B5CF6),
+                  decoration: TextDecoration.underline,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          const TextSpan(text: ' and '),
+          WidgetSpan(
+            child: GestureDetector(
+              onTap: _showPrivacyPolicy,
+              child: const Text(
+                'Privacy Policy',
+                style: TextStyle(
+                  color: Color(0xFF8B5CF6),
+                  decoration: TextDecoration.underline,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+    );
   }
 
   Widget _buildInputField({
@@ -993,7 +1611,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     TextInputType? keyboardType,
     String? Function(String?)? validator,
     Widget? suffixIcon,
-    bool enabled = true, // Added 'enabled' parameter
+    bool enabled = true,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1026,7 +1644,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             obscureText: obscureText,
             keyboardType: keyboardType,
             validator: validator,
-            enabled: enabled, // Applied 'enabled'
+            enabled: enabled,
             style: TextStyle(color: Colors.grey[800], fontSize: 16),
             decoration: InputDecoration(
               hintText: placeholder,
@@ -1113,7 +1731,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Text(
-            'Email',
+            'Email Address',
             style: TextStyle(
               color: Colors.grey[800],
               fontSize: 16,
@@ -1140,22 +1758,18 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               if (value == null || value.isEmpty) {
                 return 'Please enter your email';
               }
-              // The original requirement was @gmail.com, keeping that validation
-              if (!value.endsWith('@gmail.com')) {
-                return 'Email must end with @gmail.com';
-              }
-              if (!RegExp(r'^[\w-\.]+@gmail\.com$').hasMatch(value)) {
-                return 'Please enter a valid Gmail address';
+              if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                return 'Please enter a valid email address';
               }
               return null;
             },
             style: TextStyle(color: Colors.grey[800], fontSize: 16),
             decoration: InputDecoration(
-              hintText: 'Enter your Gmail address',
+              hintText: 'Enter your email address',
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
               prefixIcon:
               Icon(Icons.mail_outline, color: Colors.grey[500], size: 20),
-              suffixIcon: !_isLogin && !_isOtpVerified
+              suffixIcon: !_isOtpVerified && !_isLogin
                   ? TextButton(
                 onPressed: _isOtpSent ? null : _sendOTP,
                 child: Text(
@@ -1169,8 +1783,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                 ),
               )
                   : _isOtpVerified
-                  ? const Icon(Icons.verified,
-                  color: Colors.green, size: 20)
+                  ? const Icon(Icons.verified, color: Colors.green, size: 20)
                   : null,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
@@ -1180,9 +1793,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             ),
           ),
         ),
-
-        // Enhanced OTP Field (only for registration and when OTP is sent)
-        if (!_isLogin && _isOtpSent && !_isOtpVerified) ...[
+        if (_isOtpSent && !_isOtpVerified && !_isLogin) ...[
           const SizedBox(height: 16),
           _buildEnhancedOtpField(),
         ],
@@ -1279,7 +1890,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
                   ),
                   child: const Text(
                     'Verify',
@@ -1373,13 +1985,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                     ),
                     child: Stack(
                       children: [
-                        // Background pattern
                         Positioned.fill(
                           child: CustomPaint(
                             painter: CaptchaBackgroundPainter(),
                           ),
                         ),
-                        // Captcha text
                         Center(
                           child: Text(
                             _captchaText,
@@ -1419,7 +2029,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                   style: TextStyle(color: Colors.grey[800], fontSize: 16),
                   decoration: InputDecoration(
                     hintText: 'Enter captcha',
-                    hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
+                    hintStyle:
+                    TextStyle(color: Colors.grey[500], fontSize: 16),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -1453,7 +2064,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 }
 
-// Custom painter for captcha background pattern
 class CaptchaBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -1485,5 +2095,5 @@ class CaptchaBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate)=>false;
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
