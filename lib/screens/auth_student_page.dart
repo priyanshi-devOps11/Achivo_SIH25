@@ -1,5 +1,7 @@
+// lib/screens/auth_student_page.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/auth_service.dart';
 import 'dart:math';
 
 SupabaseClient get supabase => Supabase.instance.client;
@@ -117,6 +119,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       final response = await supabase
           .from('departments')
           .select('id, name')
+          .eq('is_active', true)
           .order('name', ascending: true);
 
       if (response is List) {
@@ -150,7 +153,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    Random random = Random.secure(); // ✅ Use secure random
+    Random random = Random.secure();
     setState(() {
       _captchaText = String.fromCharCodes(
         Iterable.generate(
@@ -199,6 +202,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
+      // Check if email already exists
       final profileResponse = await supabase
           .from('profiles')
           .select('email')
@@ -213,6 +217,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         return;
       }
 
+      // Send OTP
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
         emailRedirectTo: 'achivo://email-verified',
@@ -255,6 +260,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
+      // Verify OTP - this creates a temporary session
       final response = await supabase.auth.verifyOTP(
         email: _emailController.text.trim(),
         token: _otpController.text.trim(),
@@ -262,6 +268,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       );
 
       if (response.user != null) {
+        // Immediately sign out the temporary OTP session
+        // We only needed to verify the code was correct
         await supabase.auth.signOut();
 
         setState(() {
@@ -293,8 +301,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
+      // For registration, check OTP verification
       if (!_isLogin && !_isOtpVerified) {
-        _showErrorMessage('Please verify your email first');
+        _showErrorMessage('Please verify your email first by clicking "Send OTP" and entering the code');
         return;
       }
 
@@ -336,6 +345,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     try {
       print('🔐 Starting login for roll number: ${_rollNoController.text}');
 
+      // Get email from roll number
       final studentResponse = await supabase
           .from('students')
           .select('email, is_active')
@@ -358,29 +368,15 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         );
       }
 
-      final authResponse = await supabase.auth.signInWithPassword(
+      // Use AuthService for login
+      final result = await AuthService.login(
         email: email,
         password: _passwordController.text.trim(),
       );
 
-      print('👤 Auth response user: ${authResponse.user?.id}');
-      print('✅ Email confirmed at: ${authResponse.user?.emailConfirmedAt}');
-
-      if (authResponse.user == null) {
-        throw Exception('Login failed: Invalid credentials.');
+      if (!result.success) {
+        throw Exception(result.message);
       }
-
-      if (authResponse.user!.emailConfirmedAt == null) {
-        await supabase.auth.signOut();
-        throw Exception(
-          'Please verify your email before logging in. '
-              'Check your inbox for the verification link.',
-        );
-      }
-
-      await supabase.from('profiles').update({
-        'last_login': DateTime.now().toIso8601String(),
-      }).eq('id', authResponse.user!.id);
 
       print('✅ Login successful!');
       _showSuccessMessage('Login successful!');
@@ -388,23 +384,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
-    } on AuthException catch (e) {
-      print('❌ Auth Exception: ${e.message}');
-      String errorMessage = 'Login failed: ';
-
-      if (e.message.toLowerCase().contains('invalid') ||
-          e.message.toLowerCase().contains('credentials')) {
-        errorMessage += 'Incorrect roll number or password.';
-      } else if (e.message.toLowerCase().contains('email')) {
-        errorMessage += 'Please verify your email first.';
-      } else {
-        errorMessage += e.message;
-      }
-
-      throw Exception(errorMessage);
     } catch (error) {
-      print('❌ General Error: $error');
-      throw Exception('Login failed: ${error.toString()}');
+      print('❌ Login Error: $error');
+      throw Exception(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -414,57 +396,56 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     }
 
     final departmentId = _departmentIdMap[selectedDepartment];
+    if (departmentId == null) {
+      throw Exception('Please select a valid department.');
+    }
 
     try {
       print('📝 Starting registration for: ${_emailController.text}');
 
-      final authResponse = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        emailRedirectTo: 'achivo://email-verified',
-      );
+      // Check if email already exists before attempting registration
+      final existingProfile = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('email', _emailController.text.trim())
+          .maybeSingle();
 
-      if (authResponse.user == null) {
-        throw Exception('Failed to create account. Please try again.');
+      if (existingProfile != null) {
+        throw Exception('This email is already registered. Please use login instead.');
       }
 
-      print('✅ User created: ${authResponse.user!.id}');
-      print('📧 Email confirmed: ${authResponse.user!.emailConfirmedAt}');
+      // Use AuthService for registration
+      final result = await AuthService.registerStudent(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        fatherName: _fatherNameController.text.trim(),
+        gender: selectedGender!,
+        phone: _phoneController.text.trim(),
+        studentId: _studentIdController.text.trim(),
+        rollNumber: _rollNoController.text.trim(),
+        year: selectedYear!,
+        departmentId: departmentId,
+        instituteId: _profileData['institute_id'] as int,
+        stateId: _profileData['state_id'] as int,
+        countryId: _profileData['country_id'] as int,
+      );
 
-      await supabase.rpc('register_student_rpc', params: {
-        'p_user_id': authResponse.user!.id,
-        'p_email': _emailController.text.trim(),
-        'p_first_name': _firstNameController.text.trim(),
-        'p_last_name': _lastNameController.text.trim(),
-        'p_father_name': _fatherNameController.text.trim(),
-        'p_gender': selectedGender,
-        'p_phone': _phoneController.text.trim(),
-        'p_student_id': _studentIdController.text.trim(),
-        'p_roll_number': _rollNoController.text.trim(),
-        'p_year': selectedYear,
-        'p_dept_id': departmentId,
-        'p_inst_id': _profileData['institute_id'],
-        'p_state_id': _profileData['state_id'],
-        'p_country_id': _profileData['country_id'],
-      });
+      if (!result.success) {
+        throw Exception(result.message);
+      }
 
-      print('✅ Student record created');
-
-      await supabase.auth.signOut();
+      print('✅ Student registration successful');
 
       setState(() {
         _showEmailVerificationPending = true;
       });
 
-      _showSuccessMessage(
-        'Account created! Please check your email to verify your account.',
-      );
-    } on AuthException catch (e) {
-      print('❌ Auth Error: ${e.message}');
-      throw Exception('Registration failed: ${e.message}');
+      _showSuccessMessage(result.message);
     } catch (error) {
       print('❌ Registration Error: $error');
-      throw Exception('Registration Error: $error');
+      throw Exception(error.toString());
     }
   }
 
@@ -486,16 +467,15 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           .maybeSingle();
 
       if (response != null) {
-        await supabase.auth.resetPasswordForEmail(
-          response['email'],
-          redirectTo: 'achivo://reset-password',
-        );
-        _showSuccessMessage('Password reset link sent to your email');
+        final result = await AuthService.resetPassword(response['email']);
+        if (result.success) {
+          _showSuccessMessage(result.message);
+        } else {
+          _showErrorMessage(result.message);
+        }
       } else {
         _showErrorMessage('No account found with this roll number');
       }
-    } on AuthException catch (e) {
-      _showErrorMessage('Failed to send reset link: ${e.message}');
     } catch (error) {
       _showErrorMessage('Failed to send reset link: ${error.toString()}');
     } finally {
@@ -511,13 +491,15 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
-      await supabase.auth.resend(
-        type: OtpType.signup,
-        email: _emailController.text.trim(),
+      final result = await AuthService.resendVerificationEmail(
+        _emailController.text.trim(),
       );
-      _showSuccessMessage('Verification email sent! Check your inbox.');
-    } catch (e) {
-      _showErrorMessage('Failed to resend email: $e');
+
+      if (result.success) {
+        _showSuccessMessage(result.message);
+      } else {
+        _showErrorMessage(result.message);
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -545,7 +527,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
-  // ✅ NEW: Show Terms and Conditions Dialog
   void _showTermsAndConditions() {
     showDialog(
       context: context,
@@ -608,66 +589,26 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildTermsSection(
-                          'Last Updated: January 15, 2026',
+                          'Last Updated: January 18, 2026',
                           '',
                           isDate: true,
                         ),
                         const SizedBox(height: 16),
                         _buildTermsSection(
                           '1. Acceptance of Terms',
-                          'By creating a student account on Achivo, you accept and agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our platform.',
+                          'By creating a student account on Achivo, you accept and agree to be bound by these Terms and Conditions.',
                         ),
                         _buildTermsSection(
-                          '2. Student Account Registration',
-                          'You agree to provide accurate, current, and complete information during registration. You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account.',
+                          '2. Account Registration',
+                          'You must provide accurate information and maintain the confidentiality of your account credentials.',
                         ),
                         _buildTermsSection(
-                          '3. Educational Use Only',
-                          'Student accounts are intended solely for educational purposes within your registered institution. You may not use the platform for commercial purposes or any unlawful activities.',
+                          '3. Educational Use',
+                          'Student accounts are for educational purposes only within your registered institution.',
                         ),
                         _buildTermsSection(
-                          '4. Achievement Tracking & Records',
-                          'All achievements, certificates, and records submitted through Achivo must be genuine and verifiable. Submitting false or fraudulent information may result in account suspension or termination.',
-                        ),
-                        _buildTermsSection(
-                          '5. Data Privacy and Security',
-                          'We are committed to protecting your personal information. All student data is encrypted and stored securely. You acknowledge that your academic records and achievements may be accessed by authorized institute administrators.',
-                        ),
-                        _buildTermsSection(
-                          '6. Intellectual Property',
-                          'All content, features, and functionality of the Achivo platform are owned by Achivo and protected by international copyright, trademark, and intellectual property laws.',
-                        ),
-                        _buildTermsSection(
-                          '7. Prohibited Activities',
-                          'You agree not to:\n• Share your login credentials with others\n• Upload malicious code or viruses\n• Attempt unauthorized access to other accounts\n• Misrepresent your identity or achievements\n• Use the platform to harass or harm others',
-                        ),
-                        _buildTermsSection(
-                          '8. Content Ownership',
-                          'You retain ownership of content you upload (certificates, projects, achievements). By uploading, you grant Achivo a license to display and process this content for platform functionality.',
-                        ),
-                        _buildTermsSection(
-                          '9. Service Availability',
-                          'While we strive for continuous availability, we do not guarantee uninterrupted access. We reserve the right to modify, suspend, or discontinue any aspect of the service with or without notice.',
-                        ),
-                        _buildTermsSection(
-                          '10. Account Termination',
-                          'We reserve the right to suspend or terminate accounts that violate these terms. You may request account deletion at any time, subject to institutional record-keeping requirements.',
-                        ),
-                        _buildTermsSection(
-                          '11. Limitation of Liability',
-                          'Achivo shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use or inability to use the platform.',
-                        ),
-                        _buildTermsSection(
-                          '12. Governing Law',
-                          'These Terms shall be governed by the laws of India, without regard to conflict of law provisions.',
-                        ),
-                        _buildTermsSection(
-                          '13. Changes to Terms',
-                          'We may modify these terms at any time. Continued use after changes constitutes acceptance of modified terms.',
-                        ),
-                        _buildTermsSection(
-                          '14. Contact Information',
-                          'For questions about these Terms:\n\nEmail: student-support@achivo.com\nPhone: +91-XXX-XXX-XXXX',
+                          '4. Data Privacy',
+                          'We protect your personal information and academic records. Your data may be accessed by authorized administrators.',
                         ),
                         const SizedBox(height: 24),
                         Container(
@@ -683,7 +624,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'By clicking "Create Student Account" or "Sign In as Student", you acknowledge that you have read and agree to these Terms and Conditions.',
+                                  'By proceeding, you acknowledge that you have read and agree to these terms.',
                                   style: TextStyle(
                                     color: Colors.blue.shade900,
                                     fontSize: 13,
@@ -729,7 +670,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
-  // ✅ NEW: Show Privacy Policy Dialog
   void _showPrivacyPolicy() {
     showDialog(
       context: context,
@@ -792,62 +732,22 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildTermsSection(
-                          'Effective Date: January 15, 2026',
+                          'Effective Date: January 18, 2026',
                           '',
                           isDate: true,
                         ),
                         const SizedBox(height: 16),
                         _buildTermsSection(
                           '1. Information We Collect',
-                          'We collect information you provide during registration:\n• Personal details (name, email, phone, gender)\n• Academic information (student ID, roll number, department, year)\n• Parent/guardian information (father\'s name)\n• Achievement records and certificates\n• Usage data and preferences',
+                          'We collect personal and academic information to manage your student account and track achievements.',
                         ),
                         _buildTermsSection(
-                          '2. How We Use Your Information',
-                          'We use collected information to:\n• Create and manage your student account\n• Track and verify your academic achievements\n• Facilitate communication with your institution\n• Improve platform functionality and user experience\n• Generate reports for authorized administrators\n• Comply with educational and legal requirements',
+                          '2. Data Security',
+                          'We implement robust security measures including encryption and secure authentication.',
                         ),
                         _buildTermsSection(
-                          '3. Data Security',
-                          'We implement robust security measures:\n• End-to-end encryption for sensitive data\n• Secure OTP-based email verification\n• Regular security audits and updates\n• Password protection with strong requirements\n• Restricted access to authorized personnel only',
-                        ),
-                        _buildTermsSection(
-                          '4. Data Sharing',
-                          'We share your data only:\n• With your educational institution\'s administrators\n• With your explicit consent\n• To comply with legal obligations\n• With trusted service providers under strict confidentiality\n\nWe NEVER sell your personal information to third parties.',
-                        ),
-                        _buildTermsSection(
-                          '5. Student Rights Under FERPA',
-                          'If applicable, your educational records are protected under the Family Educational Rights and Privacy Act (FERPA). You have the right to access and request corrections to your records.',
-                        ),
-                        _buildTermsSection(
-                          '6. Cookies and Tracking',
-                          'We use cookies to enhance user experience, maintain sessions, and analyze platform usage. You can manage cookie preferences through your browser settings.',
-                        ),
-                        _buildTermsSection(
-                          '7. Data Retention',
-                          'We retain your information for the duration of your enrollment and as required by institutional policies. You may request data deletion after graduation, subject to legal retention requirements.',
-                        ),
-                        _buildTermsSection(
-                          '8. Your Privacy Rights',
-                          'You have the right to:\n• Access your personal data\n• Correct inaccurate information\n• Request data portability\n• Opt-out of non-essential communications\n• Request account deletion (subject to institutional requirements)',
-                        ),
-                        _buildTermsSection(
-                          '9. Parental Access',
-                          'If you are under 18, your parents/guardians may have rights to access your educational records as permitted by law and institutional policy.',
-                        ),
-                        _buildTermsSection(
-                          '10. Third-Party Services',
-                          'Our platform may integrate with third-party services (e.g., email verification). These services have their own privacy policies, which we encourage you to review.',
-                        ),
-                        _buildTermsSection(
-                          '11. International Data Transfers',
-                          'Your data may be processed in countries other than your own. We ensure appropriate safeguards are in place to protect your information.',
-                        ),
-                        _buildTermsSection(
-                          '12. Changes to Privacy Policy',
-                          'We may update this Privacy Policy periodically. We will notify you of significant changes via email or platform notification.',
-                        ),
-                        _buildTermsSection(
-                          '13. Contact Us',
-                          'For privacy-related inquiries:\n\nEmail: privacy@achivo.com\nStudent Support: student-support@achivo.com\nPhone: +91-XXX-XXX-XXXX',
+                          '3. Your Rights',
+                          'You have the right to access, correct, and request deletion of your personal data.',
                         ),
                         const SizedBox(height: 24),
                         Container(
@@ -863,7 +763,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Your privacy is our priority. We are committed to protecting your personal information and being transparent about how we use it.',
+                                  'Your privacy is our priority. We are committed to protecting your information.',
                                   style: TextStyle(
                                     color: Colors.green.shade900,
                                     fontSize: 13,
@@ -1362,9 +1262,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             else if (_departmentNames.isEmpty)
               _buildInputField(
                 controller: TextEditingController(
-                    text: 'No departments found (Check DB)'),
+                    text: 'No departments found'),
                 label: 'Department',
-                placeholder: 'Check database connection or seeding',
+                placeholder: 'Check database connection',
                 icon: Icons.error_outline,
                 enabled: false,
                 validator: (_) => 'Department list is empty.',
@@ -1439,7 +1339,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               }
               if (!_isLogin) {
                 if (!_isPasswordValid(value)) {
-                  return 'Password must contain uppercase, lowercase, digit & special character';
+                  return 'Password must be 8+ chars with uppercase, lowercase, digit & special char';
                 }
               }
               return null;
