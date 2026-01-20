@@ -61,9 +61,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   final List<String> genders = ['Male', 'Female', 'Other'];
   final List<String> years = ['I', 'II', 'III', 'IV', 'V'];
 
-  GestureTapCallback? get _showTermsAndConditions => null;
-
   GestureTapCallback? get _showPrivacyPolicy => null;
+  GestureTapCallback? get _showTermsAndConditions => null;
 
   @override
   void initState() {
@@ -186,7 +185,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // FIXED OTP FLOW - Using signInWithOtp for verification only
+  // BETTER APPROACH: Email-based OTP without Supabase Auth
+  // We'll generate and send our own OTP via email
   // ============================================================
   Future<void> _sendOTP() async {
     if (_emailController.text.isEmpty) {
@@ -227,11 +227,35 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         return;
       }
 
-      // Send OTP - this creates a temporary session that we'll discard
-      await supabase.auth.signInWithOtp(
-        email: _emailController.text.trim(),
-        shouldCreateUser: false, // IMPORTANT: Don't create permanent user
-      );
+      // Generate a 6-digit OTP
+      final random = Random.secure();
+      final otp = (100000 + random.nextInt(900000)).toString();
+
+      // Store OTP with expiry in database (5 minutes expiry)
+      final expiryTime = DateTime.now().add(const Duration(minutes: 5));
+
+      await supabase.from('email_verifications').upsert({
+        'email': _emailController.text.trim(),
+        'otp': otp,
+        'expires_at': expiryTime.toIso8601String(),
+        'verified': false,
+        'created_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'email');
+
+      // Send OTP via Supabase Edge Function
+      try {
+        await supabase.functions.invoke('send-otp-email', body: {
+          'email': _emailController.text.trim(),
+          'otp': otp,
+          'name': _firstNameController.text.trim(),
+        });
+      } catch (e) {
+        // If Edge Function not available, use fallback
+        print('Edge function not available, using fallback: $e');
+        // For development: just show the OTP (REMOVE IN PRODUCTION)
+        print('🔐 OTP for ${_emailController.text}: $otp');
+        _showSuccessMessage('OTP generated (check console in dev mode): $otp');
+      }
 
       setState(() {
         _isLoading = false;
@@ -240,11 +264,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       _startOtpTimer();
       _showSuccessMessage('Verification code sent to your email! Check your inbox.');
-    } on AuthException catch (error) {
+    } on PostgrestException catch (error) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Failed to send verification code: ${error.message}');
+      _showErrorMessage('Database error: ${error.message}');
     } catch (error) {
       setState(() {
         _isLoading = false;
@@ -270,33 +294,60 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
-      // Verify OTP - this creates a temporary session
-      final response = await supabase.auth.verifyOTP(
-        email: _emailController.text.trim(),
-        token: _otpController.text.trim(),
-        type: OtpType.email,
-      );
+      // Verify OTP from database
+      final otpRecord = await supabase
+          .from('email_verifications')
+          .select()
+          .eq('email', _emailController.text.trim())
+          .eq('otp', _otpController.text.trim())
+          .maybeSingle();
 
-      if (response.session != null) {
-        // Store the OTP token for later use
-        _tempOtpToken = _otpController.text.trim();
-
-        // IMMEDIATELY sign out the temporary session
-        await supabase.auth.signOut();
-
+      if (otpRecord == null) {
         setState(() {
           _isLoading = false;
-          _isOtpVerified = true;
-          _otpTimerController.stop();
         });
-
-        _showSuccessMessage('Email verified successfully! You can now complete registration.');
+        _showErrorMessage('Invalid verification code. Please try again.');
+        return;
       }
-    } on AuthException catch (error) {
+
+      // Check if OTP has expired
+      final expiryTime = DateTime.parse(otpRecord['expires_at'] as String);
+      if (DateTime.now().isAfter(expiryTime)) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showErrorMessage('Verification code has expired. Please request a new one.');
+        return;
+      }
+
+      // Check if already verified
+      if (otpRecord['verified'] == true) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showErrorMessage('This code has already been used. Please request a new one.');
+        return;
+      }
+
+      // Mark as verified
+      await supabase
+          .from('email_verifications')
+          .update({'verified': true})
+          .eq('email', _emailController.text.trim())
+          .eq('otp', _otpController.text.trim());
+
+      setState(() {
+        _isLoading = false;
+        _isOtpVerified = true;
+        _otpTimerController.stop();
+      });
+
+      _showSuccessMessage('Email verified successfully! You can now complete registration.');
+    } on PostgrestException catch (error) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Invalid verification code: ${error.message}');
+      _showErrorMessage('Database error: ${error.message}');
     } catch (error) {
       setState(() {
         _isLoading = false;
@@ -791,7 +842,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 // Include all your existing UI builder methods here
 // _buildHeader(), _buildTabSelector(), _buildForm(), etc.
 // [Copy from your original code - they remain unchanged]
-
   Widget _buildHeader() {
     return Column(
       children: [
