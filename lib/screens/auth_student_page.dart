@@ -177,7 +177,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // SEND OTP - Uses Supabase Auth OTP System ONLY
+  // SEND OTP - Create account immediately but don't complete profile
   // ============================================================
   Future<void> _sendOTP() async {
     if (_emailController.text.isEmpty) {
@@ -198,6 +198,12 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       return;
     }
 
+    // Validate form fields before sending OTP
+    if (!_formKey.currentState!.validate()) {
+      _showErrorMessage('Please fill all required fields correctly.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -205,26 +211,33 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     try {
       print('📧 Sending OTP to: ${_emailController.text.trim()}');
 
-      // Check if email already exists
+      // Check if email already exists in profiles (completed registrations)
       final profileResponse = await supabase
           .from('profiles')
-          .select('email')
+          .select('email, email_verified')
           .eq('email', _emailController.text.trim())
           .maybeSingle();
 
-      if (profileResponse != null && !_isLogin) {
-        _showErrorMessage(
-            'Email already registered. Please use login instead.');
-        setState(() {
-          _isLoading = false;
-        });
-        return;
+      if (profileResponse != null) {
+        // If profile exists and is verified, user should login
+        if (profileResponse['email_verified'] == true) {
+          _showErrorMessage(
+              'Email already registered. Please use login instead.');
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
       }
 
-      // Use Supabase Auth OTP - This sends the email automatically
+      // Use signInWithOtp which creates account and sends OTP
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
         emailRedirectTo: 'achivo://email-verified',
+        data: {
+          'first_name': _firstNameController.text.trim(),
+          'last_name': _lastNameController.text.trim(),
+        },
       );
 
       setState(() {
@@ -259,7 +272,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // VERIFY OTP - Uses Supabase Auth Verification
+  // VERIFY OTP - Complete the registration after verification
   // ============================================================
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
@@ -281,7 +294,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         type: OtpType.email,
       );
 
-      if (response.session == null) {
+      if (response.session == null || response.user == null) {
         setState(() {
           _isLoading = false;
         });
@@ -289,23 +302,13 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         return;
       }
 
+      final userId = response.user!.id;
       print('✅ OTP verified successfully!');
-      print('📧 Email confirmed: ${response.user?.emailConfirmedAt}');
+      print('📧 Email confirmed: ${response.user!.emailConfirmedAt}');
+      print('👤 User ID: $userId');
 
-      // Sign out the temporary session
-      await supabase.auth.signOut();
-
-      setState(() {
-        _isLoading = false;
-        _otpTimerController.stop();
-      });
-
-      _showSuccessMessage(
-          'Email verified successfully! You can now complete registration.');
-
-      // Proceed to registration after brief delay
-      await Future.delayed(const Duration(seconds: 1));
-      await _handleRegistration();
+      // Now complete the student registration
+      await _completeRegistration(userId);
 
     } on AuthException catch (e) {
       setState(() {
@@ -319,6 +322,112 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       });
       print('❌ Unexpected Error: $error');
       _showErrorMessage('Verification failed: ${error.toString()}');
+    }
+  }
+
+  // ============================================================
+  // COMPLETE REGISTRATION - Called after OTP verification
+  // ============================================================
+  Future<void> _completeRegistration(String userId) async {
+    if (_profileData['institute_id'] == null) {
+      throw Exception('Institute data missing from initial setup.');
+    }
+
+    final departmentId = _departmentIdMap[selectedDepartment];
+    if (departmentId == null) {
+      throw Exception('Please select a valid department.');
+    }
+
+    try {
+      print('📝 Completing registration for user: $userId');
+
+      // Update auth user metadata with password
+      await supabase.auth.updateUser(
+        UserAttributes(
+          password: _passwordController.text.trim(),
+          data: {
+            'first_name': _firstNameController.text.trim(),
+            'last_name': _lastNameController.text.trim(),
+            'role': 'student',
+            'department_id': departmentId,
+            'institute_id': _profileData['institute_id'],
+            'state_id': _profileData['state_id'],
+            'country_id': _profileData['country_id'],
+          },
+        ),
+      );
+
+      print('✅ User metadata updated');
+
+      // Wait for trigger to update profile
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Call registration RPC to create student record
+      print('📞 Calling register_student_rpc');
+      final rpcResponse = await supabase.rpc('register_student_rpc', params: {
+        'p_user_id': userId,
+        'p_email': _emailController.text.trim(),
+        'p_first_name': _firstNameController.text.trim(),
+        'p_last_name': _lastNameController.text.trim(),
+        'p_father_name': _fatherNameController.text.trim(),
+        'p_gender': selectedGender!,
+        'p_phone': _phoneController.text.trim(),
+        'p_student_id': _studentIdController.text.trim(),
+        'p_roll_number': _rollNoController.text.trim(),
+        'p_year': selectedYear!,
+        'p_dept_id': departmentId,
+        'p_inst_id': _profileData['institute_id'],
+        'p_state_id': _profileData['state_id'],
+        'p_country_id': _profileData['country_id'],
+      }).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Registration timeout - please try again');
+        },
+      );
+
+      print('📦 RPC Response: $rpcResponse');
+
+      if (rpcResponse == null || rpcResponse['success'] != true) {
+        // If registration fails, try to clean up
+        try {
+          await supabase.auth.signOut();
+        } catch (_) {}
+        throw Exception(rpcResponse?['error'] ?? 'Registration failed');
+      }
+
+      // Sign out the current session
+      await supabase.auth.signOut();
+
+      setState(() {
+        _isLoading = false;
+        _otpTimerController.stop();
+      });
+
+      print('✅ Registration completed successfully');
+
+      _showSuccessMessage(
+          'Account created successfully! You can now log in with your roll number.');
+
+      // Switch to login tab after brief delay
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        setState(() {
+          _isLogin = true;
+          _isOtpSent = false;
+          _otpController.clear();
+          _emailController.clear();
+          _passwordController.clear();
+          _confirmPasswordController.clear();
+        });
+      }
+
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      print('❌ Registration completion error: $e');
+      throw Exception('Registration failed: ${e.toString()}');
     }
   }
 
@@ -352,7 +461,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         if (_isLogin) {
           await _handleLogin();
         } else {
-          // For registration, OTP verification triggers registration
+          // For registration, verify OTP which will complete registration
           await _verifyOTP();
         }
       } catch (error) {
@@ -424,120 +533,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // REGISTRATION - Called after OTP verification
+  // REGISTRATION - Now removed, handled by completeRegistration
   // ============================================================
-  Future<void> _handleRegistration() async {
-    if (_profileData['institute_id'] == null) {
-      throw Exception('Institute data missing from initial setup.');
-    }
-
-    final departmentId = _departmentIdMap[selectedDepartment];
-    if (departmentId == null) {
-      throw Exception('Please select a valid department.');
-    }
-
-    try {
-      print('📝 Starting registration for: ${_emailController.text}');
-
-      // Check if email exists in profiles
-      final existingProfile = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('email', _emailController.text.trim())
-          .maybeSingle();
-
-      if (existingProfile != null) {
-        throw Exception(
-            'This email is already registered. Please use login instead.');
-      }
-
-      // Create account with verified email
-      final authResponse = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        emailRedirectTo: 'achivo://email-verified',
-        data: {
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'role': 'student',
-          'department_id': departmentId,
-          'institute_id': _profileData['institute_id'],
-          'state_id': _profileData['state_id'],
-          'country_id': _profileData['country_id'],
-        },
-      );
-
-      if (authResponse.user == null) {
-        throw Exception('Failed to create account. Please try again.');
-      }
-
-      final userId = authResponse.user!.id;
-      print('✅ Auth user created: $userId');
-      print('📧 Email confirmed: ${authResponse.user!.emailConfirmedAt}');
-
-      // Wait for trigger
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      // Call registration RPC
-      print('📞 Calling register_student_rpc');
-      final rpcResponse = await supabase.rpc('register_student_rpc', params: {
-        'p_user_id': userId,
-        'p_email': _emailController.text.trim(),
-        'p_first_name': _firstNameController.text.trim(),
-        'p_last_name': _lastNameController.text.trim(),
-        'p_father_name': _fatherNameController.text.trim(),
-        'p_gender': selectedGender!,
-        'p_phone': _phoneController.text.trim(),
-        'p_student_id': _studentIdController.text.trim(),
-        'p_roll_number': _rollNoController.text.trim(),
-        'p_year': selectedYear!,
-        'p_dept_id': departmentId,
-        'p_inst_id': _profileData['institute_id'],
-        'p_state_id': _profileData['state_id'],
-        'p_country_id': _profileData['country_id'],
-      }).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Registration timeout - please try again');
-        },
-      );
-
-      print('📦 RPC Response: $rpcResponse');
-
-      if (rpcResponse == null || rpcResponse['success'] != true) {
-        await supabase.auth.signOut();
-        throw Exception(rpcResponse?['error'] ?? 'Registration failed');
-      }
-
-      // Sign out temporary session
-      await supabase.auth.signOut();
-
-      print('✅ Registration completed successfully');
-
-      _showSuccessMessage(
-          'Account created successfully! You can now log in.');
-
-      // Navigate to login
-      await Future.delayed(const Duration(seconds: 2));
-      if (mounted) {
-        setState(() {
-          _isLogin = true;
-          _isOtpSent = false;
-        });
-      }
-
-    } on AuthException catch (e) {
-      print('❌ Auth Exception: ${e.message}');
-      if (e.message.contains('already registered') ||
-          e.message.contains('User already registered')) {
-        throw Exception('This email is already registered. Please use login.');
-      }
-      throw Exception('Registration error: ${e.message}');
-    } catch (e) {
-      print('❌ Unexpected error: $e');
-      throw Exception('Unexpected error: ${e.toString()}');
-    }
-  }
+  // This function is no longer needed as registration is completed
+  // in _completeRegistration() after OTP verification
 
   Future<void> _handleForgotPassword() async {
     if (_rollNoController.text.isEmpty) {
