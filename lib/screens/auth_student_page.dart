@@ -25,18 +25,13 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   bool _isLoading = false;
   bool _isLogin = false;
   bool _isOtpSent = false;
-  bool _isOtpVerified = false;
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
-  bool _showEmailVerificationPending = false;
   String? selectedGender;
   String? selectedDepartment;
   String? selectedYear;
   String _captchaText = '';
   int _otpCountdown = 0;
-
-  // Store temporary OTP session info
-  String? _tempOtpToken;
 
   List<String> _departmentNames = [];
   Map<String, int> _departmentIdMap = {};
@@ -60,9 +55,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   final List<String> genders = ['Male', 'Female', 'Other'];
   final List<String> years = ['I', 'II', 'III', 'IV', 'V'];
-
-  GestureTapCallback? get _showPrivacyPolicy => null;
-  GestureTapCallback? get _showTermsAndConditions => null;
 
   @override
   void initState() {
@@ -185,8 +177,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // BETTER APPROACH: Email-based OTP without Supabase Auth
-  // We'll generate and send our own OTP via email
+  // SEND OTP - Uses Supabase Auth OTP System ONLY
   // ============================================================
   Future<void> _sendOTP() async {
     if (_emailController.text.isEmpty) {
@@ -212,7 +203,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
-      // Check if email already exists in profiles (completed registrations)
+      print('📧 Sending OTP to: ${_emailController.text.trim()}');
+
+      // Check if email already exists
       final profileResponse = await supabase
           .from('profiles')
           .select('email')
@@ -220,42 +213,19 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           .maybeSingle();
 
       if (profileResponse != null && !_isLogin) {
-        _showErrorMessage('Email already registered. Please use login instead.');
+        _showErrorMessage(
+            'Email already registered. Please use login instead.');
         setState(() {
           _isLoading = false;
         });
         return;
       }
 
-      // Generate a 6-digit OTP
-      final random = Random.secure();
-      final otp = (100000 + random.nextInt(900000)).toString();
-
-      // Store OTP with expiry in database (5 minutes expiry)
-      final expiryTime = DateTime.now().add(const Duration(minutes: 5));
-
-      await supabase.from('email_verifications').upsert({
-        'email': _emailController.text.trim(),
-        'otp': otp,
-        'expires_at': expiryTime.toIso8601String(),
-        'verified': false,
-        'created_at': DateTime.now().toIso8601String(),
-      }, onConflict: 'email');
-
-      // Send OTP via Supabase Edge Function
-      try {
-        await supabase.functions.invoke('send-otp-email', body: {
-          'email': _emailController.text.trim(),
-          'otp': otp,
-          'name': _firstNameController.text.trim(),
-        });
-      } catch (e) {
-        // If Edge Function not available, use fallback
-        print('Edge function not available, using fallback: $e');
-        // For development: just show the OTP (REMOVE IN PRODUCTION)
-        print('🔐 OTP for ${_emailController.text}: $otp');
-        _showSuccessMessage('OTP generated (check console in dev mode): $otp');
-      }
+      // Use Supabase Auth OTP - This sends the email automatically
+      await supabase.auth.signInWithOtp(
+        email: _emailController.text.trim(),
+        emailRedirectTo: 'achivo://email-verified',
+      );
 
       setState(() {
         _isLoading = false;
@@ -263,16 +233,21 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       });
 
       _startOtpTimer();
-      _showSuccessMessage('Verification code sent to your email! Check your inbox.');
-    } on PostgrestException catch (error) {
+      _showSuccessMessage(
+          'Verification code sent to your email! Check your inbox.');
+
+      print('✅ OTP sent successfully via Supabase Auth');
+    } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Database error: ${error.message}');
+      print('❌ OTP Send Error: ${e.message}');
+      _showErrorMessage('Failed to send verification code: ${e.message}');
     } catch (error) {
       setState(() {
         _isLoading = false;
       });
+      print('❌ Unexpected Error: $error');
       _showErrorMessage('Failed to send verification code: ${error.toString()}');
     }
   }
@@ -283,6 +258,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     }
   }
 
+  // ============================================================
+  // VERIFY OTP - Uses Supabase Auth Verification
+  // ============================================================
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
       _showErrorMessage('Please enter the 6-digit verification code.');
@@ -294,15 +272,16 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
 
     try {
-      // Verify OTP from database
-      final otpRecord = await supabase
-          .from('email_verifications')
-          .select()
-          .eq('email', _emailController.text.trim())
-          .eq('otp', _otpController.text.trim())
-          .maybeSingle();
+      print('🔐 Verifying OTP: ${_otpController.text.trim()}');
 
-      if (otpRecord == null) {
+      // Verify OTP using Supabase Auth
+      final response = await supabase.auth.verifyOTP(
+        email: _emailController.text.trim(),
+        token: _otpController.text.trim(),
+        type: OtpType.email,
+      );
+
+      if (response.session == null) {
         setState(() {
           _isLoading = false;
         });
@@ -310,48 +289,35 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         return;
       }
 
-      // Check if OTP has expired
-      final expiryTime = DateTime.parse(otpRecord['expires_at'] as String);
-      if (DateTime.now().isAfter(expiryTime)) {
-        setState(() {
-          _isLoading = false;
-        });
-        _showErrorMessage('Verification code has expired. Please request a new one.');
-        return;
-      }
+      print('✅ OTP verified successfully!');
+      print('📧 Email confirmed: ${response.user?.emailConfirmedAt}');
 
-      // Check if already verified
-      if (otpRecord['verified'] == true) {
-        setState(() {
-          _isLoading = false;
-        });
-        _showErrorMessage('This code has already been used. Please request a new one.');
-        return;
-      }
-
-      // Mark as verified
-      await supabase
-          .from('email_verifications')
-          .update({'verified': true})
-          .eq('email', _emailController.text.trim())
-          .eq('otp', _otpController.text.trim());
+      // Sign out the temporary session
+      await supabase.auth.signOut();
 
       setState(() {
         _isLoading = false;
-        _isOtpVerified = true;
         _otpTimerController.stop();
       });
 
-      _showSuccessMessage('Email verified successfully! You can now complete registration.');
-    } on PostgrestException catch (error) {
+      _showSuccessMessage(
+          'Email verified successfully! You can now complete registration.');
+
+      // Proceed to registration after brief delay
+      await Future.delayed(const Duration(seconds: 1));
+      await _handleRegistration();
+
+    } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Database error: ${error.message}');
+      print('❌ OTP Verification Error: ${e.message}');
+      _showErrorMessage('Verification failed: ${e.message}');
     } catch (error) {
       setState(() {
         _isLoading = false;
       });
+      print('❌ Unexpected Error: $error');
       _showErrorMessage('Verification failed: ${error.toString()}');
     }
   }
@@ -364,9 +330,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
   Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
-      // For registration, check OTP verification
-      if (!_isLogin && !_isOtpVerified) {
-        _showErrorMessage('Please verify your email first by clicking "Send OTP" and entering the code');
+      // For registration, check OTP was sent
+      if (!_isLogin && !_isOtpSent) {
+        _showErrorMessage(
+            'Please verify your email first by clicking "Send OTP" and entering the code');
         return;
       }
 
@@ -385,16 +352,19 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         if (_isLogin) {
           await _handleLogin();
         } else {
-          await _handleRegistration();
+          // For registration, OTP verification triggers registration
+          await _verifyOTP();
         }
       } catch (error) {
         _showErrorMessage(error is Exception
             ? error.toString().replaceFirst('Exception: ', '')
             : 'An unexpected error occurred.');
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        if (_isLogin) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
         _generateCaptcha();
         _captchaController.clear();
       }
@@ -454,7 +424,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // FIXED REGISTRATION - Now creates account at the right time
+  // REGISTRATION - Called after OTP verification
   // ============================================================
   Future<void> _handleRegistration() async {
     if (_profileData['institute_id'] == null) {
@@ -469,7 +439,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     try {
       print('📝 Starting registration for: ${_emailController.text}');
 
-      // Double-check email doesn't exist
+      // Check if email exists in profiles
       final existingProfile = await supabase
           .from('profiles')
           .select('email')
@@ -477,10 +447,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           .maybeSingle();
 
       if (existingProfile != null) {
-        throw Exception('This email is already registered. Please use login instead.');
+        throw Exception(
+            'This email is already registered. Please use login instead.');
       }
 
-      // NOW create the actual account with signUp
+      // Create account with verified email
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -502,8 +473,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       final userId = authResponse.user!.id;
       print('✅ Auth user created: $userId');
+      print('📧 Email confirmed: ${authResponse.user!.emailConfirmedAt}');
 
-      // Wait for trigger to create profile
+      // Wait for trigger
       await Future.delayed(const Duration(milliseconds: 500));
 
       // Call registration RPC
@@ -526,43 +498,34 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       }).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
-          print('⏱️ RPC timeout');
           throw Exception('Registration timeout - please try again');
         },
       );
 
       print('📦 RPC Response: $rpcResponse');
 
-      if (rpcResponse == null) {
-        print('❌ RPC returned null');
-        // Clean up the auth user
+      if (rpcResponse == null || rpcResponse['success'] != true) {
         await supabase.auth.signOut();
-        throw Exception('Registration failed. Please try again.');
+        throw Exception(rpcResponse?['error'] ?? 'Registration failed');
       }
 
-      final result = rpcResponse as Map<String, dynamic>;
-
-      if (result['success'] != true) {
-        print('❌ RPC failed: ${result['error']}');
-        await supabase.auth.signOut();
-        throw Exception(result['error'] ?? 'Registration failed');
-      }
-
-      // Sign out the session created by signUp
+      // Sign out temporary session
       await supabase.auth.signOut();
 
-      final emailVerified = result['email_verified'] == true;
-      print('✅ Registration successful. Email verified: $emailVerified');
-
-      setState(() {
-        _showEmailVerificationPending = true;
-      });
+      print('✅ Registration completed successfully');
 
       _showSuccessMessage(
-        emailVerified
-            ? 'Account created! You can now log in.'
-            : 'Account created! Please verify your email to activate your account.',
-      );
+          'Account created successfully! You can now log in.');
+
+      // Navigate to login
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        setState(() {
+          _isLogin = true;
+          _isOtpSent = false;
+        });
+      }
+
     } on AuthException catch (e) {
       print('❌ Auth Exception: ${e.message}');
       if (e.message.contains('already registered') ||
@@ -612,28 +575,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     }
   }
 
-  Future<void> _resendVerificationEmail() async {
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final result = await AuthService.resendVerificationEmail(
-        _emailController.text.trim(),
-      );
-
-      if (result.success) {
-        _showSuccessMessage(result.message);
-      } else {
-        _showErrorMessage(result.message);
-      }
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
   void _showSuccessMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -654,15 +595,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
-  // UI code remains the same...
-  // [Rest of your build methods stay unchanged]
-
   @override
   Widget build(BuildContext context) {
-    if (_showEmailVerificationPending) {
-      return _buildEmailVerificationPendingScreen();
-    }
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -700,148 +634,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
-  Widget _buildEmailVerificationPendingScreen() {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF3E8FF),
-              Color(0xFFE0E7FF),
-              Color(0xFFDBEAFE),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.mark_email_unread,
-                      size: 80,
-                      color: Colors.blue.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Verify Your Email',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'We\'ve sent a verification link to:',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _emailController.text,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue.shade700,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.blue.shade700),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Click the link in your email to activate your account',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[800],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Don\'t see the email? Check your spam folder',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _resendVerificationEmail,
-                    icon: _isLoading
-                        ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                        : const Icon(Icons.refresh),
-                    label: const Text('Resend Verification Email'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _showEmailVerificationPending = false;
-                      });
-                      Navigator.pushReplacementNamed(context, '/welcome');
-                    },
-                    child: const Text('Back to Login'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-// Include all your existing UI builder methods here
-// _buildHeader(), _buildTabSelector(), _buildForm(), etc.
-// [Copy from your original code - they remain unchanged]
   Widget _buildHeader() {
     return Column(
       children: [
@@ -889,7 +681,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               onTap: () => setState(() {
                 _isLogin = false;
                 _isOtpSent = false;
-                _isOtpVerified = false;
                 _generateCaptcha();
               }),
               child: Container(
@@ -922,7 +713,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               onTap: () => setState(() {
                 _isLogin = true;
                 _isOtpSent = false;
-                _isOtpVerified = false;
                 _generateCaptcha();
               }),
               child: Container(
@@ -1082,8 +872,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               )
             else if (_departmentNames.isEmpty)
               _buildInputField(
-                controller: TextEditingController(
-                    text: 'No departments found'),
+                controller:
+                TextEditingController(text: 'No departments found'),
                 label: 'Department',
                 placeholder: 'Check database connection',
                 icon: Icons.error_outline,
@@ -1262,7 +1052,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                   Text(
                     _isLogin
                         ? 'Sign In as Student'
-                        : 'Create Student Account',
+                        : 'Verify OTP & Register',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -1285,40 +1075,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   Widget _buildFooter() {
-    return Text.rich(
-      TextSpan(
-        text: 'By continuing, you agree to our ',
-        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-        children: [
-          WidgetSpan(
-            child: GestureDetector(
-              onTap: _showTermsAndConditions,
-              child: const Text(
-                'Terms of Service',
-                style: TextStyle(
-                  color: Color(0xFF8B5CF6),
-                  decoration: TextDecoration.underline,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-          const TextSpan(text: ' and '),
-          WidgetSpan(
-            child: GestureDetector(
-              onTap: _showPrivacyPolicy,
-              child: const Text(
-                'Privacy Policy',
-                style: TextStyle(
-                  color: Color(0xFF8B5CF6),
-                  decoration: TextDecoration.underline,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return Text(
+      'By continuing, you agree to our Terms of Service and Privacy Policy',
+      style: TextStyle(color: Colors.grey[600], fontSize: 14),
       textAlign: TextAlign.center,
     );
   }
@@ -1490,22 +1249,18 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
               prefixIcon:
               Icon(Icons.mail_outline, color: Colors.grey[500], size: 20),
-              suffixIcon: !_isOtpVerified && !_isLogin
-                  ? TextButton(
+              suffixIcon: TextButton(
                 onPressed: _isOtpSent ? null : _sendOTP,
                 child: Text(
-                  _isOtpSent ? 'Sent' : 'Send OTP',
+                  _isOtpSent ? 'Sent ✓' : 'Send OTP',
                   style: TextStyle(
-                    color: _isOtpSent
-                        ? Colors.green
-                        : const Color(0xFF8B5CF6),
+                    color:
+                    _isOtpSent ? Colors.green : const Color(0xFF8B5CF6),
                     fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              )
-                  : _isOtpVerified
-                  ? const Icon(Icons.verified, color: Colors.green, size: 20)
-                  : null,
+              ),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 20,
@@ -1514,7 +1269,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             ),
           ),
         ),
-        if (_isOtpSent && !_isOtpVerified && !_isLogin) ...[
+        if (_isOtpSent) ...[
           const SizedBox(height: 16),
           _buildEnhancedOtpField(),
         ],
@@ -1558,73 +1313,41 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blue.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: TextFormField(
-                    controller: _otpController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.grey[800],
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 4,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: '• • • • • •',
-                      hintStyle: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 18,
-                        letterSpacing: 8,
-                      ),
-                      border: InputBorder.none,
-                      counterText: '',
-                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
+              ],
+            ),
+            child: TextFormField(
+              controller: _otpController,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.grey[800],
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 4,
               ),
-              const SizedBox(width: 12),
-              Container(
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
+              decoration: InputDecoration(
+                hintText: '• • • • • •',
+                hintStyle: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 18,
+                  letterSpacing: 8,
                 ),
-                child: ElevatedButton(
-                  onPressed: _verifyOTP,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 16),
-                  ),
-                  child: const Text(
-                    'Verify',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+                border: InputBorder.none,
+                counterText: '',
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 16),
           Row(
