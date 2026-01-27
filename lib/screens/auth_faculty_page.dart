@@ -32,6 +32,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   List<String> selectedSubjects = [];
   String _captchaText = '';
   int _otpCountdown = 0;
+  int _otpRetryCount = 0; // Track retry attempts
 
   // --- State for dynamic department loading ---
   List<String> _departmentNames = [];
@@ -191,8 +192,11 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
   }
 
+  // ===================================================================
+  // IMPROVED OTP SENDING WITH BETTER ERROR HANDLING
+  // ===================================================================
   Future<void> _sendOTP() async {
-    // Only validate email format before sending OTP
+    // Validate email format first
     if (_emailController.text.isEmpty) {
       _showErrorMessage('Please enter a valid email first.');
       return;
@@ -203,12 +207,20 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       return;
     }
 
+    // Check retry count to prevent spam
+    if (_otpRetryCount >= 3) {
+      _showErrorMessage(
+          'Maximum retry attempts reached. Please wait 10 minutes before trying again.'
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // 1. Check if email already exists in profiles (for registration only)
+      // 1. Check if email already exists (for registration only)
       if (!_isLogin) {
         final profileResponse = await supabase
             .from('profiles')
@@ -225,12 +237,14 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         }
       }
 
-      // 2. Send OTP using Supabase Auth
+      // 2. Send OTP via Supabase Auth
       print('📧 Sending OTP to: ${_emailController.text.trim()}');
+      print('🔄 Retry attempt: ${_otpRetryCount + 1}/3');
 
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
-        emailRedirectTo: null, // No redirect needed
+        emailRedirectTo: null,
+        shouldCreateUser: !_isLogin, // Only create user during registration
       );
 
       print('✅ OTP sent successfully');
@@ -238,25 +252,26 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       setState(() {
         _isLoading = false;
         _isOtpSent = true;
+        _otpRetryCount++;
       });
 
       _startOtpTimer();
-      _showSuccessMessage('OTP sent successfully! Check your email (including spam folder).');
+      _showSuccessMessage(
+          'OTP sent successfully! Check your email (including spam folder).\n'
+              'Code expires in 60 seconds.'
+      );
 
     } on AuthException catch (error) {
       print('❌ Auth Exception: ${error.message}');
+      print('🔍 Error code: ${error.statusCode}');
+
       setState(() {
         _isLoading = false;
       });
 
-      // Handle specific Supabase Auth errors
-      if (error.message.contains('Email rate limit exceeded')) {
-        _showErrorMessage('Too many attempts. Please wait a few minutes and try again.');
-      } else if (error.message.contains('SMTP')) {
-        _showErrorMessage('Email service temporarily unavailable. Please try again in a few minutes.');
-      } else {
-        _showErrorMessage('Failed to send OTP: ${error.message}');
-      }
+      // Enhanced error handling with specific messages
+      _handleOtpError(error);
+
     } catch (error) {
       print('❌ Unexpected error: $error');
       setState(() {
@@ -266,12 +281,146 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     }
   }
 
-  Future<void> _resendOTP() async {
-    if (_otpCountdown == 0) {
-      await _sendOTP();
+  // ===================================================================
+  // DETAILED ERROR HANDLING
+  // ===================================================================
+  void _handleOtpError(AuthException error) {
+    if (error.message.contains('Email rate limit exceeded') ||
+        error.message.contains('rate limit')) {
+      _showDetailedErrorDialog(
+        title: 'Rate Limit Exceeded',
+        message: 'You\'ve sent too many OTP requests.',
+        solution: 'Please wait 60 minutes before trying again. '
+            'Supabase limits OTP requests to prevent spam.',
+      );
+    } else if (error.message.contains('SMTP') ||
+        error.message.contains('Email provider')) {
+      _showDetailedErrorDialog(
+        title: 'Email Service Issue',
+        message: 'The email service is not properly configured.',
+        solution: 'Please contact system administrator. '
+            'SMTP configuration is required in Supabase Dashboard.',
+      );
+    } else if (error.message.contains('unexpected_failure') ||
+        error.message.contains('Error sending confirmation email')) {
+      _showDetailedErrorDialog(
+        title: 'Email Delivery Failed',
+        message: 'Failed to send verification email.',
+        solution: 'Possible causes:\n'
+            '• Email address is invalid\n'
+            '• SMTP not configured in Supabase\n'
+            '• Rate limit exceeded\n\n'
+            'Please check your email and try again in a few minutes.',
+      );
+    } else if (error.message.contains('Invalid email')) {
+      _showErrorMessage('Please enter a valid email address.');
+    } else {
+      _showDetailedErrorDialog(
+        title: 'Failed to Send OTP',
+        message: error.message,
+        solution: 'If this problem persists, please contact support.',
+      );
     }
   }
 
+  void _showDetailedErrorDialog({
+    required String title,
+    required String message,
+    required String solution,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red.shade600),
+            const SizedBox(width: 8),
+            Text(title),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.lightbulb_outline,
+                          color: Colors.blue.shade700,
+                          size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Solution',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    solution,
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===================================================================
+  // RESEND OTP WITH EXPONENTIAL BACKOFF
+  // ===================================================================
+  Future<void> _resendOTP() async {
+    if (_otpCountdown > 0) {
+      _showErrorMessage('Please wait ${_otpCountdown}s before resending.');
+      return;
+    }
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    // Wait a bit before resending (exponential backoff)
+    await Future.delayed(Duration(seconds: min(_otpRetryCount * 2, 10)));
+
+    if (mounted) Navigator.pop(context); // Close loading dialog
+
+    await _sendOTP();
+  }
+
+  // ===================================================================
+  // OTP VERIFICATION
+  // ===================================================================
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
       _showErrorMessage('Please enter the 6-digit OTP.');
@@ -316,6 +465,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         setState(() {
           _isOtpSent = false;
           _otpController.clear();
+          _otpRetryCount = 0; // Reset retry count
         });
       } else if (error.message.contains('invalid')) {
         _showErrorMessage('Invalid OTP. Please check and try again.');
@@ -417,7 +567,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         _showSuccessMessage('Login successful! Redirecting...');
 
         if (mounted) {
-          // Small delay for better UX
           await Future.delayed(const Duration(milliseconds: 500));
           Navigator.pushReplacementNamed(context, '/faculty-dashboard');
         }
@@ -448,7 +597,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     try {
       print('📝 Starting registration for: ${_emailController.text.trim()}');
 
-      // 1. Create auth user with email and password
+      // 1. Create auth user
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -457,7 +606,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'last_name': _lastNameController.text.trim(),
           'role': 'faculty',
         },
-        emailRedirectTo: null, // We handle verification via OTP
+        emailRedirectTo: null,
       );
 
       if (authResponse.user == null) {
@@ -466,7 +615,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       print('👤 User created: ${authResponse.user!.id}');
 
-      // 2. Register faculty profile using RPC
+      // 2. Register faculty profile
       final rpcResult = await supabase.rpc('register_faculty_rpc', params: {
         'p_user_id': authResponse.user!.id,
         'p_email': _emailController.text.trim(),
@@ -484,45 +633,34 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       print('✅ Faculty registration RPC result: $rpcResult');
 
-      // Check RPC result
-      if (rpcResult is Map) {
-        if (rpcResult['success'] == true) {
-          final emailVerified = rpcResult['email_verified'] == true;
+      if (rpcResult is Map && rpcResult['success'] == true) {
+        final emailVerified = rpcResult['email_verified'] == true;
 
-          if (emailVerified) {
-            _showSuccessMessage('Registration successful! Redirecting to dashboard...');
-            if (mounted) {
-              await Future.delayed(const Duration(milliseconds: 500));
-              Navigator.pushReplacementNamed(context, '/faculty-dashboard');
-            }
-          } else {
-            _showSuccessMessage(
-                'Registration successful! Please check your email to verify your account before logging in.'
-            );
-            if (mounted) {
-              await Future.delayed(const Duration(seconds: 2));
-              setState(() {
-                _isLogin = true;
-                _isOtpSent = false;
-                _isOtpVerified = false;
-              });
-            }
+        if (emailVerified) {
+          _showSuccessMessage('Registration successful! Redirecting...');
+          if (mounted) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            Navigator.pushReplacementNamed(context, '/faculty-dashboard');
           }
         } else {
-          final errorMsg = rpcResult['error'] ?? 'Registration failed';
-          throw Exception(errorMsg);
+          _showSuccessMessage(
+              'Registration successful! Please check your email to verify your account.'
+          );
+          if (mounted) {
+            await Future.delayed(const Duration(seconds: 2));
+            setState(() {
+              _isLogin = true;
+              _isOtpSent = false;
+              _isOtpVerified = false;
+            });
+          }
         }
       } else {
-        throw Exception('Invalid response from registration');
+        throw Exception(rpcResult['error'] ?? 'Registration failed');
       }
     } on AuthException catch (e) {
-      print('❌ Auth Exception during registration: ${e.message}');
-
-      if (e.message.contains('already registered')) {
-        throw Exception('Email already registered. Please use login instead.');
-      } else {
-        throw Exception('Registration failed: ${e.message}');
-      }
+      print('❌ Auth Exception: ${e.message}');
+      throw Exception('Registration failed: ${e.message}');
     } catch (error) {
       print('❌ Registration error: $error');
       throw Exception(error.toString().replaceFirst('Exception: ', ''));
@@ -540,7 +678,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
 
     try {
-      // Look up email using faculty_id
       final response = await supabase
           .from('faculty')
           .select('email')
@@ -670,6 +807,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                               _isLogin = true;
                               _isOtpSent = false;
                               _isOtpVerified = false;
+                              _otpRetryCount = 0;
                               _generateCaptcha();
                             }),
                             child: Container(
@@ -705,6 +843,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                               _isLogin = false;
                               _isOtpSent = false;
                               _isOtpVerified = false;
+                              _otpRetryCount = 0;
                               _generateCaptcha();
                             }),
                             child: Container(
@@ -971,7 +1110,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                           const SizedBox(height: 20),
                         ],
 
-                        // Enhanced Captcha field (only for final submission)
+                        // Enhanced Captcha field
                         _buildEnhancedCaptchaField(),
                         const SizedBox(height: 20),
 
@@ -1511,13 +1650,22 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: ElevatedButton(
-                  onPressed: _verifyOTP,
+                  onPressed: _isLoading ? null : _verifyOTP,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   ),
-                  child: const Text(
+                  child: _isLoading
+                      ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                      : const Text(
                     'Verify',
                     style: TextStyle(
                       color: Colors.white,
@@ -1557,6 +1705,34 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
               ),
             ],
           ),
+          if (_otpRetryCount > 0) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline,
+                      color: Colors.orange.shade700,
+                      size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Retry attempts: $_otpRetryCount/3',
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
