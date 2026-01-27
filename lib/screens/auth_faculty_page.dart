@@ -28,7 +28,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
   String? selectedGender;
-  String? selectedDepartment; // Department State
+  String? selectedDepartment;
   List<String> selectedSubjects = [];
   String _captchaText = '';
   int _otpCountdown = 0;
@@ -37,7 +37,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   List<String> _departmentNames = [];
   Map<String, int> _departmentIdMap = {};
   bool _departmentsLoaded = false;
-  // ------------------------------------------
 
   // Store data from WelcomeScreen
   Map<String, dynamic> _profileData = {};
@@ -54,7 +53,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
   final _facultyIdController = TextEditingController();
-  final _fatherNameController = TextEditingController();
   final _otpController = TextEditingController();
   final _captchaController = TextEditingController();
 
@@ -126,7 +124,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     _confirmPasswordController.dispose();
     _phoneController.dispose();
     _facultyIdController.dispose();
-    _fatherNameController.dispose();
     _otpController.dispose();
     _captchaController.dispose();
     super.dispose();
@@ -195,16 +192,17 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   Future<void> _sendOTP() async {
-    // Only validate email and captcha before sending OTP
+    // Validate email and captcha before sending OTP
     if (_emailController.text.isEmpty) {
       _showErrorMessage('Please enter a valid email first.');
       return;
     }
-    // Perform manual email validation check here since _formKey.currentState!.validate() checks all fields
+
     if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(_emailController.text.trim())) {
       _showErrorMessage('Please enter a valid email address.');
       return;
     }
+
     if (_captchaController.text.toUpperCase() != _captchaText) {
       _showErrorMessage('Incorrect captcha. Please re-enter.');
       _generateCaptcha();
@@ -217,7 +215,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
 
     try {
-      // 1. Check if user exists in the central 'profiles' table for a clean registration flow.
+      // 1. Check if email already exists in profiles
       final profileResponse = await supabase
           .from('profiles')
           .select('email')
@@ -233,9 +231,14 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       }
 
       // 2. Send OTP using Supabase Auth
+      print('📧 Sending OTP to: ${_emailController.text.trim()}');
+
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
+        emailRedirectTo: null, // No redirect needed
       );
+
+      print('✅ OTP sent successfully');
 
       setState(() {
         _isLoading = false;
@@ -243,18 +246,28 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       });
 
       _startOtpTimer();
-      _showSuccessMessage('OTP sent successfully to your email');
+      _showSuccessMessage('OTP sent successfully! Check your email inbox.');
 
     } on AuthException catch (error) {
+      print('❌ Auth Exception: ${error.message}');
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Failed to send OTP: ${error.message}');
+
+      // Handle specific Supabase Auth errors
+      if (error.message.contains('Email rate limit exceeded')) {
+        _showErrorMessage('Too many attempts. Please wait a few minutes and try again.');
+      } else if (error.message.contains('confirmation')) {
+        _showErrorMessage('Email confirmation is required. Please check your inbox.');
+      } else {
+        _showErrorMessage('Failed to send OTP. Please check your email and try again.');
+      }
     } catch (error) {
+      print('❌ Unexpected error: $error');
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Failed to send OTP: ${error.toString()}');
+      _showErrorMessage('An unexpected error occurred. Please try again.');
     }
   }
 
@@ -275,6 +288,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
 
     try {
+      print('🔐 Verifying OTP: ${_otpController.text.trim()}');
+
       final response = await supabase.auth.verifyOTP(
         email: _emailController.text.trim(),
         token: _otpController.text.trim(),
@@ -282,26 +297,42 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       );
 
       if (response.user != null) {
+        print('✅ OTP verified successfully for user: ${response.user!.id}');
+
         setState(() {
           _isLoading = false;
           _isOtpVerified = true;
           _otpTimerController.stop();
         });
-        // Sign out the temporary session created by verifyOTP
+
+        // Sign out the temporary session
         await supabase.auth.signOut();
 
-        _showSuccessMessage('Email verified successfully! You can now complete registration.');
+        _showSuccessMessage('Email verified successfully! Complete registration below.');
       }
     } on AuthException catch (error) {
+      print('❌ OTP verification failed: ${error.message}');
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('Invalid OTP: ${error.message}');
+
+      if (error.message.contains('expired')) {
+        _showErrorMessage('OTP has expired. Please request a new one.');
+        setState(() {
+          _isOtpSent = false;
+          _otpController.clear();
+        });
+      } else if (error.message.contains('invalid')) {
+        _showErrorMessage('Invalid OTP. Please check and try again.');
+      } else {
+        _showErrorMessage('OTP verification failed: ${error.message}');
+      }
     } catch (error) {
+      print('❌ Unexpected error during OTP verification: $error');
       setState(() {
         _isLoading = false;
       });
-      _showErrorMessage('OTP verification failed: ${error.toString()}');
+      _showErrorMessage('Verification failed. Please try again.');
     }
   }
 
@@ -322,7 +353,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         return;
       }
 
-      if (!_isLogin && selectedDepartment == null) { // NEW VALIDATION
+      if (!_isLogin && selectedDepartment == null) {
         _showErrorMessage('Please select your department.');
         return;
       }
@@ -362,10 +393,12 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
   Future<void> _handleLogin() async {
     try {
-      // 1. Look up email using faculty_id from the 'faculty' table
+      print('🔐 Starting login for Faculty ID: ${_facultyIdController.text.trim()}');
+
+      // 1. Look up email using faculty_id
       final facultyResponse = await supabase
           .from('faculty')
-          .select('email')
+          .select('email, is_active, user_id')
           .eq('faculty_id', _facultyIdController.text.trim())
           .maybeSingle();
 
@@ -373,53 +406,109 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         throw Exception('Faculty not found. Please check your Faculty ID.');
       }
 
-      // 2. Sign in using the retrieved email and password
+      print('📧 Found email: ${facultyResponse['email']}');
+
+      // 2. Check if account is active
+      if (facultyResponse['is_active'] != true) {
+        throw Exception('Your account is not active. Please verify your email first.');
+      }
+
+      // 3. Sign in using email and password
       final authResponse = await supabase.auth.signInWithPassword(
         email: facultyResponse['email'],
         password: _passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        _showSuccessMessage('Login successful!');
-        if (mounted) Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+        print('✅ Login successful');
+        _showSuccessMessage('Login successful! Redirecting...');
+
+        if (mounted) {
+          // Small delay for better UX
+          await Future.delayed(const Duration(milliseconds: 500));
+          Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+        }
       }
     } on AuthException catch (e) {
-      throw Exception('Login failed: Invalid credentials or account not confirmed.');
+      print('❌ Auth Exception: ${e.message}');
+
+      if (e.message.contains('Invalid login credentials')) {
+        throw Exception('Incorrect password. Please try again.');
+      } else if (e.message.contains('Email not confirmed')) {
+        throw Exception('Please verify your email before logging in.');
+      } else {
+        throw Exception('Login failed: ${e.message}');
+      }
     } catch (error) {
-      throw Exception('Login failed: ${error.toString()}');
+      print('❌ Login error: $error');
+      throw Exception(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
   Future<void> _handleRegistration() async {
     final departmentId = _departmentIdMap[selectedDepartment];
 
+    if (departmentId == null) {
+      throw Exception('Invalid department selection');
+    }
+
     try {
+      print('📝 Starting registration for: ${_emailController.text.trim()}');
+
+      // 1. Create auth user
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
+        data: {
+          'first_name': _firstNameController.text.trim(),
+          'last_name': _lastNameController.text.trim(),
+          'role': 'faculty',
+        },
       );
 
-      if (authResponse.user != null) {
-        await supabase.rpc('register_faculty_rpc', params: {
-          'p_user_id': authResponse.user!.id,
-          'p_email': _emailController.text.trim(),
-          'p_first_name': _firstNameController.text.trim(),
-          'p_last_name': _lastNameController.text.trim(),
-          'p_gender': selectedGender,
-          'p_phone': _phoneController.text.trim(),
-          'p_faculty_id': _facultyIdController.text.trim(),
-          'p_dept_id': departmentId,
-          'p_subjects': selectedSubjects, // Pass the List<String> directly
-          'p_inst_id': _profileData['institute_id'],
-          'p_state_id': _profileData['state_id'],
-          'p_country_id': _profileData['country_id'],
-        });
-
-        _showSuccessMessage('Faculty Account created successfully!');
-        if (mounted) Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+      if (authResponse.user == null) {
+        throw Exception('Failed to create account. Please try again.');
       }
+
+      print('👤 User created: ${authResponse.user!.id}');
+
+      // 2. Register faculty profile using RPC
+      final rpcResult = await supabase.rpc('register_faculty_rpc', params: {
+        'p_user_id': authResponse.user!.id,
+        'p_email': _emailController.text.trim(),
+        'p_first_name': _firstNameController.text.trim(),
+        'p_last_name': _lastNameController.text.trim(),
+        'p_gender': selectedGender,
+        'p_phone': _phoneController.text.trim(),
+        'p_faculty_id': _facultyIdController.text.trim(),
+        'p_dept_id': departmentId,
+        'p_subjects': selectedSubjects,
+        'p_inst_id': _profileData['institute_id'],
+        'p_state_id': _profileData['state_id'],
+        'p_country_id': _profileData['country_id'],
+      });
+
+      print('✅ Faculty registration RPC result: $rpcResult');
+
+      // Check RPC result
+      if (rpcResult is Map && rpcResult['success'] == true) {
+        _showSuccessMessage('Account created successfully! Redirecting...');
+
+        if (mounted) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+        }
+      } else {
+        // Handle RPC error
+        final errorMsg = rpcResult is Map ? rpcResult['error'] ?? 'Unknown error' : 'Registration failed';
+        throw Exception(errorMsg);
+      }
+    } on AuthException catch (e) {
+      print('❌ Auth Exception during registration: ${e.message}');
+      throw Exception('Registration failed: ${e.message}');
     } catch (error) {
-      throw Exception('Registration Error: $error');
+      print('❌ Registration error: $error');
+      throw Exception(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -434,7 +523,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
 
     try {
-      // Look up email using faculty_id from the 'faculty' table
+      // Look up email using faculty_id
       final response = await supabase
           .from('faculty')
           .select('email')
@@ -442,7 +531,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           .maybeSingle();
 
       if (response != null) {
-        await supabase.auth.resetPasswordForEmail(response['email']);
+        await supabase.auth.resetPasswordForEmail(
+          response['email'],
+          redirectTo: 'achivo://reset-password',
+        );
         _showSuccessMessage('Password reset link sent to your email');
       } else {
         _showErrorMessage('No account found with this Faculty ID');
@@ -461,7 +553,13 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   void _showSuccessMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 3),
       ),
@@ -471,7 +569,13 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   void _showErrorMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
         backgroundColor: Colors.red,
         duration: const Duration(seconds: 4),
       ),
@@ -507,7 +611,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                       Row(
                         children: [
                           IconButton(
-                            // 💡 FIX APPLIED HERE: Use pushReplacementNamed to go back to the welcome route
                             onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
@@ -666,21 +769,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                           _buildEmailFieldWithOTP(),
                           const SizedBox(height: 20),
 
-                          // Father's Name field
-                          _buildInputField(
-                            controller: _fatherNameController,
-                            label: "Father's Name",
-                            placeholder: "Enter your father's name",
-                            icon: Icons.family_restroom_outlined,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return "Please enter your father's name";
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 20),
-
                           // Department Dropdown
                           if (!_departmentsLoaded)
                             _buildInputField(
@@ -693,9 +781,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                             )
                           else if (_departmentNames.isEmpty)
                             _buildInputField(
-                              controller: TextEditingController(text: 'No departments found (Check DB)'),
+                              controller: TextEditingController(text: 'No departments found'),
                               label: 'Department',
-                              placeholder: 'Check database connection or seeding',
+                              placeholder: 'Check database',
                               icon: Icons.error_outline,
                               enabled: false,
                               validator: (_) => 'Department list is empty.',
@@ -717,7 +805,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                               },
                             ),
                           const SizedBox(height: 20),
-                          // End Department Dropdown
 
                           // Gender field
                           _buildDropdownField(
@@ -801,7 +888,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                           const SizedBox(height: 20),
                         ],
 
-                        // Password field with eye icon
+                        // Password field
                         _buildInputField(
                           controller: _passwordController,
                           label: 'Password',
@@ -995,7 +1082,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   // -------------------------------------------------------------------
-  // Helper Widgets (ALL DEFINITIONS)
+  // Helper Widgets
   // -------------------------------------------------------------------
 
   Widget _buildInputField({
@@ -1259,12 +1346,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   Widget _buildEmailFieldWithOTP() {
-    // Hide this complex field in login mode, as Faculty ID is used for lookup.
     if (_isLogin) {
       return const SizedBox.shrink();
     }
 
-    // Determine the suffix icon
     Widget? emailSuffixIcon;
     if (!_isOtpSent && !_isOtpVerified) {
       emailSuffixIcon = Padding(
@@ -1296,7 +1381,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 1. Email Input Field
         _buildInputField(
           controller: _emailController,
           label: 'Email Address',
@@ -1315,7 +1399,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           suffixIcon: emailSuffixIcon,
         ),
 
-        // 2. OTP Verification Field
         if (_isOtpSent && !_isOtpVerified) ...[
           const SizedBox(height: 20),
           _buildEnhancedOtpField(),
@@ -1587,7 +1670,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 }
 
-// Custom painter for captcha background pattern - MUST BE OUTSIDE _AuthFacultyPageState
+// Custom painter for captcha background pattern
 class CaptchaBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
