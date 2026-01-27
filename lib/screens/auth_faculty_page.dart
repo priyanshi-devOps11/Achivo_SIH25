@@ -192,7 +192,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   Future<void> _sendOTP() async {
-    // Validate email and captcha before sending OTP
+    // Only validate email format before sending OTP
     if (_emailController.text.isEmpty) {
       _showErrorMessage('Please enter a valid email first.');
       return;
@@ -203,31 +203,26 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       return;
     }
 
-    if (_captchaController.text.toUpperCase() != _captchaText) {
-      _showErrorMessage('Incorrect captcha. Please re-enter.');
-      _generateCaptcha();
-      _captchaController.clear();
-      return;
-    }
-
     setState(() {
       _isLoading = true;
     });
 
     try {
-      // 1. Check if email already exists in profiles
-      final profileResponse = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('email', _emailController.text.trim())
-          .maybeSingle();
+      // 1. Check if email already exists in profiles (for registration only)
+      if (!_isLogin) {
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('email', _emailController.text.trim())
+            .maybeSingle();
 
-      if (profileResponse != null && !_isLogin) {
-        _showErrorMessage('Email already registered. Please use login instead.');
-        setState(() {
-          _isLoading = false;
-        });
-        return;
+        if (profileResponse != null) {
+          _showErrorMessage('Email already registered. Please use login instead.');
+          setState(() {
+            _isLoading = false;
+          });
+          return;
+        }
       }
 
       // 2. Send OTP using Supabase Auth
@@ -246,7 +241,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       });
 
       _startOtpTimer();
-      _showSuccessMessage('OTP sent successfully! Check your email inbox.');
+      _showSuccessMessage('OTP sent successfully! Check your email (including spam folder).');
 
     } on AuthException catch (error) {
       print('❌ Auth Exception: ${error.message}');
@@ -257,10 +252,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       // Handle specific Supabase Auth errors
       if (error.message.contains('Email rate limit exceeded')) {
         _showErrorMessage('Too many attempts. Please wait a few minutes and try again.');
-      } else if (error.message.contains('confirmation')) {
-        _showErrorMessage('Email confirmation is required. Please check your inbox.');
+      } else if (error.message.contains('SMTP')) {
+        _showErrorMessage('Email service temporarily unavailable. Please try again in a few minutes.');
       } else {
-        _showErrorMessage('Failed to send OTP. Please check your email and try again.');
+        _showErrorMessage('Failed to send OTP: ${error.message}');
       }
     } catch (error) {
       print('❌ Unexpected error: $error');
@@ -343,8 +338,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
   Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
+      // For registration, check OTP verification
       if (!_isLogin && !_isOtpVerified) {
-        _showErrorMessage('Please verify your email first');
+        _showErrorMessage('Please verify your email with OTP first');
         return;
       }
 
@@ -358,9 +354,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         return;
       }
 
-      // Final Captcha check before submit
+      // Captcha check before submission
       if (_captchaController.text.toUpperCase() != _captchaText) {
-        _showErrorMessage('Incorrect captcha. Please refresh and try again.');
+        _showErrorMessage('Incorrect captcha. Please try again.');
         _generateCaptcha();
         _captchaController.clear();
         return;
@@ -385,9 +381,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         _generateCaptcha();
         _captchaController.clear();
       }
-    } else {
-      _generateCaptcha();
-      _captchaController.clear();
     }
   }
 
@@ -455,7 +448,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     try {
       print('📝 Starting registration for: ${_emailController.text.trim()}');
 
-      // 1. Create auth user
+      // 1. Create auth user with email and password
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -464,6 +457,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           'last_name': _lastNameController.text.trim(),
           'role': 'faculty',
         },
+        emailRedirectTo: null, // We handle verification via OTP
       );
 
       if (authResponse.user == null) {
@@ -491,21 +485,44 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       print('✅ Faculty registration RPC result: $rpcResult');
 
       // Check RPC result
-      if (rpcResult is Map && rpcResult['success'] == true) {
-        _showSuccessMessage('Account created successfully! Redirecting...');
+      if (rpcResult is Map) {
+        if (rpcResult['success'] == true) {
+          final emailVerified = rpcResult['email_verified'] == true;
 
-        if (mounted) {
-          await Future.delayed(const Duration(milliseconds: 500));
-          Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+          if (emailVerified) {
+            _showSuccessMessage('Registration successful! Redirecting to dashboard...');
+            if (mounted) {
+              await Future.delayed(const Duration(milliseconds: 500));
+              Navigator.pushReplacementNamed(context, '/faculty-dashboard');
+            }
+          } else {
+            _showSuccessMessage(
+                'Registration successful! Please check your email to verify your account before logging in.'
+            );
+            if (mounted) {
+              await Future.delayed(const Duration(seconds: 2));
+              setState(() {
+                _isLogin = true;
+                _isOtpSent = false;
+                _isOtpVerified = false;
+              });
+            }
+          }
+        } else {
+          final errorMsg = rpcResult['error'] ?? 'Registration failed';
+          throw Exception(errorMsg);
         }
       } else {
-        // Handle RPC error
-        final errorMsg = rpcResult is Map ? rpcResult['error'] ?? 'Unknown error' : 'Registration failed';
-        throw Exception(errorMsg);
+        throw Exception('Invalid response from registration');
       }
     } on AuthException catch (e) {
       print('❌ Auth Exception during registration: ${e.message}');
-      throw Exception('Registration failed: ${e.message}');
+
+      if (e.message.contains('already registered')) {
+        throw Exception('Email already registered. Please use login instead.');
+      } else {
+        throw Exception('Registration failed: ${e.message}');
+      }
     } catch (error) {
       print('❌ Registration error: $error');
       throw Exception(error.toString().replaceFirst('Exception: ', ''));
@@ -954,7 +971,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                           const SizedBox(height: 20),
                         ],
 
-                        // Enhanced Captcha field
+                        // Enhanced Captcha field (only for final submission)
                         _buildEnhancedCaptchaField(),
                         const SizedBox(height: 20),
 
