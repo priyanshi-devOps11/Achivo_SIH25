@@ -49,7 +49,7 @@ Follow the official installation guide:
 https://docs.flutter.dev/get-started/install
 
 Clone the Repository
-git clone https://github.com/<your-username>/achivo.git
+git clone (https://github.com/priyanshi-devOps11/Achivo_SIH25)
 cd achivo
 
 Install Dependencies
