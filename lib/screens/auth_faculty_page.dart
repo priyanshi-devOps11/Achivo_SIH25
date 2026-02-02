@@ -220,7 +220,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     });
 
     try {
-      // 1. Check if email already exists (for registration only)
+
       if (!_isLogin) {
         final profileResponse = await supabase
             .from('profiles')
