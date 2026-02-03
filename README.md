@@ -23,9 +23,12 @@ Instagram: @i.arunsharmaa
 
 Email: arunsharma73177@gmail.com
 
+
 Priyanshi Srivastava
 
 Instagram: @priyanshi_srivastava.11
+
+Email: srivastavapriyanshi8081@gmail.com
 
 We welcome developers, designers, and contributors to join this project.
 
