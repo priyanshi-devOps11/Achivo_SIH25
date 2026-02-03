@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 
-// Global Supabase client accessor (assuming it's defined in main.dart)
+// Global Supabase client accessor
 SupabaseClient get supabase => Supabase.instance.client;
 
 class AuthFacultyPage extends StatefulWidget {
@@ -32,19 +32,16 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   List<String> selectedSubjects = [];
   String _captchaText = '';
   int _otpCountdown = 0;
-  int _otpRetryCount = 0; // Track retry attempts
+  int _otpRetryCount = 0;
 
-  // --- State for dynamic department loading ---
+  // Department loading state
   List<String> _departmentNames = [];
   Map<String, int> _departmentIdMap = {};
   bool _departmentsLoaded = false;
 
-  // Store data from WelcomeScreen
+  // Profile data from WelcomeScreen
   Map<String, dynamic> _profileData = {};
   bool _isDataLoaded = false;
-
-  // Supabase client
-  final SupabaseClient supabase = Supabase.instance.client;
 
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
@@ -130,6 +127,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     super.dispose();
   }
 
+  // ===================================================================
+  // DEPARTMENT LOADING
+  // ===================================================================
   Future<void> _fetchDepartments() async {
     try {
       final response = await supabase
@@ -166,6 +166,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     }
   }
 
+  // ===================================================================
+  // CAPTCHA
+  // ===================================================================
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     Random random = Random();
@@ -193,12 +196,12 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   // ===================================================================
-  // IMPROVED OTP SENDING WITH BETTER ERROR HANDLING
+  // SEND OTP - IMPROVED VERSION
   // ===================================================================
   Future<void> _sendOTP() async {
-    // Validate email format first
+    // Validate email
     if (_emailController.text.isEmpty) {
-      _showErrorMessage('Please enter a valid email first.');
+      _showErrorMessage('Please enter your email address.');
       return;
     }
 
@@ -207,20 +210,18 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       return;
     }
 
-    // Check retry count to prevent spam
+    // Check retry limit
     if (_otpRetryCount >= 3) {
       _showErrorMessage(
-          'Maximum retry attempts reached. Please wait 10 minutes before trying again.'
+          'Maximum attempts reached. Please wait 10 minutes before trying again.'
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-
+      // Check if email already exists (for registration)
       if (!_isLogin) {
         final profileResponse = await supabase
             .from('profiles')
@@ -230,24 +231,30 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
         if (profileResponse != null) {
           _showErrorMessage('Email already registered. Please use login instead.');
-          setState(() {
-            _isLoading = false;
-          });
+          setState(() => _isLoading = false);
           return;
         }
       }
 
-      // 2. Send OTP via Supabase Auth
-      print('📧 Sending OTP to: ${_emailController.text.trim()}');
-      print('🔄 Retry attempt: ${_otpRetryCount + 1}/3');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('📧 Sending OTP via Resend');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('To: ${_emailController.text.trim()}');
+      print('Provider: Resend (smtp.resend.com:587)');
+      print('Sender: onboarding@resend.dev');
+      print('Attempt: ${_otpRetryCount + 1}/3');
+      print('Timestamp: ${DateTime.now()}');
 
+      // Send OTP via Supabase Auth
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
         emailRedirectTo: null,
-        shouldCreateUser: !_isLogin, // Only create user during registration
+        shouldCreateUser: !_isLogin,
       );
 
-      print('✅ OTP sent successfully');
+      print('✅ OTP request sent successfully!');
+      print('📬 Email should arrive within 1-2 minutes');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       setState(() {
         _isLoading = false;
@@ -256,152 +263,124 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       });
 
       _startOtpTimer();
-      _showSuccessMessage(
-          'OTP sent successfully! Check your email (including spam folder).\n'
-              'Code expires in 60 seconds.'
-      );
 
-    } on AuthException catch (error) {
-      print('❌ Auth Exception: ${error.message}');
-      print('🔍 Error code: ${error.statusCode}');
-
-      setState(() {
-        _isLoading = false;
-      });
-
-      // Enhanced error handling with specific messages
-      _handleOtpError(error);
-
-    } catch (error) {
-      print('❌ Unexpected error: $error');
-      setState(() {
-        _isLoading = false;
-      });
-      _showErrorMessage('An unexpected error occurred. Please try again.');
-    }
-  }
-
-  // ===================================================================
-  // DETAILED ERROR HANDLING
-  // ===================================================================
-  void _handleOtpError(AuthException error) {
-    if (error.message.contains('Email rate limit exceeded') ||
-        error.message.contains('rate limit')) {
-      _showDetailedErrorDialog(
-        title: 'Rate Limit Exceeded',
-        message: 'You\'ve sent too many OTP requests.',
-        solution: 'Please wait 60 minutes before trying again. '
-            'Supabase limits OTP requests to prevent spam.',
-      );
-    } else if (error.message.contains('SMTP') ||
-        error.message.contains('Email provider')) {
-      _showDetailedErrorDialog(
-        title: 'Email Service Issue',
-        message: 'The email service is not properly configured.',
-        solution: 'Please contact system administrator. '
-            'SMTP configuration is required in Supabase Dashboard.',
-      );
-    } else if (error.message.contains('unexpected_failure') ||
-        error.message.contains('Error sending confirmation email')) {
-      _showDetailedErrorDialog(
-        title: 'Email Delivery Failed',
-        message: 'Failed to send verification email.',
-        solution: 'Possible causes:\n'
-            '• Email address is invalid\n'
-            '• SMTP not configured in Supabase\n'
-            '• Rate limit exceeded\n\n'
-            'Please check your email and try again in a few minutes.',
-      );
-    } else if (error.message.contains('Invalid email')) {
-      _showErrorMessage('Please enter a valid email address.');
-    } else {
-      _showDetailedErrorDialog(
-        title: 'Failed to Send OTP',
-        message: error.message,
-        solution: 'If this problem persists, please contact support.',
-      );
-    }
-  }
-
-  void _showDetailedErrorDialog({
-    required String title,
-    required String message,
-    required String solution,
-  }) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.error_outline, color: Colors.red.shade600),
-            const SizedBox(width: 8),
-            Text(title),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      // Show detailed success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.lightbulb_outline,
-                          color: Colors.blue.shade700,
-                          size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Solution',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                  Icon(Icons.check_circle, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
                   Text(
-                    solution,
-                    style: TextStyle(color: Colors.grey.shade700),
+                    'OTP Sent Successfully!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+              const SizedBox(height: 10),
+              Text(
+                '📧 Check your email inbox\n'
+                    '⚠️ IMPORTANT: Also check SPAM/JUNK folder!\n'
+                    '🔍 Search for "Achivo" or "Resend"\n'
+                    '⏰ Code expires in 60 seconds',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withOpacity(0.95),
+                  height: 1.5,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+          backgroundColor: Colors.green.shade600,
+          duration: const Duration(seconds: 7),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+
+    } on AuthException catch (error) {
+      print('❌ Resend Error');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('Error: ${error.message}');
+      print('Status: ${error.statusCode}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+      setState(() => _isLoading = false);
+
+      // Handle specific errors
+      if (error.message.contains('Email rate limit exceeded') ||
+          error.message.contains('rate limit')) {
+        _showDetailedErrorDialog(
+          title: 'Rate Limit Exceeded',
+          message: 'You\'ve sent too many OTP requests.',
+          solution: '🕐 Wait 60 minutes before trying again\n\n'
+              '📧 Check if you already received the email\n\n'
+              '📂 Look in your SPAM/JUNK folder\n\n'
+              '📊 Current attempt: $_otpRetryCount/3\n\n'
+              'Resend limits OTP requests to prevent spam abuse.',
+          icon: Icons.schedule,
+          iconColor: Colors.orange,
+        );
+      } else if (error.message.contains('Invalid email')) {
+        _showErrorMessage('Please enter a valid email address.');
+      } else if (error.message.contains('unexpected_failure') ||
+          error.message.contains('Error sending confirmation email')) {
+        _showDetailedErrorDialog(
+          title: 'Email Delivery Issue',
+          message: 'Failed to send verification email via Resend.',
+          solution: '✅ Try using Gmail (most reliable)\n\n'
+              '📂 Check your SPAM/JUNK folder\n\n'
+              '⏰ Wait a few minutes and try again\n\n'
+              '✉️ Verify your email is correct\n\n'
+              '🔄 Try a different email provider if issue persists\n\n'
+              'From: onboarding@resend.dev\n'
+              'To: ${_emailController.text.trim()}',
+          icon: Icons.mail_outline,
+          iconColor: Colors.red,
+        );
+      } else {
+        _showDetailedErrorDialog(
+          title: 'Failed to Send OTP',
+          message: error.message,
+          solution: '🔄 Try again in a few minutes\n\n'
+              '📧 Use a different email address\n\n'
+              '📂 Check SPAM folder for previous emails\n\n'
+              '💬 Contact support if this persists\n\n'
+              'Error code: ${error.statusCode ?? "unknown"}',
+          icon: Icons.error_outline,
+          iconColor: Colors.red,
+        );
+      }
+
+    } catch (error) {
+      print('❌ Unexpected error: $error');
+      setState(() => _isLoading = false);
+      _showErrorMessage(
+          'Network error. Please check your internet connection and try again.'
+      );
+    }
   }
 
   // ===================================================================
-  // RESEND OTP WITH EXPONENTIAL BACKOFF
+  // RESEND OTP
   // ===================================================================
   Future<void> _resendOTP() async {
     if (_otpCountdown > 0) {
-      _showErrorMessage('Please wait ${_otpCountdown}s before resending.');
+      _showErrorMessage('Please wait $_otpCountdown seconds before resending.');
       return;
     }
 
-    // Show loading indicator
+    // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -410,26 +389,24 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       ),
     );
 
-    // Wait a bit before resending (exponential backoff)
+    // Wait a bit (exponential backoff)
     await Future.delayed(Duration(seconds: min(_otpRetryCount * 2, 10)));
 
-    if (mounted) Navigator.pop(context); // Close loading dialog
+    if (mounted) Navigator.pop(context);
 
     await _sendOTP();
   }
 
   // ===================================================================
-  // OTP VERIFICATION
+  // VERIFY OTP - IMPROVED VERSION
   // ===================================================================
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
-      _showErrorMessage('Please enter the 6-digit OTP.');
+      _showErrorMessage('Please enter the 6-digit OTP code.');
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       print('🔐 Verifying OTP: ${_otpController.text.trim()}');
@@ -452,40 +429,50 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         // Sign out the temporary session
         await supabase.auth.signOut();
 
-        _showSuccessMessage('Email verified successfully! Complete registration below.');
+        _showSuccessMessage(
+            '✅ Email verified successfully! Complete your registration below.'
+        );
       }
+
     } on AuthException catch (error) {
       print('❌ OTP verification failed: ${error.message}');
-      setState(() {
-        _isLoading = false;
-      });
+
+      setState(() => _isLoading = false);
 
       if (error.message.contains('expired')) {
         _showErrorMessage('OTP has expired. Please request a new one.');
         setState(() {
           _isOtpSent = false;
           _otpController.clear();
-          _otpRetryCount = 0; // Reset retry count
+          _otpRetryCount = 0;
         });
-      } else if (error.message.contains('invalid')) {
-        _showErrorMessage('Invalid OTP. Please check and try again.');
+      } else if (error.message.contains('invalid') ||
+          error.message.contains('Token')) {
+        _showErrorMessage('Invalid OTP code. Please check and try again.');
       } else {
-        _showErrorMessage('OTP verification failed: ${error.message}');
+        _showErrorMessage('Verification failed: ${error.message}');
       }
+
     } catch (error) {
-      print('❌ Unexpected error during OTP verification: $error');
-      setState(() {
-        _isLoading = false;
-      });
+      print('❌ Unexpected verification error: $error');
+      setState(() => _isLoading = false);
       _showErrorMessage('Verification failed. Please try again.');
     }
   }
 
+  // ===================================================================
+  // PASSWORD VALIDATION
+  // ===================================================================
   bool _isPasswordValid(String password) {
-    RegExp passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
+    RegExp passwordRegex = RegExp(
+        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
+    );
     return passwordRegex.hasMatch(password);
   }
 
+  // ===================================================================
+  // HANDLE SUBMIT
+  // ===================================================================
   Future<void> _handleSubmit() async {
     if (_formKey.currentState!.validate()) {
       // For registration, check OTP verification
@@ -500,11 +487,11 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       }
 
       if (!_isLogin && selectedDepartment == null) {
-        _showErrorMessage('Please select your department.');
+        _showErrorMessage('Please select your department');
         return;
       }
 
-      // Captcha check before submission
+      // Captcha check
       if (_captchaController.text.toUpperCase() != _captchaText) {
         _showErrorMessage('Incorrect captcha. Please try again.');
         _generateCaptcha();
@@ -512,9 +499,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         return;
       }
 
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
 
       try {
         if (_isLogin) {
@@ -523,22 +508,27 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           await _handleRegistration();
         }
       } catch (error) {
-        _showErrorMessage(error is Exception ? error.toString().replaceFirst('Exception: ', '') : 'An unexpected error occurred.');
+        _showErrorMessage(
+            error is Exception
+                ? error.toString().replaceFirst('Exception: ', '')
+                : 'An unexpected error occurred.'
+        );
       } finally {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
         _generateCaptcha();
         _captchaController.clear();
       }
     }
   }
 
+  // ===================================================================
+  // LOGIN
+  // ===================================================================
   Future<void> _handleLogin() async {
     try {
       print('🔐 Starting login for Faculty ID: ${_facultyIdController.text.trim()}');
 
-      // 1. Look up email using faculty_id
+      // Look up email using faculty_id
       final facultyResponse = await supabase
           .from('faculty')
           .select('email, is_active, user_id')
@@ -551,12 +541,14 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       print('📧 Found email: ${facultyResponse['email']}');
 
-      // 2. Check if account is active
+      // Check if account is active
       if (facultyResponse['is_active'] != true) {
-        throw Exception('Your account is not active. Please verify your email first.');
+        throw Exception(
+            'Your account is not active. Please verify your email first.'
+        );
       }
 
-      // 3. Sign in using email and password
+      // Sign in using email and password
       final authResponse = await supabase.auth.signInWithPassword(
         email: facultyResponse['email'],
         password: _passwordController.text.trim(),
@@ -571,6 +563,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           Navigator.pushReplacementNamed(context, '/faculty-dashboard');
         }
       }
+
     } on AuthException catch (e) {
       print('❌ Auth Exception: ${e.message}');
 
@@ -581,12 +574,16 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       } else {
         throw Exception('Login failed: ${e.message}');
       }
+
     } catch (error) {
       print('❌ Login error: $error');
       throw Exception(error.toString().replaceFirst('Exception: ', ''));
     }
   }
 
+  // ===================================================================
+  // REGISTRATION
+  // ===================================================================
   Future<void> _handleRegistration() async {
     final departmentId = _departmentIdMap[selectedDepartment];
 
@@ -597,7 +594,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     try {
       print('📝 Starting registration for: ${_emailController.text.trim()}');
 
-      // 1. Create auth user
+      // Create auth user
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -615,7 +612,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       print('👤 User created: ${authResponse.user!.id}');
 
-      // 2. Register faculty profile
+      // Register faculty profile
       final rpcResult = await supabase.rpc('register_faculty_rpc', params: {
         'p_user_id': authResponse.user!.id,
         'p_email': _emailController.text.trim(),
@@ -658,6 +655,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       } else {
         throw Exception(rpcResult['error'] ?? 'Registration failed');
       }
+
     } on AuthException catch (e) {
       print('❌ Auth Exception: ${e.message}');
       throw Exception('Registration failed: ${e.message}');
@@ -667,15 +665,16 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     }
   }
 
+  // ===================================================================
+  // FORGOT PASSWORD
+  // ===================================================================
   Future<void> _handleForgotPassword() async {
     if (_facultyIdController.text.isEmpty) {
       _showErrorMessage('Please enter your Faculty ID first');
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final response = await supabase
@@ -698,12 +697,13 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     } catch (error) {
       _showErrorMessage('Failed to send reset link: ${error.toString()}');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
+  // ===================================================================
+  // UI MESSAGES
+  // ===================================================================
   void _showSuccessMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -716,6 +716,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         ),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -732,10 +733,95 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         ),
         backgroundColor: Colors.red,
         duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
+  void _showDetailedErrorDialog({
+    required String title,
+    required String message,
+    required String solution,
+    IconData icon = Icons.error_outline,
+    Color iconColor = Colors.red,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, color: iconColor),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline,
+                          color: Colors.blue.shade700,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'What to do',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      solution,
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Got it'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===================================================================
+  // BUILD METHOD
+  // ===================================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -765,7 +851,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                       Row(
                         children: [
                           IconButton(
-                            onPressed: () => Navigator.pushReplacementNamed(context, '/welcome'),
+                            onPressed: () => Navigator.pushReplacementNamed(
+                              context,
+                              '/welcome',
+                            ),
                             icon: const Icon(Icons.arrow_back, size: 24),
                             color: Colors.black87,
                           ),
@@ -784,7 +873,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                       const SizedBox(height: 8),
                       Text(
                         'Shape the future with Achivo',
-                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -928,7 +1020,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                           // Department Dropdown
                           if (!_departmentsLoaded)
                             _buildInputField(
-                              controller: TextEditingController(text: 'Loading departments...'),
+                              controller: TextEditingController(
+                                text: 'Loading departments...',
+                              ),
                               label: 'Department',
                               placeholder: 'Loading...',
                               icon: Icons.business_outlined,
@@ -937,7 +1031,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                             )
                           else if (_departmentNames.isEmpty)
                             _buildInputField(
-                              controller: TextEditingController(text: 'No departments found'),
+                              controller: TextEditingController(
+                                text: 'No departments found',
+                              ),
                               label: 'Department',
                               placeholder: 'Check database',
                               icon: Icons.error_outline,
@@ -1055,7 +1151,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                           obscureText: !_passwordVisible,
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _passwordVisible ? Icons.visibility : Icons.visibility_off,
+                              _passwordVisible
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
                               color: Colors.grey[500],
                             ),
                             onPressed: () {
@@ -1088,12 +1186,15 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                             obscureText: !_confirmPasswordVisible,
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _confirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                _confirmPasswordVisible
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                                 color: Colors.grey[500],
                               ),
                               onPressed: () {
                                 setState(() {
-                                  _confirmPasswordVisible = !_confirmPasswordVisible;
+                                  _confirmPasswordVisible =
+                                  !_confirmPasswordVisible;
                                 });
                               },
                             ),
@@ -1237,9 +1338,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
   }
 
-  // -------------------------------------------------------------------
-  // Helper Widgets
-  // -------------------------------------------------------------------
+  // ===================================================================
+  // HELPER WIDGETS
+  // ===================================================================
 
   Widget _buildInputField({
     required TextEditingController controller,
@@ -1407,7 +1508,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                   );
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   child: Row(
                     children: [
                       Icon(icon, color: Colors.grey[500], size: 20),
@@ -1555,9 +1659,43 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           suffixIcon: emailSuffixIcon,
         ),
 
+        // OTP Field
         if (_isOtpSent && !_isOtpVerified) ...[
           const SizedBox(height: 20),
           _buildEnhancedOtpField(),
+        ],
+
+        // Spam folder warning
+        if (_isOtpSent && !_isOtpVerified) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.warning_amber,
+                  color: Colors.orange.shade700,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Not receiving OTP? Check your SPAM/JUNK folder!',
+                    style: TextStyle(
+                      color: Colors.orange.shade900,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
 
         if (_isOtpVerified) const SizedBox(height: 10),
@@ -1654,7 +1792,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                   ),
                   child: _isLoading
                       ? const SizedBox(
@@ -1716,9 +1857,11 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline,
-                      color: Colors.orange.shade700,
-                      size: 16),
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.orange.shade700,
+                    size: 16,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
