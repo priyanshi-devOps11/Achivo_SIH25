@@ -78,7 +78,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     );
 
     _otpTimerController = AnimationController(
-      duration: const Duration(seconds: 60),
+      duration: const Duration(seconds: 600), // 10 minutes
       vsync: this,
     );
 
@@ -102,7 +102,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_isDataLoaded) {
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final args =
+      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null) {
         _profileData = args;
         _isDataLoaded = true;
@@ -174,14 +175,15 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     Random random = Random();
     setState(() {
       _captchaText = String.fromCharCodes(
-        Iterable.generate(6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
+        Iterable.generate(
+            6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
       );
     });
   }
 
   void _startOtpTimer() {
     setState(() {
-      _otpCountdown = 60;
+      _otpCountdown = 600; // 10 minutes in seconds
     });
     _otpTimerController.reset();
     _otpTimerController.forward();
@@ -189,14 +191,22 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     _otpTimerController.addListener(() {
       if (_otpTimerController.isAnimating) {
         setState(() {
-          _otpCountdown = (60 * (1 - _otpTimerController.value)).round();
+          _otpCountdown = (600 * (1 - _otpTimerController.value)).round();
         });
       }
     });
   }
 
   // ===================================================================
-  // SEND OTP - IMPROVED VERSION
+  // GENERATE OTP
+  // ===================================================================
+  String _generateOTP() {
+    final random = Random();
+    return List.generate(6, (_) => random.nextInt(10)).join();
+  }
+
+  // ===================================================================
+  // SEND OTP - CUSTOM IMPLEMENTATION
   // ===================================================================
   Future<void> _sendOTP() async {
     // Validate email
@@ -205,7 +215,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       return;
     }
 
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(_emailController.text.trim())) {
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
+        .hasMatch(_emailController.text.trim())) {
       _showErrorMessage('Please enter a valid email address.');
       return;
     }
@@ -213,8 +224,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     // Check retry limit
     if (_otpRetryCount >= 3) {
       _showErrorMessage(
-          'Maximum attempts reached. Please wait 10 minutes before trying again.'
-      );
+          'Maximum attempts reached. Please wait 10 minutes before trying again.');
       return;
     }
 
@@ -230,143 +240,120 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
             .maybeSingle();
 
         if (profileResponse != null) {
-          _showErrorMessage('Email already registered. Please use login instead.');
+          _showErrorMessage(
+              'Email already registered. Please use login instead.');
           setState(() => _isLoading = false);
           return;
         }
       }
 
+      final email = _emailController.text.trim();
+      final otp = _generateOTP();
+      final expiresAt = DateTime.now().add(Duration(minutes: 10));
+
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📧 Sending OTP via Resend');
+      print('📧 Sending Custom OTP');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('To: ${_emailController.text.trim()}');
-      print('Provider: Resend (smtp.resend.com:587)');
-      print('Sender: onboarding@resend.dev');
+      print('To: $email');
+      print('OTP: $otp');
+      print('Expires: $expiresAt');
       print('Attempt: ${_otpRetryCount + 1}/3');
-      print('Timestamp: ${DateTime.now()}');
-
-      // Send OTP via Supabase Auth
-      await supabase.auth.signInWithOtp(
-        email: _emailController.text.trim(),
-        emailRedirectTo: null,
-        shouldCreateUser: !_isLogin,
-      );
-
-      print('✅ OTP request sent successfully!');
-      print('📬 Email should arrive within 1-2 minutes');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      setState(() {
-        _isLoading = false;
-        _isOtpSent = true;
-        _otpRetryCount++;
+      // Store OTP in database
+      await supabase.from('email_verifications').upsert({
+        'email': email,
+        'otp': otp,
+        'verified': false,
+        'attempts': 0,
+        'expires_at': expiresAt.toIso8601String(),
       });
 
-      _startOtpTimer();
+      print('✅ OTP stored in database');
 
-      // Show detailed success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
+      // Send email via Edge Function
+      try {
+        final response = await supabase.functions.invoke(
+          'send-otp',
+          body: {'email': email, 'otp': otp},
+        );
+
+        print('📬 Edge Function Response: ${response.data}');
+
+        if (response.data != null && response.data['success'] == true) {
+          print('✅ OTP email sent successfully!');
+
+          setState(() {
+            _isLoading = false;
+            _isOtpSent = true;
+            _otpRetryCount++;
+          });
+
+          _startOtpTimer();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check_circle, color: Colors.white, size: 20),
-                  SizedBox(width: 8),
+                  const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'OTP Sent Successfully!',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   Text(
-                    'OTP Sent Successfully!',
+                    '📧 Check your email inbox\n'
+                        '⚠️ IMPORTANT: Also check SPAM/JUNK folder!\n'
+                        '🔍 Search for "Achivo" or "verification"\n'
+                        '⏰ Code expires in 10 minutes',
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                      fontSize: 12,
+                      color: Colors.white.withOpacity(0.95),
+                      height: 1.5,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                '📧 Check your email inbox\n'
-                    '⚠️ IMPORTANT: Also check SPAM/JUNK folder!\n'
-                    '🔍 Search for "Achivo" or "Resend"\n'
-                    '⏰ Code expires in 60 seconds',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.95),
-                  height: 1.5,
-                ),
+              backgroundColor: Colors.green.shade600,
+              duration: const Duration(seconds: 7),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-            ],
-          ),
-          backgroundColor: Colors.green.shade600,
-          duration: const Duration(seconds: 7),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      );
-
-    } on AuthException catch (error) {
-      print('❌ Resend Error');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('Error: ${error.message}');
-      print('Status: ${error.statusCode}');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-
-      setState(() => _isLoading = false);
-
-      // Handle specific errors
-      if (error.message.contains('Email rate limit exceeded') ||
-          error.message.contains('rate limit')) {
-        _showDetailedErrorDialog(
-          title: 'Rate Limit Exceeded',
-          message: 'You\'ve sent too many OTP requests.',
-          solution: '🕐 Wait 60 minutes before trying again\n\n'
-              '📧 Check if you already received the email\n\n'
-              '📂 Look in your SPAM/JUNK folder\n\n'
-              '📊 Current attempt: $_otpRetryCount/3\n\n'
-              'Resend limits OTP requests to prevent spam abuse.',
-          icon: Icons.schedule,
-          iconColor: Colors.orange,
-        );
-      } else if (error.message.contains('Invalid email')) {
-        _showErrorMessage('Please enter a valid email address.');
-      } else if (error.message.contains('unexpected_failure') ||
-          error.message.contains('Error sending confirmation email')) {
-        _showDetailedErrorDialog(
-          title: 'Email Delivery Issue',
-          message: 'Failed to send verification email via Resend.',
-          solution: '✅ Try using Gmail (most reliable)\n\n'
-              '📂 Check your SPAM/JUNK folder\n\n'
-              '⏰ Wait a few minutes and try again\n\n'
-              '✉️ Verify your email is correct\n\n'
-              '🔄 Try a different email provider if issue persists\n\n'
-              'From: onboarding@resend.dev\n'
-              'To: ${_emailController.text.trim()}',
-          icon: Icons.mail_outline,
-          iconColor: Colors.red,
-        );
-      } else {
-        _showDetailedErrorDialog(
-          title: 'Failed to Send OTP',
-          message: error.message,
-          solution: '🔄 Try again in a few minutes\n\n'
-              '📧 Use a different email address\n\n'
-              '📂 Check SPAM folder for previous emails\n\n'
-              '💬 Contact support if this persists\n\n'
-              'Error code: ${error.statusCode ?? "unknown"}',
-          icon: Icons.error_outline,
-          iconColor: Colors.red,
-        );
+            ),
+          );
+        } else {
+          throw Exception(response.data?['error'] ?? 'Failed to send email');
+        }
+      } catch (edgeFunctionError) {
+        print('❌ Edge Function Error: $edgeFunctionError');
+        throw Exception(
+            'Failed to send email. Please check your internet connection.');
       }
-
     } catch (error) {
-      print('❌ Unexpected error: $error');
+      print('❌ Error in _sendOTP: $error');
       setState(() => _isLoading = false);
-      _showErrorMessage(
-          'Network error. Please check your internet connection and try again.'
+
+      _showDetailedErrorDialog(
+        title: 'Failed to Send OTP',
+        message: error.toString(),
+        solution: '🔄 Try again in a few minutes\n\n'
+            '📧 Use a different email address\n\n'
+            '📂 Check SPAM folder for previous emails\n\n'
+            '💬 Contact support if this persists',
+        icon: Icons.error_outline,
+        iconColor: Colors.red,
       );
     }
   }
@@ -376,29 +363,23 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   // ===================================================================
   Future<void> _resendOTP() async {
     if (_otpCountdown > 0) {
-      _showErrorMessage('Please wait $_otpCountdown seconds before resending.');
+      final minutes = (_otpCountdown / 60).floor();
+      final seconds = _otpCountdown % 60;
+      _showErrorMessage(
+          'Please wait $minutes:${seconds.toString().padLeft(2, '0')} before resending.');
       return;
     }
 
-    // Show loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    // Wait a bit (exponential backoff)
-    await Future.delayed(Duration(seconds: min(_otpRetryCount * 2, 10)));
-
-    if (mounted) Navigator.pop(context);
+    // Reset and send new OTP
+    setState(() {
+      _otpController.clear();
+    });
 
     await _sendOTP();
   }
 
   // ===================================================================
-  // VERIFY OTP - IMPROVED VERSION
+  // VERIFY OTP
   // ===================================================================
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
@@ -409,16 +390,67 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
     setState(() => _isLoading = true);
 
     try {
-      print('🔐 Verifying OTP: ${_otpController.text.trim()}');
+      final email = _emailController.text.trim();
+      final enteredOtp = _otpController.text.trim();
 
-      final response = await supabase.auth.verifyOTP(
-        email: _emailController.text.trim(),
-        token: _otpController.text.trim(),
-        type: OtpType.email,
-      );
+      print('🔐 Verifying OTP for: $email');
+      print('Entered OTP: $enteredOtp');
 
-      if (response.user != null) {
-        print('✅ OTP verified successfully for user: ${response.user!.id}');
+      // Fetch stored OTP
+      final verification = await supabase
+          .from('email_verifications')
+          .select()
+          .eq('email', email)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (verification == null) {
+        _showErrorMessage('No OTP found. Please request a new one.');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      print('Stored OTP: ${verification['otp']}');
+      print('Expires at: ${verification['expires_at']}');
+
+      // Check expiration
+      final expiresAt = DateTime.parse(verification['expires_at']);
+      if (DateTime.now().isAfter(expiresAt)) {
+        print('❌ OTP expired');
+        _showErrorMessage('OTP has expired. Please request a new one.');
+
+        // Clean up expired OTP
+        await supabase
+            .from('email_verifications')
+            .delete()
+            .eq('email', email);
+
+        setState(() {
+          _isLoading = false;
+          _isOtpSent = false;
+          _otpController.clear();
+        });
+        return;
+      }
+
+      // Check attempts
+      final attempts = verification['attempts'] ?? 0;
+      if (attempts >= 5) {
+        _showErrorMessage('Too many failed attempts. Please request a new OTP.');
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Verify OTP
+      if (verification['otp'] == enteredOtp) {
+        print('✅ OTP verified successfully!');
+
+        // Mark as verified
+        await supabase
+            .from('email_verifications')
+            .update({'verified': true})
+            .eq('email', email);
 
         setState(() {
           _isLoading = false;
@@ -426,35 +458,23 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           _otpTimerController.stop();
         });
 
-        // Sign out the temporary session
-        await supabase.auth.signOut();
-
         _showSuccessMessage(
-            '✅ Email verified successfully! Complete your registration below.'
-        );
-      }
-
-    } on AuthException catch (error) {
-      print('❌ OTP verification failed: ${error.message}');
-
-      setState(() => _isLoading = false);
-
-      if (error.message.contains('expired')) {
-        _showErrorMessage('OTP has expired. Please request a new one.');
-        setState(() {
-          _isOtpSent = false;
-          _otpController.clear();
-          _otpRetryCount = 0;
-        });
-      } else if (error.message.contains('invalid') ||
-          error.message.contains('Token')) {
-        _showErrorMessage('Invalid OTP code. Please check and try again.');
+            '✅ Email verified successfully! Complete your registration below.');
       } else {
-        _showErrorMessage('Verification failed: ${error.message}');
-      }
+        print('❌ Invalid OTP');
 
+        // Increment attempts
+        await supabase
+            .from('email_verifications')
+            .update({'attempts': attempts + 1})
+            .eq('email', email);
+
+        _showErrorMessage(
+            'Invalid OTP. ${5 - attempts - 1} attempts remaining.');
+        setState(() => _isLoading = false);
+      }
     } catch (error) {
-      print('❌ Unexpected verification error: $error');
+      print('❌ Error verifying OTP: $error');
       setState(() => _isLoading = false);
       _showErrorMessage('Verification failed. Please try again.');
     }
@@ -465,8 +485,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   // ===================================================================
   bool _isPasswordValid(String password) {
     RegExp passwordRegex = RegExp(
-        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$'
-    );
+        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
     return passwordRegex.hasMatch(password);
   }
 
@@ -508,11 +527,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           await _handleRegistration();
         }
       } catch (error) {
-        _showErrorMessage(
-            error is Exception
-                ? error.toString().replaceFirst('Exception: ', '')
-                : 'An unexpected error occurred.'
-        );
+        _showErrorMessage(error is Exception
+            ? error.toString().replaceFirst('Exception: ', '')
+            : 'An unexpected error occurred.');
       } finally {
         setState(() => _isLoading = false);
         _generateCaptcha();
@@ -544,8 +561,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       // Check if account is active
       if (facultyResponse['is_active'] != true) {
         throw Exception(
-            'Your account is not active. Please verify your email first.'
-        );
+            'Your account is not active. Please contact administration.');
       }
 
       // Sign in using email and password
@@ -556,6 +572,17 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       if (authResponse.user != null) {
         print('✅ Login successful');
+
+        // Update last login
+        try {
+          await supabase
+              .from('profiles')
+              .update({'last_login': DateTime.now().toIso8601String()})
+              .eq('id', authResponse.user!.id);
+        } catch (e) {
+          print('⚠️ Could not update last_login: $e');
+        }
+
         _showSuccessMessage('Login successful! Redirecting...');
 
         if (mounted) {
@@ -563,7 +590,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
           Navigator.pushReplacementNamed(context, '/faculty-dashboard');
         }
       }
-
     } on AuthException catch (e) {
       print('❌ Auth Exception: ${e.message}');
 
@@ -574,7 +600,6 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       } else {
         throw Exception('Login failed: ${e.message}');
       }
-
     } catch (error) {
       print('❌ Login error: $error');
       throw Exception(error.toString().replaceFirst('Exception: ', ''));
@@ -612,6 +637,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
 
       print('👤 User created: ${authResponse.user!.id}');
 
+      // Since we already verified email via custom OTP, manually update auth user
+      // Note: This is a workaround since we can't directly confirm email
+      // The user will still need to verify via Supabase's email, or you need admin API
+
       // Register faculty profile
       final rpcResult = await supabase.rpc('register_faculty_rpc', params: {
         'p_user_id': authResponse.user!.id,
@@ -631,31 +660,31 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       print('✅ Faculty registration RPC result: $rpcResult');
 
       if (rpcResult is Map && rpcResult['success'] == true) {
-        final emailVerified = rpcResult['email_verified'] == true;
+        // Clean up custom OTP record
+        try {
+          await supabase
+              .from('email_verifications')
+              .delete()
+              .eq('email', _emailController.text.trim());
+        } catch (e) {
+          print('⚠️ Could not clean up OTP: $e');
+        }
 
-        if (emailVerified) {
-          _showSuccessMessage('Registration successful! Redirecting...');
-          if (mounted) {
-            await Future.delayed(const Duration(milliseconds: 500));
-            Navigator.pushReplacementNamed(context, '/faculty-dashboard');
-          }
-        } else {
-          _showSuccessMessage(
-              'Registration successful! Please check your email to verify your account.'
-          );
-          if (mounted) {
-            await Future.delayed(const Duration(seconds: 2));
-            setState(() {
-              _isLogin = true;
-              _isOtpSent = false;
-              _isOtpVerified = false;
-            });
-          }
+        _showSuccessMessage(
+            'Registration successful! Please check your email to verify your account.');
+
+        if (mounted) {
+          await Future.delayed(const Duration(seconds: 2));
+          setState(() {
+            _isLogin = true;
+            _isOtpSent = false;
+            _isOtpVerified = false;
+            _otpRetryCount = 0;
+          });
         }
       } else {
         throw Exception(rpcResult['error'] ?? 'Registration failed');
       }
-
     } on AuthException catch (e) {
       print('❌ Auth Exception: ${e.message}');
       throw Exception('Registration failed: ${e.message}');
@@ -1249,7 +1278,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                             borderRadius: BorderRadius.circular(28),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                                color:
+                                const Color(0xFF8B5CF6).withOpacity(0.3),
                                 blurRadius: 12,
                                 offset: const Offset(0, 4),
                               ),
@@ -1704,6 +1734,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
   }
 
   Widget _buildEnhancedOtpField() {
+    final minutes = (_otpCountdown / 60).floor();
+    final seconds = _otpCountdown % 60;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1774,7 +1807,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                       ),
                       border: InputBorder.none,
                       counterText: '',
-                      contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                      contentPadding:
+                      const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
                 ),
@@ -1824,11 +1858,13 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
             children: [
               Text(
                 _otpCountdown > 0
-                    ? 'Resend OTP in ${_otpCountdown}s'
-                    : 'Didn\'t receive code?',
+                    ? 'Code expires in $minutes:${seconds.toString().padLeft(2, '0')}'
+                    : 'Code expired',
                 style: TextStyle(
-                  color: Colors.grey[600],
+                  color: _otpCountdown > 0 ? Colors.grey[600] : Colors.red,
                   fontSize: 12,
+                  fontWeight:
+                  _otpCountdown > 0 ? FontWeight.normal : FontWeight.bold,
                 ),
               ),
               TextButton(
@@ -1865,7 +1901,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Retry attempts: $_otpRetryCount/3',
+                      'OTP attempts: $_otpRetryCount/3',
                       style: TextStyle(
                         color: Colors.orange.shade700,
                         fontSize: 12,
@@ -1972,7 +2008,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                   style: TextStyle(color: Colors.grey[800], fontSize: 16),
                   decoration: InputDecoration(
                     hintText: 'Enter captcha',
-                    hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
+                    hintStyle:
+                    TextStyle(color: Colors.grey[500], fontSize: 16),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -1988,7 +2025,8 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                     _generateCaptcha();
                     _captchaController.clear();
                   },
-                  icon: const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
+                  icon:
+                  const Icon(Icons.refresh, color: Color(0xFF8B5CF6)),
                   tooltip: 'Change Captcha',
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.purple.shade50,
