@@ -1515,7 +1515,7 @@ class _FacultyDashboardMainState extends State<FacultyDashboardMain> {
   }
 }
 
-// Shared sign out function
+
 Future<void> _handleSignOut(BuildContext context) async {
   try {
     await supabase.auth.signOut();
