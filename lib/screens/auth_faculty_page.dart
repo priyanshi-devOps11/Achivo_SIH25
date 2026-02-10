@@ -218,10 +218,10 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       final email = _emailController.text.trim();
 
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📧 Sending OTP via Supabase Auth');
+      print('📧 Sending OTP via Supabase Auth (Magic Link as OTP)');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       print('To: $email');
-      print('Method: Supabase Built-in OTP');
+      print('Method: Supabase Magic Link');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       // Check if email already exists (for registration)
@@ -240,11 +240,11 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
         }
       }
 
-      // Send OTP using Supabase's built-in method
+      // Send magic link (which contains the OTP token)
+      // We'll use this differently - the user will get an email with a code
       await supabase.auth.signInWithOtp(
         email: email,
-        emailRedirectTo: null,
-        shouldCreateUser: false, // Don't create user until after verification
+        shouldCreateUser: true, // Allow signup
       );
 
       print('✅ OTP sent successfully via Supabase Auth!');
@@ -267,7 +267,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
                   Icon(Icons.check_circle, color: Colors.white, size: 20),
                   SizedBox(width: 8),
                   Text(
-                    'OTP Sent Successfully!',
+                    'Verification Email Sent!',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
@@ -279,7 +279,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
               Text(
                 '📧 Check your email inbox\n'
                     '⚠️ IMPORTANT: Also check SPAM/JUNK folder!\n'
-                    '🔍 Search for "Confirm your signup"\n'
+                    '🔍 Look for the 6-digit code in the email\n'
                     '⏰ Code expires in 60 seconds',
                 style: TextStyle(
                   fontSize: 12,
@@ -302,28 +302,12 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       print('❌ Supabase Auth Error: ${e.message}');
       setState(() => _isLoading = false);
 
-      String errorMessage = 'Failed to send OTP. ';
-      String solution = '';
-
-      if (e.message.contains('rate limit') ||
-          e.message.contains('Email rate limit exceeded')) {
-        errorMessage = 'Too many requests. ';
-        solution = '⏰ Please wait 60 seconds before trying again.\n\n'
-            '💡 Supabase limits OTP requests to prevent abuse.';
-      } else if (e.message.contains('User already registered')) {
-        errorMessage = 'Email already registered. ';
-        solution = '🔄 Please use the Login tab instead.\n\n'
-            '📧 Or use a different email address.';
-      } else {
-        solution = '🔄 Try again in a few minutes\n\n'
-            '📧 Use a different email address\n\n'
-            '💬 Contact support if this persists';
-      }
-
       _showDetailedErrorDialog(
-        title: 'Failed to Send OTP',
-        message: errorMessage + e.message,
-        solution: solution,
+        title: 'Failed to Send Verification Email',
+        message: e.message,
+        solution: '🔄 Try again in a few minutes\n\n'
+            '📧 Use a different email address\n\n'
+            '💬 Contact support if this persists',
         icon: Icons.error_outline,
         iconColor: Colors.red,
       );
@@ -332,7 +316,7 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       setState(() => _isLoading = false);
 
       _showDetailedErrorDialog(
-        title: 'Failed to Send OTP',
+        title: 'Failed to Send Verification Email',
         message: error.toString(),
         solution: '🔄 Check your internet connection\n\n'
             '📧 Verify email address is correct\n\n'
