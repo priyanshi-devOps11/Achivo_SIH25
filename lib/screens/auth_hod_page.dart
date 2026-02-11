@@ -535,26 +535,19 @@ class _AuthHodPageState extends State<AuthHodPage>
     try {
       print('📝 Starting registration for: ${_emailController.text.trim()}');
 
-      // Create auth user
-      final authResponse = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        data: {
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'role': 'hod',
-        },
-      );
+      // Get the current session (user was created during OTP verification)
+      final session = supabase.auth.currentSession;
 
-      if (authResponse.user == null) {
-        throw Exception('Failed to create account. Please try again.');
+      if (session == null || session.user == null) {
+        throw Exception('No active session. Please verify OTP first.');
       }
 
-      print('👤 User created: ${authResponse.user!.id}');
+      final userId = session.user!.id;
+      print('👤 Using existing user: $userId');
 
-      // Register HOD profile
+      // Register HOD profile using the existing user
       final rpcResult = await supabase.rpc('register_hod_rpc', params: {
-        'p_user_id': authResponse.user!.id,
+        'p_user_id': userId,
         'p_email': _emailController.text.trim(),
         'p_first_name': _firstNameController.text.trim(),
         'p_last_name': _lastNameController.text.trim(),
@@ -571,16 +564,23 @@ class _AuthHodPageState extends State<AuthHodPage>
       print('✅ HOD registration RPC result: $rpcResult');
 
       if (rpcResult is Map && rpcResult['success'] == true) {
-        _showSuccessMessage(
-            'Registration successful! Please check your email to verify your account.');
+        // Update user password (they verified via OTP, now set their password)
+        await supabase.auth.updateUser(
+          UserAttributes(
+            password: _passwordController.text.trim(),
+            data: {
+              'first_name': _firstNameController.text.trim(),
+              'last_name': _lastNameController.text.trim(),
+              'role': 'hod',
+            },
+          ),
+        );
+
+        _showSuccessMessage('Registration successful! Redirecting...');
 
         if (mounted) {
           await Future.delayed(const Duration(seconds: 2));
-          setState(() {
-            _isLogin = true;
-            _isOtpSent = false;
-            _isOtpVerified = false;
-          });
+          Navigator.pushReplacementNamed(context, '/hod-dashboard');
         }
       } else {
         throw Exception(rpcResult['error'] ?? 'Registration failed');
