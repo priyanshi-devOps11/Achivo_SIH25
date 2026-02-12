@@ -17,9 +17,7 @@ This project serves as the foundation for building a clean, scalable, and visual
 
 👥 Collaboration & Contact
 
-Arun Sharma
-
-Instagram: @i.arunsharmaa
+Arun Kumar
 
 Email: arunsharma73177@gmail.com
 
