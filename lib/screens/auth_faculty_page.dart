@@ -372,10 +372,9 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       if (response.user != null) {
         print('✅ OTP verified successfully!');
         print('User ID: ${response.user!.id}');
+        print('Session active: ${response.session != null}');
 
-        // Sign out immediately - we just wanted to verify the email
-        // The actual user will be created during registration
-        await supabase.auth.signOut();
+        // ✅ DO NOT SIGN OUT - Keep the session active for registration!
 
         setState(() {
           _isLoading = false;
@@ -392,13 +391,15 @@ class _AuthFacultyPageState extends State<AuthFacultyPage>
       print('❌ OTP verification failed: ${e.message}');
       setState(() => _isLoading = false);
 
-      if (e.message.contains('expired') || e.message.contains('Token has expired')) {
+      if (e.message.contains('expired') ||
+          e.message.contains('Token has expired')) {
         _showErrorMessage('OTP has expired. Please request a new one.');
         setState(() {
           _isOtpSent = false;
           _otpController.clear();
         });
-      } else if (e.message.contains('invalid') || e.message.contains('Token invalid')) {
+      } else if (e.message.contains('invalid') ||
+          e.message.contains('Token invalid')) {
         _showErrorMessage('Invalid OTP. Please check and try again.');
       } else {
         _showErrorMessage('Verification failed: ${e.message}');
