@@ -366,10 +366,9 @@ class _AuthHodPageState extends State<AuthHodPage>
       if (response.user != null) {
         print('✅ OTP verified successfully!');
         print('User ID: ${response.user!.id}');
+        print('Session active: ${response.session != null}');
 
-        // Sign out immediately - we just wanted to verify the email
-        // The actual user will be created during registration
-        await supabase.auth.signOut();
+        // ✅ DO NOT SIGN OUT - Keep the session active for registration!
 
         setState(() {
           _isLoading = false;
