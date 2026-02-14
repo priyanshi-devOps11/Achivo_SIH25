@@ -589,7 +589,7 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 }
 
-// Data Models for HOD Dashboard
+
 class Faculty {
   final String id;
   final String name;
