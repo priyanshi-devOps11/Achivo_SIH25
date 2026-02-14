@@ -1,3 +1,4 @@
+import 'package:achivo/screens/faculty_dashboard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -99,7 +100,7 @@ class MyApp extends StatelessWidget {
         // Main dashboard routes
         '/admin-dashboard': (context) => AdminDashboard(),
         '/hod-dashboard': (context) => const HODDashboardMain(),
-        '/faculty-dashboard': (context) => const FacultyDashboardMain(),
+        '/faculty-dashboard': (context) => const FacultyDashboard(),
         '/student-dashboard': (context) => StudentDashboard(),
 
         // Admin sub-pages routes
