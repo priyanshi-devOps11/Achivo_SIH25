@@ -306,6 +306,28 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     }
   }
 
+  Future<void> _handleLogout() async {
+    try {
+      await supabase.auth.signOut();
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/welcome',
+              (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error signing out: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -350,6 +372,13 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           icon: const Icon(Icons.menu),
           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.red),
+            onPressed: _handleLogout,
+            tooltip: 'Logout',
+          ),
+        ],
       ),
       drawer: _buildDrawer(),
       body: _isLoading
