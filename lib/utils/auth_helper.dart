@@ -15,7 +15,7 @@ class AuthHelper {
   }
 
   static String? getUserRole() {
-    // You can store role in user metadata or fetch from profile
+
     return Supabase.instance.client.auth.currentUser?.userMetadata?['role'];
   }
 }
