@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 
 import '../models/hod_models.dart';
+import 'hod_document_review_page.dart';
 import '../services/hod_service.dart';
 
 // Get Supabase client
@@ -1105,28 +1106,15 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   }
 
   void _openDocumentReview(DocumentForReview doc) {
-    // For now, show a placeholder dialog
-    // You'll create the actual review page later
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(doc.title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Student: ${doc.studentName}'),
-            Text('Type: ${doc.displayType}'),
-            const SizedBox(height: 16),
-            const Text('Document review page coming soon...'),
-          ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => HODDocumentReviewPage(
+          document: doc,
+          onReviewComplete: () {
+            _refreshData();
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
