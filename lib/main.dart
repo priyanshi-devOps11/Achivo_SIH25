@@ -12,6 +12,7 @@ import 'package:achivo/screens/auth_faculty_page.dart';
 import 'package:achivo/screens/auth_student_page.dart';
 import 'package:achivo/screens/student_dashboard.dart';
 import 'package:achivo/screens/admin_dashboard.dart';
+import 'package:achivo/screens/hod_dashboard.dart';
 
 // Import admin dashboard pages
 import 'package:achivo/dashboards_in_admin/activity_approvals.dart';
@@ -589,13 +590,16 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 }
 
+// ============================================================================
+// CORRECTED DATA MODELS - Uses first_name + last_name from database
+// ============================================================================
 
 class Faculty {
   final String id;
   final String name;
   final String email;
   final String phone;
-  final String department;
+  final BigInt departmentId;
   final String designation;
   final int experience;
   final List<String> subjects;
@@ -608,7 +612,7 @@ class Faculty {
     required this.name,
     required this.email,
     required this.phone,
-    required this.department,
+    required this.departmentId,
     required this.designation,
     required this.experience,
     required this.subjects,
@@ -617,18 +621,32 @@ class Faculty {
     required this.qualification,
   });
 
-  static Faculty fromMap(Map<String, dynamic> map) {
+  factory Faculty.fromMap(Map<String, dynamic> map) {
+    // ✅ CORRECTED: Construct name from first_name + last_name
+    final firstName = map['first_name'] ?? '';
+    final lastName = map['last_name'] ?? '';
+    final fullName = '$firstName $lastName'.trim();
+
+    final subjectsData = map['subjects'];
+    List<String> subjectsList = [];
+    if (subjectsData is List) {
+      subjectsList = List<String>.from(subjectsData.map((e) => e.toString()));
+    }
+
+    final deptId = map['department_id'];
+    final departmentBigInt = deptId is int ? BigInt.from(deptId) : (deptId is BigInt ? deptId : BigInt.zero);
+
     return Faculty(
-      id: map['id'].toString(),
-      name: map['name'] ?? '',
+      id: map['id']?.toString() ?? '',
+      name: fullName.isNotEmpty ? fullName : 'Unknown',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
-      department: map['department'] ?? '',
+      departmentId: departmentBigInt,
       designation: map['designation'] ?? '',
-      experience: map['experience'] ?? 0,
-      subjects: List<String>.from(map['subjects'] ?? []),
+      experience: map['experience_years'] ?? 0,
+      subjects: subjectsList,
       joiningDate: map['joining_date'] ?? '',
-      status: map['status'] ?? '',
+      status: map['is_active'] == false ? 'Inactive' : 'Active',
       qualification: map['qualification'] ?? '',
     );
   }
@@ -641,9 +659,9 @@ class Student {
   final String phone;
   final String rollNumber;
   final String year;
-  final String semester;
+  final String branch;
   final double cgpa;
-  final String address;
+  final BigInt departmentId;
   final String parentContact;
   final String status;
   final String admissionDate;
@@ -655,27 +673,35 @@ class Student {
     required this.phone,
     required this.rollNumber,
     required this.year,
-    required this.semester,
+    required this.branch,
     required this.cgpa,
-    required this.address,
+    required this.departmentId,
     required this.parentContact,
     required this.status,
     required this.admissionDate,
   });
 
-  static Student fromMap(Map<String, dynamic> map) {
+  factory Student.fromMap(Map<String, dynamic> map) {
+    // ✅ CORRECTED: Construct name from first_name + last_name
+    final firstName = map['first_name'] ?? '';
+    final lastName = map['last_name'] ?? '';
+    final fullName = '$firstName $lastName'.trim();
+
+    final deptId = map['department_id'];
+    final departmentBigInt = deptId is int ? BigInt.from(deptId) : (deptId is BigInt ? deptId : BigInt.zero);
+
     return Student(
-      id: map['id'].toString(),
-      name: map['name'] ?? '',
+      id: map['id']?.toString() ?? '',
+      name: fullName.isNotEmpty ? fullName : 'Unknown',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
       rollNumber: map['roll_number'] ?? '',
-      year: map['year'] ?? '',
-      semester: map['semester'] ?? '',
+      year: map['year'] ?? 'N/A',
+      branch: map['branch'] ?? 'N/A',
       cgpa: (map['cgpa'] ?? 0.0).toDouble(),
-      address: map['address'] ?? '',
-      parentContact: map['parent_contact'] ?? '',
-      status: map['status'] ?? '',
+      departmentId: departmentBigInt,
+      parentContact: map['parent_phone'] ?? '',
+      status: map['is_active'] == false ? 'Inactive' : 'Active',
       admissionDate: map['admission_date'] ?? '',
     );
   }
@@ -722,7 +748,10 @@ class ApprovalRequest {
   }
 }
 
-// List Views for HOD Dashboard
+// ============================================================================
+// PLACEHOLDER WIDGETS - These are used in old HOD dashboard from main.dart
+// ============================================================================
+
 class FacultyListView extends StatelessWidget {
   final List<Faculty> faculty;
   final String searchTerm;
@@ -1033,489 +1062,6 @@ class ApprovalRequestListView extends StatelessWidget {
     );
   }
 }
-
-// HOD Dashboard Implementation
-class HODDashboardMain extends StatefulWidget {
-  const HODDashboardMain({super.key});
-
-  @override
-  State<HODDashboardMain> createState() => _HODDashboardMainState();
-}
-
-class _HODDashboardMainState extends State<HODDashboardMain>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  String searchTerm = '';
-  String filterStatus = 'all';
-  String filterDesignation = 'all';
-
-  List<Faculty> faculty = [];
-  List<Student> students = [];
-  List<ApprovalRequest> approvalRequests = [];
-  bool isLoading = true;
-  bool isRefreshing = false;
-
-  final SupabaseClient supabase = Supabase.instance.client;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _loadData();
-
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        setState(() {
-          searchTerm = '';
-          filterStatus = 'all';
-          filterDesignation = 'all';
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadData() async {
-    setState(() => isLoading = true);
-
-    try {
-      await _loadFromSupabase();
-    } catch (e) {
-      print('Error loading data from Supabase: $e');
-      _loadSampleData();
-    } finally {
-      setState(() => isLoading = false);
-    }
-  }
-
-  Future<void> _loadFromSupabase() async {
-    try {
-      final facultyResponse = await supabase
-          .from('faculty')
-          .select()
-          .order('name', ascending: true);
-      faculty = (facultyResponse as List)
-          .map((data) => Faculty.fromMap(data))
-          .toList();
-    } catch (e) {
-      print('Error loading faculty: $e');
-      if (faculty.isEmpty) {
-        faculty = _getSampleFaculty();
-      }
-    }
-
-    try {
-      final studentsResponse = await supabase
-          .from('students')
-          .select()
-          .order('name', ascending: true);
-      students = (studentsResponse as List)
-          .map((data) => Student.fromMap(data))
-          .toList();
-    } catch (e) {
-      print('Error loading students: $e');
-      if (students.isEmpty) {
-        students = _getSampleStudents();
-      }
-    }
-
-    try {
-      final requestsResponse = await supabase
-          .from('approval_requests')
-          .select()
-          .order('submitted_date', ascending: false);
-      approvalRequests = (requestsResponse as List)
-          .map((data) => ApprovalRequest.fromMap(data))
-          .toList();
-    } catch (e) {
-      print('Error loading approval requests: $e');
-      if (approvalRequests.isEmpty) {
-        approvalRequests = _getSampleApprovalRequests();
-      }
-    }
-  }
-
-  void _loadSampleData() {
-    faculty = _getSampleFaculty();
-    students = _getSampleStudents();
-    approvalRequests = _getSampleApprovalRequests();
-  }
-
-  List<Faculty> _getSampleFaculty() {
-    return [
-      Faculty(
-        id: '1',
-        name: 'Dr. Sarah Johnson',
-        email: 'sarah.johnson@university.edu',
-        phone: '+1 (555) 123-4567',
-        department: 'Computer Science',
-        designation: 'Professor',
-        experience: 12,
-        subjects: ['Data Structures', 'Algorithms', 'Machine Learning'],
-        joiningDate: '2012-08-15',
-        status: 'Active',
-        qualification: 'Ph.D in Computer Science',
-      ),
-      Faculty(
-        id: '2',
-        name: 'Prof. Michael Chen',
-        email: 'michael.chen@university.edu',
-        phone: '+1 (555) 234-5678',
-        department: 'Computer Science',
-        designation: 'Associate Professor',
-        experience: 8,
-        subjects: ['Database Systems', 'Web Development', 'Software Engineering'],
-        joiningDate: '2016-01-20',
-        status: 'Active',
-        qualification: 'Ph.D in Information Technology',
-      ),
-    ];
-  }
-
-  List<Student> _getSampleStudents() {
-    return [
-      Student(
-        id: '1',
-        name: 'Alex Thompson',
-        email: 'alex.thompson@student.edu',
-        phone: '+1 (555) 111-2222',
-        rollNumber: 'CS2021001',
-        year: '3rd Year',
-        semester: '6th Semester',
-        cgpa: 8.5,
-        address: '123 University Street, College Town',
-        parentContact: '+1 (555) 111-3333',
-        status: 'Active',
-        admissionDate: '2021-08-15',
-      ),
-    ];
-  }
-
-  List<ApprovalRequest> _getSampleApprovalRequests() {
-    return [
-      ApprovalRequest(
-        id: '1',
-        studentId: '1',
-        studentName: 'Alex Thompson',
-        type: 'Leave Application',
-        title: 'Medical Leave Request',
-        description:
-        'Requesting 2 weeks medical leave due to surgery. Attached medical certificate.',
-        submittedDate: '2024-09-05',
-        status: 'Pending',
-        urgency: 'High',
-        documents: ['medical_certificate.pdf'],
-      ),
-    ];
-  }
-
-  Future<void> _refreshData() async {
-    setState(() => isRefreshing = true);
-    await _loadData();
-    setState(() => isRefreshing = false);
-    _showSuccessSnackbar('Data refreshed successfully');
-  }
-
-  void _showSuccessSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white),
-            const SizedBox(width: 8),
-            Text(message),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  Future<void> _updateApprovalStatus(String requestId, String newStatus) async {
-    try {
-      await supabase.from('approval_requests').update({
-        'status': newStatus,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', requestId);
-
-      setState(() {
-        final index = approvalRequests.indexWhere((r) => r.id == requestId);
-        if (index != -1) {
-          approvalRequests[index].status = newStatus;
-        }
-      });
-
-      _showSuccessSnackbar('Request ${newStatus.toLowerCase()} successfully');
-    } catch (e) {
-      setState(() {
-        final index = approvalRequests.indexWhere((r) => r.id == requestId);
-        if (index != -1) {
-          approvalRequests[index].status = newStatus;
-        }
-      });
-      _showSuccessSnackbar(
-          'Request ${newStatus.toLowerCase()} successfully (local update)');
-      print('Error updating approval status: $e');
-    }
-  }
-
-  Widget _buildSearchAndFilterRow(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              onChanged: (value) {
-                setState(() {
-                  searchTerm = value;
-                });
-              },
-              decoration: InputDecoration(
-                hintText: 'Search by name or ID...',
-                prefixIcon: const Icon(Icons.search, color: Color(0xFF1976D2)),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding:
-                const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Color(0xFF1976D2)),
-            onPressed: () => _showFilterOptions(context),
-            tooltip: 'Filter Options',
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showFilterOptions(BuildContext context) {
-    String currentTab =
-    ['Faculty', 'Students', 'Approvals'][_tabController.index];
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Filter $currentTab'),
-        content: Text(
-            'Implement specific filtering options for the $currentTab tab here. Current Search Term: $searchTerm'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF8F9FA),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1976D2)),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Loading dashboard data...',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        title: const Text('HOD Dashboard'),
-        backgroundColor: Colors.blue.shade700,
-        foregroundColor: Colors.white,
-        elevation: 4,
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.refresh,
-              color: isRefreshing ? Colors.yellow.shade200 : Colors.white,
-            ),
-            onPressed: _refreshData,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _handleSignOut(context),
-            tooltip: 'Sign Out',
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.blue.shade200,
-          indicatorColor: Colors.white,
-          onTap: (_) {
-            setState(() {
-              searchTerm = '';
-            });
-          },
-          tabs: const [
-            Tab(icon: Icon(Icons.people), text: 'Faculty'),
-            Tab(icon: Icon(Icons.school), text: 'Students'),
-            Tab(icon: Icon(Icons.assignment), text: 'Approvals'),
-          ],
-        ),
-      ),
-      body: Column(
-        children: [
-          _buildSearchAndFilterRow(context),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                FacultyListView(
-                  faculty: faculty,
-                  searchTerm: searchTerm,
-                  filterDesignation: filterDesignation,
-                ),
-                StudentListView(
-                  students: students,
-                  searchTerm: searchTerm,
-                ),
-                ApprovalRequestListView(
-                  approvalRequests: approvalRequests,
-                  searchTerm: searchTerm,
-                  filterStatus: filterStatus,
-                  updateStatusCallback: _updateApprovalStatus,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Faculty Dashboard Implementation
-class FacultyDashboardMain extends StatefulWidget {
-  const FacultyDashboardMain({super.key});
-
-  @override
-  State<FacultyDashboardMain> createState() => _FacultyDashboardMainState();
-}
-
-class _FacultyDashboardMainState extends State<FacultyDashboardMain> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.school, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 12),
-            ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ).createShader(bounds),
-              child: const Text(
-                'Faculty Portal',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 1,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            onPressed: () => _handleSignOut(context),
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF3E8FF),
-              Color(0xFFE0E7FF),
-              Color(0xFFDBEAFE),
-            ],
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.school, size: 100, color: Colors.green.shade400),
-              const SizedBox(height: 20),
-              const Text(
-                'Welcome to Faculty Dashboard',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Manage your classes and students',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 
 Future<void> _handleSignOut(BuildContext context) async {
   try {
