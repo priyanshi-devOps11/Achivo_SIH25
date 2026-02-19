@@ -216,44 +216,89 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     super.dispose();
   }
 
+  // Add this method to your _HODDashboardMainState class in hod_dashboard.dart
+// Replace the _checkAuthAndSetupData method with this production version
+
   Future<void> _checkAuthAndSetupData() async {
     setState(() => isLoading = true);
 
     try {
       final user = supabase.auth.currentUser;
       if (user == null) {
+        print('❌ No authenticated user');
+        setState(() => isLoading = false);
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/welcome');
+        }
+        return;
+      }
+
+      print('✅ User authenticated: ${user.email}');
+
+      // STEP 1: Ensure HOD record exists (auto-creates if missing)
+      print('🔍 Checking HOD record...');
+      final hodRecordExists = await HODService.ensureHODRecordExists();
+
+      if (!hodRecordExists) {
+        print('❌ Failed to verify/create HOD record');
+        _showSnackbar('Error: Could not verify HOD account. Please contact admin.', Colors.red);
         setState(() => isLoading = false);
         return;
       }
 
-      // Get HOD department
+      print('✅ HOD record verified');
+
+      // STEP 2: Get HOD department
+      print('🔍 Getting HOD department...');
       _hodDepartmentId = await HODService.getHODDepartmentId();
 
       if (_hodDepartmentId == null) {
-        _showSnackbar('Error: HOD department not found', Colors.red);
+        print('⚠️ No department assigned to HOD');
+        _showSnackbar('No department assigned. Please contact admin.', Colors.orange);
         setState(() => isLoading = false);
         return;
       }
 
-      // Get HOD name
-      final profileResponse = await supabase
-          .from('profiles')
-          .select('first_name, last_name')
-          .eq('id', user.id)
-          .single();
+      print('✅ HOD department: $_hodDepartmentId');
 
-      _hodName = '${profileResponse['first_name'] ?? ''} ${profileResponse['last_name'] ?? ''}'.trim();
+      // STEP 3: Get HOD name
+      try {
+        final profileResponse = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (profileResponse != null) {
+          _hodName = '${profileResponse['first_name'] ?? ''} ${profileResponse['last_name'] ?? ''}'.trim();
+          if (_hodName!.isEmpty) _hodName = 'HOD';
+        } else {
+          _hodName = 'HOD';
+        }
+      } catch (e) {
+        print('⚠️ Error getting HOD name: $e');
+        _hodName = 'HOD';
+      }
+
+      print('✅ HOD name: $_hodName');
 
       setState(() => isAuthReady = true);
 
-      // Load all data
+      // STEP 4: Load all data (with error handling)
+      print('📊 Loading dashboard data...');
       await _loadAllData();
+
+      // STEP 5: Setup real-time subscriptions
+      print('🔄 Setting up real-time subscriptions...');
       await _setupRealTimeSubscriptions();
 
+      print('✅ Dashboard loaded successfully');
       setState(() => isLoading = false);
-    } catch (e) {
-      print('Setup error: $e');
-      _showSnackbar('Failed to load dashboard', Colors.red);
+
+    } catch (e, stackTrace) {
+      print('❌ Setup error: $e');
+      print('Stack trace: $stackTrace');
+      _showSnackbar('Failed to load dashboard: ${e.toString()}', Colors.red);
       setState(() => isLoading = false);
     }
   }
