@@ -564,6 +564,7 @@ class _AuthHodPageState extends State<AuthHodPage>
 
       if (rpcResult is Map && rpcResult['success'] == true) {
         // Update user password (they verified via OTP, now set their password)
+        // Update user password (they verified via OTP, now set their password)
         await supabase.auth.updateUser(
           UserAttributes(
             password: _passwordController.text.trim(),
@@ -571,6 +572,10 @@ class _AuthHodPageState extends State<AuthHodPage>
               'first_name': _firstNameController.text.trim(),
               'last_name': _lastNameController.text.trim(),
               'role': 'hod',
+              'department_id': departmentId.toString(),   // ADD THIS
+              'institute_id': _profileData['institute_id']?.toString(),
+              'state_id': _profileData['state_id']?.toString(),
+              'country_id': _profileData['country_id']?.toString(),
             },
           ),
         );
