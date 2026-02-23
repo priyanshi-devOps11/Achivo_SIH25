@@ -171,7 +171,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
           _isOtpVerified = true;
           _otpTimerController.stop();
         });
-        await supabase.auth.signOut();
 
         _showSuccessMessage('Email verified successfully! 🎉 You can now create your account.');
       } else {
@@ -292,7 +291,13 @@ class _AuthAdminPageState extends State<AuthAdminPage>
     try {
       final currentTime = DateTime.now().toIso8601String();
       final instituteCode = _instituteIdController.text.trim();
-      final initialInstituteId = _profileData['institute_id'] as int;
+
+      // Get current session (created during OTP verification)
+      final session = supabase.auth.currentSession;
+      if (session == null || session.user == null) {
+        throw Exception('No active session. Please verify OTP first.');
+      }
+      final userId = session.user!.id;
 
       final instituteResponse = await supabase
           .from('institutes')
@@ -319,44 +324,53 @@ class _AuthAdminPageState extends State<AuthAdminPage>
         throw Exception('An admin is already registered for this Institute ID.');
       }
 
-      final authResponse = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      // Update password for the OTP-verified user
+      await supabase.auth.updateUser(
+        UserAttributes(
+          password: _passwordController.text.trim(),
+          data: {
+            'first_name': _firstNameController.text.trim(),
+            'last_name': _lastNameController.text.trim(),
+            'role': 'admin',
+            'institute_id': instituteBigIntId.toString(),
+            'state_id': stateId.toString(),
+            'country_id': countryId.toString(),
+          },
+        ),
       );
 
-      if (authResponse.user != null) {
-        final userId = authResponse.user!.id;
+      // Insert into admins table
+      await supabase.from('admins').insert({
+        'user_id': userId,
+        'first_name': _firstNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'institute_id': instituteBigIntId,
+        'created_at': currentTime,
+      });
 
-        await supabase.from('admins').insert({
-          'user_id': userId,
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'institute_id': instituteBigIntId,
-          'created_at': currentTime,
-        });
+      // Insert into profiles table
+      await supabase.from('profiles').upsert({
+        'id': userId,
+        'role': 'admin',
+        'email': _emailController.text.trim(),
+        'first_name': _firstNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'email_verified': true,
+        'institute_id': instituteBigIntId,
+        'state_id': stateId,
+        'country_id': countryId,
+        'country': _profileData['country_name'],
+        'state': _profileData['state_name'],
+        'institute': _profileData['institute_name'],
+        'created_at': currentTime,
+      });
 
-        await supabase.from('profiles').insert({
-          'id': userId,
-          'role': 'admin',
-          'email': _emailController.text.trim(),
-          'first_name': _firstNameController.text.trim(),
-          'last_name': _lastNameController.text.trim(),
-          'phone': _phoneController.text.trim(),
-          'email_verified': true,
-          'institute_id': instituteBigIntId,
-          'state_id': stateId,
-          'country_id': countryId,
-          'country': _profileData['country_name'],
-          'state': _profileData['state_name'],
-          'institute': _profileData['institute_name'],
-          'created_at': currentTime,
-        });
+      _showSuccessMessage('Admin account created successfully! Redirecting...');
+      if (mounted) Navigator.pushReplacementNamed(context, '/admin-dashboard');
 
-        _showSuccessMessage('Admin account created successfully! Redirecting...');
-        if (mounted) Navigator.pushReplacementNamed(context, '/admin-dashboard');
-      }
     } on AuthException catch (e) {
       throw Exception('Registration failed: ${e.message}');
     } catch (error) {
