@@ -362,9 +362,6 @@ class _AuthAdminPageState extends State<AuthAdminPage>
         'institute_id': instituteBigIntId,
         'state_id': stateId,
         'country_id': countryId,
-        'country': _profileData['country_name'],
-        'state': _profileData['state_name'],
-        'institute': _profileData['institute_name'],
         'created_at': currentTime,
       });
 
