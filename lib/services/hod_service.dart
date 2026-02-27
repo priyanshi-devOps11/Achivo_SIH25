@@ -1,5 +1,5 @@
 // lib/services/hod_service.dart
-// PRODUCTION VERSION - Handles missing data gracefully
+// FIXED: reviewed_by now uses auth.uid() (UUID in profiles) not hods.id
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/hod_models.dart';
@@ -7,32 +7,20 @@ import '../models/hod_models.dart';
 class HODService {
   static final _supabase = Supabase.instance.client;
 
-  /// Get HOD's department ID with proper error handling
   static Future<BigInt?> getHODDepartmentId() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) {
-        print('⚠️ No authenticated user');
-        return null;
-      }
+      if (userId == null) return null;
 
-      // First try to get from profiles
       final profileResponse = await _supabase
           .from('profiles')
           .select('department_id')
           .eq('id', userId)
           .maybeSingle();
 
-      if (profileResponse == null) {
-        print('⚠️ No profile found for user: $userId');
-        return null;
-      }
-
+      if (profileResponse == null) return null;
       final deptId = profileResponse['department_id'];
-      if (deptId == null) {
-        print('⚠️ No department assigned to profile');
-        return null;
-      }
+      if (deptId == null) return null;
 
       return deptId is int ? BigInt.from(deptId) : (deptId is BigInt ? deptId : null);
     } catch (e) {
@@ -41,13 +29,11 @@ class HODService {
     }
   }
 
-  /// Verify HOD record exists, create if missing (for existing users)
   static Future<bool> ensureHODRecordExists() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return false;
 
-      // Check if HOD record exists
       final hodRecord = await _supabase
           .from('hods')
           .select('id')
@@ -59,22 +45,14 @@ class HODService {
         return true;
       }
 
-      // HOD record missing - check profile
       final profile = await _supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
           .maybeSingle();
 
-      if (profile == null || profile['role'] != 'hod') {
-        print('❌ User is not an HOD or profile missing');
-        return false;
-      }
+      if (profile == null || profile['role'] != 'hod') return false;
 
-      // Create HOD record
-      print('⚠️ HOD record missing, creating...');
-
-      // Generate HOD ID
       final deptCode = await _getDepartmentCode(profile['department_id']);
       final hodId = 'HOD${deptCode}${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
 
@@ -111,58 +89,33 @@ class HODService {
     }
   }
 
-  /// Get documents with robust error handling
   static Future<List<DocumentForReview>> getDocumentsForReview({
     BigInt? departmentId,
     String? status,
     String? documentType,
   }) async {
     try {
-      if (departmentId == null) {
-        print('⚠️ No department ID provided');
-        return [];
-      }
-
+      if (departmentId == null) return [];
       final deptIdInt = departmentId.toInt();
 
       dynamic query = _supabase
           .from('student_documents')
           .select('''
             *,
-            students!inner(
-              id,
-              first_name,
-              last_name,
-              roll_number,
-              department_id
-            )
+            students!inner(id, first_name, last_name, roll_number, department_id)
           ''');
 
       query = query.eq('students.department_id', deptIdInt);
+      if (status != null && status != 'all') query = query.eq('status', status);
+      if (documentType != null && documentType != 'all') query = query.eq('document_type', documentType);
 
-      if (status != null && status != 'all') {
-        query = query.eq('status', status);
-      }
+      final response = await query.order('created_at', ascending: false);
+      if (response == null || (response as List).isEmpty) return [];
 
-      if (documentType != null && documentType != 'all') {
-        query = query.eq('document_type', documentType);
-      }
-
-      query = query.order('created_at', ascending: false);
-
-      final response = await query;
-
-      if (response == null || response.isEmpty) {
-        print('ℹ️ No documents found for department $deptIdInt');
-        return [];
-      }
-
-      return (response as List).map((doc) {
+      return response.map<DocumentForReview>((doc) {
         final student = doc['students'] as Map<String, dynamic>;
         final studentName = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
-        final rollNumber = student['roll_number'] ?? 'N/A';
-
-        return DocumentForReview.fromMap(doc, studentName, rollNumber);
+        return DocumentForReview.fromMap(doc, studentName, student['roll_number'] ?? 'N/A');
       }).toList();
     } catch (e) {
       print('❌ Error loading documents: $e');
@@ -170,53 +123,31 @@ class HODService {
     }
   }
 
-  /// Get leaves with robust error handling
   static Future<List<LeaveForReview>> getLeavesForReview({
     BigInt? departmentId,
     String? status,
   }) async {
     try {
-      if (departmentId == null) {
-        print('⚠️ No department ID provided');
-        return [];
-      }
-
+      if (departmentId == null) return [];
       final deptIdInt = departmentId.toInt();
 
       dynamic query = _supabase
           .from('leave_applications')
           .select('''
             *,
-            students!inner(
-              id,
-              first_name,
-              last_name,
-              roll_number,
-              department_id
-            )
+            students!inner(id, first_name, last_name, roll_number, department_id)
           ''');
 
       query = query.eq('students.department_id', deptIdInt);
+      if (status != null && status != 'all') query = query.eq('status', status);
 
-      if (status != null && status != 'all') {
-        query = query.eq('status', status);
-      }
+      final response = await query.order('created_at', ascending: false);
+      if (response == null || (response as List).isEmpty) return [];
 
-      query = query.order('created_at', ascending: false);
-
-      final response = await query;
-
-      if (response == null || response.isEmpty) {
-        print('ℹ️ No leave applications found for department $deptIdInt');
-        return [];
-      }
-
-      return (response as List).map((leave) {
+      return response.map<LeaveForReview>((leave) {
         final student = leave['students'] as Map<String, dynamic>;
         final studentName = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
-        final rollNumber = student['roll_number'] ?? 'N/A';
-
-        return LeaveForReview.fromMap(leave, studentName, rollNumber);
+        return LeaveForReview.fromMap(leave, studentName, student['roll_number'] ?? 'N/A');
       }).toList();
     } catch (e) {
       print('❌ Error loading leaves: $e');
@@ -224,7 +155,7 @@ class HODService {
     }
   }
 
-  /// Review document with validation
+  /// ✅ FIXED: uses auth.uid() for reviewed_by — this UUID exists in profiles table
   static Future<bool> reviewDocument({
     required String documentId,
     required String action,
@@ -233,51 +164,17 @@ class HODService {
   }) async {
     try {
       final hodUserId = _supabase.auth.currentUser?.id;
-      if (hodUserId == null) {
-        print('❌ No authenticated user');
-        return false;
-      }
+      if (hodUserId == null) return false;
 
-      // Get HOD's ID from hods table
-      final hodResponse = await _supabase
-          .from('hods')
-          .select('id')
-          .eq('user_id', hodUserId)
-          .maybeSingle();
-
-      if (hodResponse == null) {
-        print('❌ HOD record not found. Creating...');
-        await ensureHODRecordExists();
-
-        // Retry after creating
-        final retryHodResponse = await _supabase
-            .from('hods')
-            .select('id')
-            .eq('user_id', hodUserId)
-            .maybeSingle();
-
-        if (retryHodResponse == null) {
-          print('❌ Failed to create HOD record');
-          return false;
-        }
-      }
-
-      final hodId = hodResponse?['id'];
-
-      final updateData = {
+      await _supabase.from('student_documents').update({
         'status': action == 'approve' ? 'approved' : 'rejected',
         'hod_remarks': remarks,
         'points_awarded': action == 'approve' ? pointsAwarded : 0,
-        'reviewed_by': hodId,
+        'reviewed_by': hodUserId,   // ← auth.uid(), always in profiles
         'reviewed_at': DateTime.now().toIso8601String(),
-      };
+      }).eq('id', int.parse(documentId));
 
-      await _supabase
-          .from('student_documents')
-          .update(updateData)
-          .eq('id', int.parse(documentId));
-
-      print('✅ Document $documentId ${action}ed successfully');
+      print('✅ Document $documentId ${action}d');
       return true;
     } catch (e) {
       print('❌ Error reviewing document: $e');
@@ -285,7 +182,7 @@ class HODService {
     }
   }
 
-  /// Review leave with validation
+  /// ✅ FIXED: uses auth.uid() for reviewed_by — this UUID exists in profiles table
   static Future<bool> reviewLeave({
     required String leaveId,
     required String action,
@@ -293,38 +190,16 @@ class HODService {
   }) async {
     try {
       final hodUserId = _supabase.auth.currentUser?.id;
-      if (hodUserId == null) {
-        print('❌ No authenticated user');
-        return false;
-      }
+      if (hodUserId == null) return false;
 
-      final hodResponse = await _supabase
-          .from('hods')
-          .select('id')
-          .eq('user_id', hodUserId)
-          .maybeSingle();
-
-      if (hodResponse == null) {
-        print('❌ HOD record not found');
-        await ensureHODRecordExists();
-        return false;
-      }
-
-      final hodId = hodResponse['id'];
-
-      final updateData = {
+      await _supabase.from('leave_applications').update({
         'status': action == 'approve' ? 'approved' : 'rejected',
         'hod_remarks': remarks,
-        'reviewed_by': hodId,
+        'reviewed_by': hodUserId,   // ← auth.uid(), always in profiles
         'reviewed_at': DateTime.now().toIso8601String(),
-      };
+      }).eq('id', int.parse(leaveId));
 
-      await _supabase
-          .from('leave_applications')
-          .update(updateData)
-          .eq('id', int.parse(leaveId));
-
-      print('✅ Leave $leaveId ${action}ed successfully');
+      print('✅ Leave $leaveId ${action}d');
       return true;
     } catch (e) {
       print('❌ Error reviewing leave: $e');
@@ -332,135 +207,58 @@ class HODService {
     }
   }
 
-  /// Get HOD stats with fallback values
   static Future<HODStats> getHODStats(BigInt departmentId) async {
     try {
       final deptIdInt = departmentId.toInt();
       final today = DateTime.now();
       final todayStart = DateTime(today.year, today.month, today.day);
 
-      // Students count with error handling
-      int totalStudents = 0;
-      int activeStudents = 0;
+      int totalStudents = 0, activeStudents = 0;
+      int totalFaculty = 0, activeFaculty = 0;
 
       try {
-        final studentsResponse = await _supabase
-            .from('students')
-            .select('is_active')
-            .eq('department_id', deptIdInt);
-
-        totalStudents = studentsResponse.length;
-        activeStudents = (studentsResponse as List)
-            .where((s) => s['is_active'] == true)
-            .length;
-      } catch (e) {
-        print('⚠️ Error fetching students: $e');
-      }
-
-      // Faculty count with error handling
-      int totalFaculty = 0;
-      int activeFaculty = 0;
+        final r = await _supabase.from('students').select('is_active').eq('department_id', deptIdInt);
+        totalStudents = (r as List).length;
+        activeStudents = r.where((s) => s['is_active'] == true).length;
+      } catch (_) {}
 
       try {
-        final facultyResponse = await _supabase
-            .from('faculty')
-            .select('is_active')
-            .eq('department_id', deptIdInt);
+        final r = await _supabase.from('faculty').select('is_active').eq('department_id', deptIdInt);
+        totalFaculty = (r as List).length;
+        activeFaculty = r.where((f) => f['is_active'] == true).length;
+      } catch (_) {}
 
-        totalFaculty = facultyResponse.length;
-        activeFaculty = (facultyResponse as List)
-            .where((f) => f['is_active'] == true)
-            .length;
-      } catch (e) {
-        print('⚠️ Error fetching faculty: $e');
-      }
-
-      // Get student IDs for department
       Set<dynamic> deptStudentIds = {};
       try {
-        final studentIds = await _supabase
-            .from('students')
-            .select('id')
-            .eq('department_id', deptIdInt);
-        deptStudentIds = (studentIds as List).map((s) => s['id']).toSet();
-      } catch (e) {
-        print('⚠️ Error fetching student IDs: $e');
-      }
+        final r = await _supabase.from('students').select('id').eq('department_id', deptIdInt);
+        deptStudentIds = (r as List).map((s) => s['id']).toSet();
+      } catch (_) {}
 
-      // Pending counts
-      int pendingDocuments = 0;
-      int pendingLeaves = 0;
-      int pendingActivities = 0;
-      int documentsReviewedToday = 0;
-      int leavesReviewedToday = 0;
+      int pendingDocuments = 0, pendingLeaves = 0;
+      int documentsReviewedToday = 0, leavesReviewedToday = 0;
 
       if (deptStudentIds.isNotEmpty) {
         try {
-          final pendingDocsResponse = await _supabase
-              .from('student_documents')
-              .select('id, student_id')
-              .eq('status', 'pending');
-
-          pendingDocuments = (pendingDocsResponse as List)
-              .where((doc) => deptStudentIds.contains(doc['student_id']))
-              .length;
-        } catch (e) {
-          print('⚠️ Error fetching pending documents: $e');
-        }
+          final r = await _supabase.from('student_documents').select('id, student_id').eq('status', 'pending');
+          pendingDocuments = (r as List).where((d) => deptStudentIds.contains(d['student_id'])).length;
+        } catch (_) {}
 
         try {
-          final pendingLeavesResponse = await _supabase
-              .from('leave_applications')
-              .select('id, student_id')
-              .eq('status', 'pending');
-
-          pendingLeaves = (pendingLeavesResponse as List)
-              .where((leave) => deptStudentIds.contains(leave['student_id']))
-              .length;
-        } catch (e) {
-          print('⚠️ Error fetching pending leaves: $e');
-        }
+          final r = await _supabase.from('leave_applications').select('id, student_id').eq('status', 'pending');
+          pendingLeaves = (r as List).where((l) => deptStudentIds.contains(l['student_id'])).length;
+        } catch (_) {}
 
         try {
-          final pendingActivitiesResponse = await _supabase
-              .from('activities')
-              .select('id, student_id')
-              .eq('status', 'pending');
-
-          pendingActivities = (pendingActivitiesResponse as List)
-              .where((activity) => deptStudentIds.contains(activity['student_id']))
-              .length;
-        } catch (e) {
-          print('⚠️ Error fetching pending activities: $e');
-        }
+          final r = await _supabase.from('student_documents').select('id, student_id, reviewed_at')
+              .not('reviewed_at', 'is', null).gte('reviewed_at', todayStart.toIso8601String());
+          documentsReviewedToday = (r as List).where((d) => deptStudentIds.contains(d['student_id'])).length;
+        } catch (_) {}
 
         try {
-          final docsReviewedTodayResponse = await _supabase
-              .from('student_documents')
-              .select('id, student_id, reviewed_at')
-              .not('reviewed_at', 'is', null)
-              .gte('reviewed_at', todayStart.toIso8601String());
-
-          documentsReviewedToday = (docsReviewedTodayResponse as List)
-              .where((doc) => deptStudentIds.contains(doc['student_id']))
-              .length;
-        } catch (e) {
-          print('⚠️ Error fetching documents reviewed today: $e');
-        }
-
-        try {
-          final leavesReviewedTodayResponse = await _supabase
-              .from('leave_applications')
-              .select('id, student_id, reviewed_at')
-              .not('reviewed_at', 'is', null)
-              .gte('reviewed_at', todayStart.toIso8601String());
-
-          leavesReviewedToday = (leavesReviewedTodayResponse as List)
-              .where((leave) => deptStudentIds.contains(leave['student_id']))
-              .length;
-        } catch (e) {
-          print('⚠️ Error fetching leaves reviewed today: $e');
-        }
+          final r = await _supabase.from('leave_applications').select('id, student_id, reviewed_at')
+              .not('reviewed_at', 'is', null).gte('reviewed_at', todayStart.toIso8601String());
+          leavesReviewedToday = (r as List).where((l) => deptStudentIds.contains(l['student_id'])).length;
+        } catch (_) {}
       }
 
       return HODStats(
@@ -470,44 +268,26 @@ class HODService {
         activeFaculty: activeFaculty,
         pendingDocuments: pendingDocuments,
         pendingLeaves: pendingLeaves,
-        pendingActivities: pendingActivities,
+        pendingActivities: 0,
         documentsReviewedToday: documentsReviewedToday,
         leavesReviewedToday: leavesReviewedToday,
       );
     } catch (e) {
       print('❌ Error getting HOD stats: $e');
-      // Return zeros instead of crashing
       return HODStats(
-        totalStudents: 0,
-        activeStudents: 0,
-        totalFaculty: 0,
-        activeFaculty: 0,
-        pendingDocuments: 0,
-        pendingLeaves: 0,
-        pendingActivities: 0,
-        documentsReviewedToday: 0,
-        leavesReviewedToday: 0,
+        totalStudents: 0, activeStudents: 0, totalFaculty: 0, activeFaculty: 0,
+        pendingDocuments: 0, pendingLeaves: 0, pendingActivities: 0,
+        documentsReviewedToday: 0, leavesReviewedToday: 0,
       );
     }
   }
 
-  /// Get document URL for preview
+  /// Get document download URL (public bucket = direct URL)
   static Future<String?> getDocumentDownloadUrl(String documentUrl) async {
     try {
-      if (documentUrl.startsWith('http')) {
-        return documentUrl;
-      }
-
-      String path = documentUrl;
-      if (path.startsWith('student-documents/')) {
-        path = path.replaceFirst('student-documents/', '');
-      }
-
-      final signedUrl = await _supabase.storage
-          .from('student-documents')
-          .createSignedUrl(path, 3600);
-
-      return signedUrl;
+      if (documentUrl.startsWith('http')) return documentUrl;
+      String path = documentUrl.replaceFirst('documents/', '');
+      return await _supabase.storage.from('documents').createSignedUrl(path, 3600);
     } catch (e) {
       print('❌ Error getting document URL: $e');
       return null;

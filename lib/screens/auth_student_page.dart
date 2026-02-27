@@ -325,9 +325,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     }
   }
 
-  // ============================================================
-  // COMPLETE REGISTRATION - Called after OTP verification
-  // ============================================================
   Future<void> _completeRegistration(String userId) async {
     if (_profileData['institute_id'] == null) {
       throw Exception('Institute data missing from initial setup.');
@@ -341,7 +338,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     try {
       print('📝 Completing registration for user: $userId');
 
-      // Update auth user metadata with password
+      // Update auth user metadata with password - keeps session alive
       await supabase.auth.updateUser(
         UserAttributes(
           password: _passwordController.text.trim(),
@@ -389,37 +386,25 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       print('📦 RPC Response: $rpcResponse');
 
       if (rpcResponse == null || rpcResponse['success'] != true) {
-        // If registration fails, try to clean up
+        // If registration fails, clean up and throw
         try {
           await supabase.auth.signOut();
         } catch (_) {}
         throw Exception(rpcResponse?['error'] ?? 'Registration failed');
       }
 
-      // Sign out the current session
-      await supabase.auth.signOut();
-
+      // ✅ DO NOT sign out - keep session active and go straight to dashboard
       setState(() {
         _isLoading = false;
         _otpTimerController.stop();
       });
 
-      print('✅ Registration completed successfully');
+      print('✅ Registration completed successfully - redirecting to dashboard');
 
-      _showSuccessMessage(
-          'Account created successfully! You can now log in with your roll number.');
+      _showSuccessMessage('Account created successfully! Welcome to Achivo 🎉');
 
-      // Switch to login tab after brief delay
-      await Future.delayed(const Duration(seconds: 2));
       if (mounted) {
-        setState(() {
-          _isLogin = true;
-          _isOtpSent = false;
-          _otpController.clear();
-          _emailController.clear();
-          _passwordController.clear();
-          _confirmPasswordController.clear();
-        });
+        Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
 
     } catch (e) {
@@ -1051,7 +1036,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                   Text(
                     _isLogin
                         ? 'Sign In as Student'
-                        : 'Verify OTP & Register',
+                        : 'Create Student Account',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -1312,41 +1297,84 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),
           const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+          // ── OTP input + Verify button side by side ──
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TextFormField(
+                    controller: _otpController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey[800],
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 4,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '• • • • • •',
+                      hintStyle: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 18,
+                        letterSpacing: 8,
+                      ),
+                      border: InputBorder.none,
+                      counterText: '',
+                      contentPadding:
+                      const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
                 ),
-              ],
-            ),
-            child: TextFormField(
-              controller: _otpController,
-              keyboardType: TextInputType.number,
-              maxLength: 6,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey[800],
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 4,
               ),
-              decoration: InputDecoration(
-                hintText: '• • • • • •',
-                hintStyle: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 18,
-                  letterSpacing: 8,
+              const SizedBox(width: 12),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                border: InputBorder.none,
-                counterText: '',
-                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _verifyOTP,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                      : const Text(
+                    'Verify',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
           const SizedBox(height: 16),
           Row(

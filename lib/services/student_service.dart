@@ -1,6 +1,8 @@
 // lib/services/student_service.dart
+// Web-compatible version - uses Uint8List instead of dart:io File
 
-import 'dart:io';
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/student_models.dart';
 
@@ -46,43 +48,6 @@ class StudentService {
 
   static Future<DashboardStats> getDashboardStats(String studentId) async {
     try {
-      // Fetch attendance data
-      final attendanceData = await _supabase
-          .from('attendance')
-          .select('status')
-          .eq('student_id', studentId);
-
-      int present = 0, total = 0;
-      for (var record in attendanceData) {
-        total++;
-        if (record['status'] == 'present') present++;
-      }
-      final attendancePercentage = total > 0 ? (present / total) * 100 : 0.0;
-
-      // Fetch course enrollments for credits
-      final enrollments = await _supabase
-          .from('course_enrollments')
-          .select('course_id, status')
-          .eq('student_id', studentId);
-
-      final courseIds = enrollments
-          .where((e) => e['status'] == 'completed')
-          .map((e) => e['course_id'])
-          .toList();
-
-      int creditsCompleted = 0;
-      if (courseIds.isNotEmpty) {
-        final courses = await _supabase
-            .from('courses')
-            .select('credits')
-            .filter('id', 'in', courseIds);
-
-        creditsCompleted = courses.fold<int>(
-          0,
-              (sum, course) => sum + (int.tryParse(course['credits']?.toString() ?? '0') ?? 0),
-        );
-      }
-
       // Fetch pending leaves
       final leaves = await _supabase
           .from('leave_applications')
@@ -93,7 +58,7 @@ class StudentService {
       // Fetch approved documents
       final documents = await _supabase
           .from('student_documents')
-          .select('id')
+          .select('id, points_awarded')
           .eq('student_id', studentId)
           .eq('status', 'approved');
 
@@ -102,23 +67,31 @@ class StudentService {
           .from('students')
           .select('cgpa')
           .eq('id', studentId)
-          .single();
+          .maybeSingle();
+
+      // Calculate total points from approved docs
+      int totalPoints = 0;
+      for (var doc in (documents as List)) {
+        totalPoints += (doc['points_awarded'] as int? ?? 0);
+      }
 
       return DashboardStats(
-        cgpa: student['cgpa'] != null ? (student['cgpa'] as num).toDouble() : null,
-        attendancePercentage: attendancePercentage,
-        creditsCompleted: creditsCompleted,
-        totalCredits: 180, // Default total credits (adjust as needed)
-        activeClubs: 3, // TODO: Link to clubs table when available
-        pendingLeaves: leaves.length,
-        approvedDocuments: documents.length,
+        cgpa: student?['cgpa'] != null
+            ? (student!['cgpa'] as num).toDouble()
+            : null,
+        attendancePercentage: 0,
+        creditsCompleted: totalPoints,
+        totalCredits: 150,
+        activeClubs: 0,
+        pendingLeaves: (leaves as List).length,
+        approvedDocuments: (documents as List).length,
       );
     } catch (e) {
       print('❌ Error fetching dashboard stats: $e');
       return DashboardStats(
         attendancePercentage: 0,
         creditsCompleted: 0,
-        totalCredits: 180,
+        totalCredits: 150,
         activeClubs: 0,
         pendingLeaves: 0,
         approvedDocuments: 0,
@@ -130,7 +103,8 @@ class StudentService {
   // LEAVE APPLICATIONS
   // ================================
 
-  static Future<List<LeaveApplication>> getLeaveApplications(String studentId) async {
+  static Future<List<LeaveApplication>> getLeaveApplications(
+      String studentId) async {
     try {
       final response = await _supabase
           .from('leave_applications')
@@ -147,32 +121,39 @@ class StudentService {
     }
   }
 
+  /// Submit leave application.
+  /// [fileBytes] and [fileName] come from FilePicker (web-compatible).
   static Future<bool> submitLeaveApplication({
     required String studentId,
     required String title,
     required String description,
     required DateTime fromDate,
     required DateTime toDate,
-    File? document,
+    Uint8List? fileBytes,   // ← web-safe, replaces File
+    String? fileName,
   }) async {
     try {
       String? documentUrl;
 
-      // Upload document if provided
-      if (document != null) {
-        final fileName = '${DateTime.now().millisecondsSinceEpoch}_${document.path.split('/').last}';
-        final filePath = 'leaves/$studentId/$fileName';
+      if (fileBytes != null && fileName != null) {
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final safeName = fileName.replaceAll(' ', '_');
+        final storagePath = 'leaves/$studentId/${timestamp}_$safeName';
 
-        await _supabase.storage
-            .from('documents')
-            .upload(filePath, document);
+        await _supabase.storage.from('documents').uploadBinary(
+          storagePath,
+          fileBytes,
+          fileOptions: const FileOptions(
+            contentType: 'application/pdf',
+            upsert: false,
+          ),
+        );
 
         documentUrl = _supabase.storage
             .from('documents')
-            .getPublicUrl(filePath);
+            .getPublicUrl(storagePath);
       }
 
-      // Insert leave application
       await _supabase.from('leave_applications').insert({
         'student_id': studentId,
         'title': title,
@@ -220,33 +201,42 @@ class StudentService {
     }
   }
 
+  /// Upload student document.
+  /// [fileBytes] and [fileName] come from FilePicker (web-compatible).
   static Future<bool> uploadStudentDocument({
     required String studentId,
     required String documentType,
     required String title,
     String? description,
-    required File document,
+    required Uint8List fileBytes,  // ← web-safe
+    required String fileName,
   }) async {
     try {
-      // Upload document
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_${document.path.split('/').last}';
-      final filePath = 'student_documents/$studentId/$fileName';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final safeName = fileName.replaceAll(' ', '_');
+      final storagePath = 'student_documents/$studentId/${timestamp}_$safeName';
 
-      await _supabase.storage
-          .from('documents')
-          .upload(filePath, document);
+      await _supabase.storage.from('documents').uploadBinary(
+        storagePath,
+        fileBytes,
+        fileOptions: const FileOptions(
+          contentType: 'application/pdf',
+          upsert: false,
+        ),
+      );
 
       final documentUrl = _supabase.storage
           .from('documents')
-          .getPublicUrl(filePath);
+          .getPublicUrl(storagePath);
 
-      // Insert document record
       await _supabase.from('student_documents').insert({
         'student_id': studentId,
         'document_type': documentType,
         'title': title,
         'description': description,
         'document_url': documentUrl,
+        'file_name': fileName,
+        'file_size': fileBytes.length,
         'status': 'pending',
         'points_awarded': 0,
       });
@@ -260,24 +250,18 @@ class StudentService {
   }
 
   // ================================
-  // STORAGE BUCKET CREATION (Run once)
+  // STORAGE BUCKET CHECK
   // ================================
 
   static Future<void> ensureStorageBuckets() async {
+    // Buckets are created via SQL/dashboard.
+    // This just silently verifies without crashing on web.
     try {
-      // Check if 'documents' bucket exists, create if not
-      final buckets = await _supabase.storage.listBuckets();
-      final hasDocumentsBucket = buckets.any((b) => b.name == 'documents');
-
-      if (!hasDocumentsBucket) {
-        await _supabase.storage.createBucket(
-          'documents',
-          const BucketOptions(public: true),
-        );
-        print('✅ Created documents storage bucket');
-      }
+      await _supabase.storage.getBucket('documents');
+      print('✅ Storage bucket "documents" is ready');
     } catch (e) {
       print('⚠️ Storage bucket check: $e');
+      // Don't crash — bucket may still work fine
     }
   }
 }

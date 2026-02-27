@@ -1,6 +1,7 @@
 // lib/screens/documents_page.dart
+// Web-compatible: uses FilePicker bytes instead of dart:io File
 
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/student_models.dart';
@@ -126,9 +127,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Colors.purple, Colors.blue],
-        ),
+        gradient: const LinearGradient(colors: [Colors.purple, Colors.blue]),
         borderRadius: BorderRadius.circular(16),
       ),
       child: const Column(
@@ -137,18 +136,12 @@ class _DocumentsPageState extends State<DocumentsPage> {
           Text(
             'Documents Management 📁',
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+                color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
           ),
           SizedBox(height: 8),
           Text(
             'Upload and manage your academic documents',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-            ),
+            style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
         ],
       ),
@@ -163,23 +156,18 @@ class _DocumentsPageState extends State<DocumentsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 10,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Upload Document',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text('Upload Document',
+              style:
+              TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 2,
@@ -193,7 +181,8 @@ class _DocumentsPageState extends State<DocumentsPage> {
                 label: type['label'],
                 icon: type['icon'],
                 color: type['color'],
-                onTap: () => _showUploadDialog(type['value'], type['label']),
+                onTap: () =>
+                    _showUploadDialog(type['value'], type['label']),
               );
             }).toList(),
           ),
@@ -228,14 +217,10 @@ class _DocumentsPageState extends State<DocumentsPage> {
               child: Icon(icon, color: color, size: 28),
             ),
             const SizedBox(height: 12),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
+            Text(label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13)),
           ],
         ),
       ),
@@ -250,11 +235,10 @@ class _DocumentsPageState extends State<DocumentsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 1,
+              blurRadius: 10,
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -263,26 +247,20 @@ class _DocumentsPageState extends State<DocumentsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Your Documents',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              const Text('Your Documents',
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold)),
               DropdownButton<String>(
                 value: _selectedCategory,
                 items: [
-                  const DropdownMenuItem(
-                    value: 'all',
-                    child: Text('All'),
-                  ),
-                  ..._documentTypes.map<DropdownMenuItem<String>>((type) { // Specify the type here
-                    return DropdownMenuItem<String>( // And here
-                      value: type['value'] as String, // Cast the value to String
-                      child: Text(type['label'] as String),
-                    );
-                  }).toList(),
+                  const DropdownMenuItem(value: 'all', child: Text('All')),
+                  ..._documentTypes
+                      .map<DropdownMenuItem<String>>((type) =>
+                      DropdownMenuItem<String>(
+                        value: type['value'] as String,
+                        child: Text(type['label'] as String),
+                      ))
+                      .toList(),
                 ],
                 onChanged: (value) {
                   if (value != null) {
@@ -294,17 +272,14 @@ class _DocumentsPageState extends State<DocumentsPage> {
             ],
           ),
           const SizedBox(height: 16),
-
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else if (_documents.isEmpty)
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
-                child: Text(
-                  'No documents uploaded yet',
-                  style: TextStyle(color: Colors.grey),
-                ),
+                child: Text('No documents uploaded yet',
+                    style: TextStyle(color: Colors.grey)),
               ),
             )
           else
@@ -312,11 +287,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _documents.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final document = _documents[index];
-                return _buildDocumentCard(document);
-              },
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) =>
+                  _buildDocumentCard(_documents[index]),
             ),
         ],
       ),
@@ -342,70 +315,58 @@ class _DocumentsPageState extends State<DocumentsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      document.title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text(document.title,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(
-                        document.displayType,
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: Text(document.displayType,
+                          style: const TextStyle(
+                              color: Colors.blue,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(
-                  document.status.toUpperCase(),
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
+                child: Text(document.status.toUpperCase(),
+                    style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12)),
               ),
             ],
           ),
           if (document.description != null) ...[
             const SizedBox(height: 8),
-            Text(
-              document.description!,
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-            ),
+            Text(document.description!,
+                style: TextStyle(color: Colors.grey[600], fontSize: 13)),
           ],
-          if (document.status == 'approved' && document.pointsAwarded > 0) ...[
+          if (document.status == 'approved' &&
+              document.pointsAwarded > 0) ...[
             const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(Icons.star, color: Colors.amber, size: 16),
                 const SizedBox(width: 4),
-                Text(
-                  '${document.pointsAwarded} points awarded',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.amber,
-                    fontSize: 12,
-                  ),
-                ),
+                Text('${document.pointsAwarded} points awarded',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber,
+                        fontSize: 12)),
               ],
             ),
           ],
@@ -420,18 +381,12 @@ class _DocumentsPageState extends State<DocumentsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'HOD Remarks:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
+                  const Text('HOD Remarks:',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(height: 4),
-                  Text(
-                    document.hodRemarks!,
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                  Text(document.hodRemarks!,
+                      style: const TextStyle(fontSize: 12)),
                 ],
               ),
             ),
@@ -447,7 +402,6 @@ class _DocumentsPageState extends State<DocumentsPage> {
         return Colors.green;
       case 'rejected':
         return Colors.red;
-      case 'pending':
       default:
         return Colors.orange;
     }
@@ -455,7 +409,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
 }
 
 // ================================
-// DOCUMENT UPLOAD DIALOG
+// DOCUMENT UPLOAD DIALOG — Web-safe
 // ================================
 
 class DocumentUploadDialog extends StatefulWidget {
@@ -480,7 +434,9 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  File? _selectedFile;
+
+  Uint8List? _fileBytes;
+  String? _fileName;
   bool _isUploading = false;
 
   @override
@@ -492,14 +448,16 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
 
   Future<void> _pickFile() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
+        withData: true, // ← loads bytes into memory (required for web)
       );
 
-      if (result != null && result.files.single.path != null) {
+      if (result != null && result.files.single.bytes != null) {
         setState(() {
-          _selectedFile = File(result.files.single.path!);
+          _fileBytes = result.files.single.bytes;
+          _fileName = result.files.single.name;
         });
       }
     } catch (e) {
@@ -510,7 +468,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
   Future<void> _uploadDocument() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedFile == null) {
+    if (_fileBytes == null || _fileName == null) {
       _showSnackBar('Please select a PDF file', Colors.orange);
       return;
     }
@@ -522,7 +480,8 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
       documentType: widget.documentType,
       title: _titleController.text.trim(),
       description: _descriptionController.text.trim(),
-      document: _selectedFile!,
+      fileBytes: _fileBytes!,
+      fileName: _fileName!,
     );
 
     setState(() => _isUploading = false);
@@ -530,26 +489,25 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
     if (success) {
       widget.onSuccess();
     } else {
-      _showSnackBar('Failed to upload document', Colors.red);
+      _showSnackBar('Failed to upload document. Check console for details.',
+          Colors.red);
     }
   }
 
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
+          content: Text(message),
+          backgroundColor: color,
+          behavior: SnackBarBehavior.floating),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape:
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Form(
@@ -561,9 +519,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
               Text(
                 'Upload ${widget.documentTypeLabel}',
                 style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                    fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 20),
 
@@ -572,8 +528,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
                 decoration: InputDecoration(
                   labelText: 'Title *',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                      borderRadius: BorderRadius.circular(8)),
                   prefixIcon: const Icon(Icons.title),
                 ),
                 validator: (value) {
@@ -590,34 +545,38 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
                 decoration: InputDecoration(
                   labelText: 'Description (optional)',
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                      borderRadius: BorderRadius.circular(8)),
                   prefixIcon: const Icon(Icons.description),
                 ),
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
 
+              // File picker — web-safe
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  border:
+                  Border.all(color: Colors.grey.withOpacity(0.3)),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      _selectedFile != null ? Icons.check_circle : Icons.upload_file,
-                      color: _selectedFile != null ? Colors.green : Colors.grey,
+                      _fileBytes != null
+                          ? Icons.check_circle
+                          : Icons.upload_file,
+                      color:
+                      _fileBytes != null ? Colors.green : Colors.grey,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _selectedFile != null
-                            ? _selectedFile!.path.split('/').last
-                            : 'No file selected',
+                        _fileName ?? 'No file selected',
                         style: TextStyle(
-                          color: _selectedFile != null ? Colors.black : Colors.grey,
+                          color: _fileBytes != null
+                              ? Colors.black
+                              : Colors.grey,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -650,18 +609,14 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
                       backgroundColor: Colors.purple,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
+                          horizontal: 24, vertical: 12),
                     ),
                     child: _isUploading
                         ? const SizedBox(
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
+                          color: Colors.white, strokeWidth: 2),
                     )
                         : const Text('Upload'),
                   ),

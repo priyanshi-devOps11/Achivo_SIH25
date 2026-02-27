@@ -1,6 +1,7 @@
 // lib/screens/leave_application_page.dart
+// Web-compatible: uses FilePicker bytes instead of dart:io File
 
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
@@ -10,7 +11,8 @@ import '../services/student_service.dart';
 class LeaveApplicationPage extends StatefulWidget {
   final String studentId;
 
-  const LeaveApplicationPage({Key? key, required this.studentId}) : super(key: key);
+  const LeaveApplicationPage({Key? key, required this.studentId})
+      : super(key: key);
 
   @override
   State<LeaveApplicationPage> createState() => _LeaveApplicationPageState();
@@ -23,9 +25,12 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
 
   DateTime? _fromDate;
   DateTime? _toDate;
-  File? _selectedDocument;
-  bool _isSubmitting = false;
 
+  // ── Web-safe file fields ──
+  Uint8List? _fileBytes;
+  String? _fileName;
+
+  bool _isSubmitting = false;
   List<LeaveApplication> _leaveApplications = [];
   bool _isLoadingApplications = true;
 
@@ -44,9 +49,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
 
   Future<void> _loadLeaveApplications() async {
     setState(() => _isLoadingApplications = true);
-
-    final applications = await StudentService.getLeaveApplications(widget.studentId);
-
+    final applications =
+    await StudentService.getLeaveApplications(widget.studentId);
     if (mounted) {
       setState(() {
         _leaveApplications = applications;
@@ -81,14 +85,16 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
 
   Future<void> _pickDocument() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
+        withData: true, // ← IMPORTANT: loads bytes into memory (web-safe)
       );
 
-      if (result != null && result.files.single.path != null) {
+      if (result != null && result.files.single.bytes != null) {
         setState(() {
-          _selectedDocument = File(result.files.single.path!);
+          _fileBytes = result.files.single.bytes;
+          _fileName = result.files.single.name;
         });
       }
     } catch (e) {
@@ -112,7 +118,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
       description: _descriptionController.text.trim(),
       fromDate: _fromDate!,
       toDate: _toDate!,
-      document: _selectedDocument,
+      fileBytes: _fileBytes,
+      fileName: _fileName,
     );
 
     setState(() => _isSubmitting = false);
@@ -132,7 +139,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
     setState(() {
       _fromDate = null;
       _toDate = null;
-      _selectedDocument = null;
+      _fileBytes = null;
+      _fileName = null;
     });
   }
 
@@ -192,10 +200,7 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
           children: [
             const Text(
               'Apply for Leave',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
 
@@ -205,9 +210,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               decoration: InputDecoration(
                 labelText: 'Title *',
                 hintText: 'e.g., Medical Leave, Family Emergency',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 prefixIcon: const Icon(Icons.title),
               ),
               validator: (value) {
@@ -225,9 +229,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               decoration: InputDecoration(
                 labelText: 'Reason *',
                 hintText: 'Explain the reason for your leave',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 prefixIcon: const Icon(Icons.description),
               ),
               maxLines: 4,
@@ -262,7 +265,7 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
             ),
             const SizedBox(height: 16),
 
-            // Document Upload
+            // Document Upload (web-safe)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -272,17 +275,17 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               child: Row(
                 children: [
                   Icon(
-                    _selectedDocument != null ? Icons.check_circle : Icons.upload_file,
-                    color: _selectedDocument != null ? Colors.green : Colors.grey,
+                    _fileBytes != null
+                        ? Icons.check_circle
+                        : Icons.upload_file,
+                    color: _fileBytes != null ? Colors.green : Colors.grey,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _selectedDocument != null
-                          ? _selectedDocument!.path.split('/').last
-                          : 'No document selected (optional)',
+                      _fileName ?? 'No document selected (optional)',
                       style: TextStyle(
-                        color: _selectedDocument != null ? Colors.black : Colors.grey,
+                        color: _fileBytes != null ? Colors.black : Colors.grey,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -311,21 +314,19 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.all(16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 child: _isSubmitting
                     ? const SizedBox(
                   height: 20,
                   width: 20,
                   child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
+                      color: Colors.white, strokeWidth: 2),
                 )
                     : const Text(
                   'Submit Leave Application',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -351,13 +352,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-            ),
+            Text(label,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600])),
             const SizedBox(height: 4),
             Text(
               date != null
@@ -395,23 +391,17 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
         children: [
           const Text(
             'Your Leave Applications',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-
           if (_isLoadingApplications)
             const Center(child: CircularProgressIndicator())
           else if (_leaveApplications.isEmpty)
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
-                child: Text(
-                  'No leave applications yet',
-                  style: TextStyle(color: Colors.grey),
-                ),
+                child: Text('No leave applications yet',
+                    style: TextStyle(color: Colors.grey)),
               ),
             )
           else
@@ -419,10 +409,10 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _leaveApplications.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
+              separatorBuilder: (context, index) =>
+              const SizedBox(height: 12),
               itemBuilder: (context, index) {
-                final application = _leaveApplications[index];
-                return _buildLeaveCard(application);
+                return _buildLeaveCard(_leaveApplications[index]);
               },
             ),
         ],
@@ -449,13 +439,12 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
                 child: Text(
                   application.title,
                   style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                      fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
@@ -463,19 +452,16 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
                 child: Text(
                   application.status.toUpperCase(),
                   style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            application.description,
-            style: TextStyle(color: Colors.grey[600]),
-          ),
+          Text(application.description,
+              style: TextStyle(color: Colors.grey[600])),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -483,20 +469,14 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               const SizedBox(width: 4),
               Text(
                 application.formattedDateRange,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
               const SizedBox(width: 16),
               Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
               const SizedBox(width: 4),
               Text(
                 '${application.durationDays} days',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ],
           ),
@@ -511,18 +491,12 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'HOD Remarks:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
+                  const Text('HOD Remarks:',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 12)),
                   const SizedBox(height: 4),
-                  Text(
-                    application.hodRemarks!,
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                  Text(application.hodRemarks!,
+                      style: const TextStyle(fontSize: 12)),
                 ],
               ),
             ),
@@ -538,7 +512,6 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
         return Colors.green;
       case 'rejected':
         return Colors.red;
-      case 'pending':
       default:
         return Colors.orange;
     }
