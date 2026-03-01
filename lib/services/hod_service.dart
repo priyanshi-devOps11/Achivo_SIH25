@@ -1,5 +1,4 @@
-// lib/services/hod_service.dart
-// FIXED: reviewed_by now uses auth.uid() (UUID in profiles) not hods.id
+
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/hod_models.dart';
@@ -155,7 +154,6 @@ class HODService {
     }
   }
 
-  /// ✅ FIXED: uses auth.uid() for reviewed_by — this UUID exists in profiles table
   static Future<bool> reviewDocument({
     required String documentId,
     required String action,
@@ -182,7 +180,7 @@ class HODService {
     }
   }
 
-  /// ✅ FIXED: uses auth.uid() for reviewed_by — this UUID exists in profiles table
+
   static Future<bool> reviewLeave({
     required String leaveId,
     required String action,
@@ -282,7 +280,6 @@ class HODService {
     }
   }
 
-  /// Get document download URL (public bucket = direct URL)
   static Future<String?> getDocumentDownloadUrl(String documentUrl) async {
     try {
       if (documentUrl.startsWith('http')) return documentUrl;
