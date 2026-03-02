@@ -8,6 +8,7 @@ import 'dart:async';
 import '../models/hod_models.dart';
 import 'hod_document_review_page.dart';
 import '../services/hod_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 SupabaseClient get supabase => Supabase.instance.client;
 
@@ -1387,6 +1388,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // ── Header: icon + student name + status badge ──
           Row(children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -1409,6 +1411,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             _buildStatusBadge(leave.status),
           ]),
           const SizedBox(height: 12),
+
+          // ── Date range row ──
           Row(children: [
             Expanded(
               child: Container(
@@ -1445,6 +1449,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               ),
             ),
           ]),
+
+          // ── Description ──
           if (leave.description.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(leave.description,
@@ -1452,6 +1458,60 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis),
           ],
+
+          // ── ✅ NEW: View Attached Document button ──
+          if (leave.documentUrl != null && leave.documentUrl!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final url = leave.documentUrl!;
+                // Try to get a signed URL if it's not already an http URL
+                String? openUrl;
+                if (url.startsWith('http')) {
+                  openUrl = url;
+                } else {
+                  openUrl = await HODService.getDocumentDownloadUrl(url);
+                }
+                if (openUrl == null) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Could not load document URL'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                  return;
+                }
+                final uri = Uri.parse(openUrl);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Could not open document'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 18),
+              label: const Text(
+                'View Attached Document',
+                style: TextStyle(color: Colors.deepOrange, fontSize: 13),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.deepOrange),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              ),
+            ),
+          ],
+
+          // ── Approve / Reject buttons (pending only) ──
           if (leave.isPending) ...[
             const SizedBox(height: 12),
             Row(children: [
@@ -1478,6 +1538,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               ),
             ]),
           ],
+
+          // ── HOD remarks (if already reviewed) ──
           if (leave.hodRemarks != null && leave.hodRemarks!.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
