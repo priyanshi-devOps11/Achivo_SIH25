@@ -90,8 +90,8 @@ class _HODDocumentReviewPageState extends State<HODDocumentReviewPage> {
   Future<void> _approveDocument() async {
     final points = int.tryParse(_pointsController.text.trim()) ?? 0;
 
-    if (points <= 0) {
-      _showSnackbar('Please enter a valid points value (must be > 0)', Colors.orange);
+    if (points < 0) {
+      _showSnackbar('Points cannot be negative', Colors.orange);
       return;
     }
 
