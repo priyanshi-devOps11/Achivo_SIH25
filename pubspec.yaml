@@ -56,13 +56,8 @@ flutter:
     - assets/.env.example
     - assets/icon/
 
-# -------------------------------------------------------------
-# 🚀 FLUTTER LAUNCHER ICONS CONFIGURATION (TOP LEVEL - NO INDENTATION)
-# -------------------------------------------------------------
 flutter_icons:
   android: true
   ios: true
   image_path: "assets/icon/iconachivo.png"
-  # Optional: For Android Adaptive Icons (recommended for Android 8.0+)
-  # adaptive_icon_background: "#ffffff" # Solid color background
-  # adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+
