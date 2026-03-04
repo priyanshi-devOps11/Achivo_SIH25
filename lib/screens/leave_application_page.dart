@@ -1,5 +1,6 @@
 // lib/screens/leave_application_page.dart
 // Web-compatible: uses FilePicker bytes instead of dart:io File
+// ✅ NEW: Students can withdraw (delete) pending leave applications only
 
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -26,7 +27,6 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
   DateTime? _fromDate;
   DateTime? _toDate;
 
-  // ── Web-safe file fields ──
   Uint8List? _fileBytes;
   String? _fileName;
 
@@ -88,7 +88,7 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true, // ← IMPORTANT: loads bytes into memory (web-safe)
+        withData: true,
       );
 
       if (result != null && result.files.single.bytes != null) {
@@ -130,6 +130,66 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
       _loadLeaveApplications();
     } else {
       _showSnackBar('Failed to submit leave application', Colors.red);
+    }
+  }
+
+  // ── ✅ NEW: Withdraw a pending leave application ──────────────
+  Future<void> _confirmWithdrawLeave(LeaveApplication leave) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Withdraw Application?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to withdraw "${leave.title}"?\n\n'
+              'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Withdraw'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final success = await StudentService.deleteLeaveApplication(
+      leaveId: leave.id.toString(),
+      studentId: widget.studentId,
+      documentUrl: leave.documentUrl,
+    );
+
+    if (mounted) {
+      if (success) {
+        _showSnackBar('Leave application withdrawn successfully', Colors.green);
+        _loadLeaveApplications();
+      } else {
+        _showSnackBar(
+          'Could not withdraw — the HOD may have already reviewed it',
+          Colors.red,
+        );
+        // Refresh list so student sees the updated status
+        _loadLeaveApplications();
+      }
     }
   }
 
@@ -178,6 +238,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
     );
   }
 
+  // ── Submit form ────────────────────────────────────────────────
+
   Widget _buildApplicationForm() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -210,8 +272,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               decoration: InputDecoration(
                 labelText: 'Title *',
                 hintText: 'e.g., Medical Leave, Family Emergency',
-                border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
                 prefixIcon: const Icon(Icons.title),
               ),
               validator: (value) {
@@ -229,8 +291,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               decoration: InputDecoration(
                 labelText: 'Reason *',
                 hintText: 'Explain the reason for your leave',
-                border:
-                OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
                 prefixIcon: const Icon(Icons.description),
               ),
               maxLines: 4,
@@ -265,7 +327,7 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
             ),
             const SizedBox(height: 16),
 
-            // Document Upload (web-safe)
+            // Document Upload
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -285,7 +347,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
                     child: Text(
                       _fileName ?? 'No document selected (optional)',
                       style: TextStyle(
-                        color: _fileBytes != null ? Colors.black : Colors.grey,
+                        color:
+                        _fileBytes != null ? Colors.black : Colors.grey,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -371,6 +434,8 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
     );
   }
 
+  // ── Applications list ──────────────────────────────────────────
+
   Widget _buildApplicationsList() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -409,35 +474,40 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _leaveApplications.length,
-              separatorBuilder: (context, index) =>
-              const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                return _buildLeaveCard(_leaveApplications[index]);
-              },
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (_, index) =>
+                  _buildLeaveCard(_leaveApplications[index]),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildLeaveCard(LeaveApplication application) {
-    Color statusColor = _getStatusColor(application.status);
+  Widget _buildLeaveCard(LeaveApplication leave) {
+    final isPending = leave.status == 'pending';
+    final statusColor = _getStatusColor(leave.status);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(
+          color: isPending
+              ? Colors.orange.withOpacity(0.4)
+              : Colors.grey.withOpacity(0.2),
+          width: isPending ? 1.5 : 1,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Title + Status ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Text(
-                  application.title,
+                  leave.title,
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w600),
                 ),
@@ -450,7 +520,7 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  application.status.toUpperCase(),
+                  leave.status.toUpperCase(),
                   style: TextStyle(
                       color: statusColor,
                       fontWeight: FontWeight.bold,
@@ -460,44 +530,104 @@ class _LeaveApplicationPageState extends State<LeaveApplicationPage> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(application.description,
-              style: TextStyle(color: Colors.grey[600])),
+
+          // ── Description ──
+          Text(leave.description,
+              style: TextStyle(color: Colors.grey[600], fontSize: 13)),
           const SizedBox(height: 12),
+
+          // ── Date range + Duration ──
           Row(
             children: [
-              Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+              Icon(Icons.calendar_today,
+                  size: 16, color: Colors.grey[600]),
               const SizedBox(width: 4),
               Text(
-                application.formattedDateRange,
+                leave.formattedDateRange,
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
               const SizedBox(width: 16),
               Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
               const SizedBox(width: 4),
               Text(
-                '${application.durationDays} days',
+                '${leave.durationDays} day${leave.durationDays != 1 ? 's' : ''}',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
             ],
           ),
-          if (application.hodRemarks != null) ...[
+
+          // ── HOD Remarks (if reviewed) ──
+          if (leave.hodRemarks != null &&
+              leave.hodRemarks!.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withOpacity(0.07),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('HOD Remarks:',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 12)),
+                  const Row(
+                    children: [
+                      Icon(Icons.comment, size: 14, color: Colors.blue),
+                      SizedBox(width: 6),
+                      Text('HOD Remarks:',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Colors.blue)),
+                    ],
+                  ),
                   const SizedBox(height: 4),
-                  Text(application.hodRemarks!,
+                  Text(leave.hodRemarks!,
                       style: const TextStyle(fontSize: 12)),
                 ],
+              ),
+            ),
+          ],
+
+          // ── ✅ WITHDRAW BUTTON — only for pending leaves ──
+          if (isPending) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFEEEEEE)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.info_outline,
+                    size: 14, color: Colors.orange),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Awaiting HOD review — you can withdraw until it is reviewed',
+                    style:
+                    TextStyle(fontSize: 11, color: Colors.orange[700]),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _confirmWithdrawLeave(leave),
+                icon: const Icon(Icons.delete_outline,
+                    color: Colors.red, size: 18),
+                label: const Text(
+                  'Withdraw Application',
+                  style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.red),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
               ),
             ),
           ],

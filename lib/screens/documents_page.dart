@@ -1,5 +1,6 @@
 // lib/screens/documents_page.dart
 // Web-compatible: uses FilePicker bytes instead of dart:io File
+// ✅ NEW: Students can delete pending documents only
 
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -92,6 +93,65 @@ class _DocumentsPageState extends State<DocumentsPage> {
     );
   }
 
+  // ── ✅ NEW: Confirm and delete a pending document ─────────────
+  Future<void> _confirmDeleteDocument(StudentDocument document) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Delete Document?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete "${document.title}"?\n\n'
+              'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final success = await StudentService.deleteStudentDocument(
+      documentId: document.id.toString(),
+      studentId: widget.studentId,
+      documentUrl: document.documentUrl,
+    );
+
+    if (mounted) {
+      if (success) {
+        _showSnackBar('Document deleted successfully', Colors.green);
+        _loadDocuments();
+      } else {
+        _showSnackBar(
+          'Could not delete — the HOD may have already reviewed it',
+          Colors.red,
+        );
+        _loadDocuments(); // refresh to show latest status
+      }
+    }
+  }
+
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -101,6 +161,8 @@ class _DocumentsPageState extends State<DocumentsPage> {
       ),
     );
   }
+
+  // ── BUILD ──────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +198,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
           Text(
             'Documents Management 📁',
             style: TextStyle(
-                color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold),
           ),
           SizedBox(height: 8),
           Text(
@@ -166,8 +230,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Upload Document',
-              style:
-              TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           GridView.count(
             crossAxisCount: 2,
@@ -255,11 +318,12 @@ class _DocumentsPageState extends State<DocumentsPage> {
                 items: [
                   const DropdownMenuItem(value: 'all', child: Text('All')),
                   ..._documentTypes
-                      .map<DropdownMenuItem<String>>((type) =>
-                      DropdownMenuItem<String>(
-                        value: type['value'] as String,
-                        child: Text(type['label'] as String),
-                      ))
+                      .map<DropdownMenuItem<String>>(
+                        (type) => DropdownMenuItem<String>(
+                      value: type['value'] as String,
+                      child: Text(type['label'] as String),
+                    ),
+                  )
                       .toList(),
                 ],
                 onChanged: (value) {
@@ -288,7 +352,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _documents.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) =>
+              itemBuilder: (_, index) =>
                   _buildDocumentCard(_documents[index]),
             ),
         ],
@@ -297,17 +361,24 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 
   Widget _buildDocumentCard(StudentDocument document) {
-    Color statusColor = _getStatusColor(document.status);
+    final isPending = document.status == 'pending';
+    final statusColor = _getStatusColor(document.status);
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(
+          color: isPending
+              ? Colors.orange.withOpacity(0.4)
+              : Colors.grey.withOpacity(0.2),
+          width: isPending ? 1.5 : 1,
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Title + Status ──
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -315,9 +386,11 @@ class _DocumentsPageState extends State<DocumentsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(document.title,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(
+                      document.title,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -326,11 +399,13 @@ class _DocumentsPageState extends State<DocumentsPage> {
                         color: Colors.blue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(document.displayType,
-                          style: const TextStyle(
-                              color: Colors.blue,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600)),
+                      child: Text(
+                        document.displayType,
+                        style: const TextStyle(
+                            color: Colors.blue,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ],
                 ),
@@ -342,19 +417,28 @@ class _DocumentsPageState extends State<DocumentsPage> {
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Text(document.status.toUpperCase(),
-                    style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12)),
+                child: Text(
+                  document.status.toUpperCase(),
+                  style: TextStyle(
+                      color: statusColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
+                ),
               ),
             ],
           ),
-          if (document.description != null) ...[
+
+          // ── Description ──
+          if (document.description != null &&
+              document.description!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(document.description!,
-                style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            Text(
+              document.description!,
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
           ],
+
+          // ── Points (approved only) ──
           if (document.status == 'approved' &&
               document.pointsAwarded > 0) ...[
             const SizedBox(height: 8),
@@ -362,32 +446,91 @@ class _DocumentsPageState extends State<DocumentsPage> {
               children: [
                 const Icon(Icons.star, color: Colors.amber, size: 16),
                 const SizedBox(width: 4),
-                Text('${document.pointsAwarded} points awarded',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.amber,
-                        fontSize: 12)),
+                Text(
+                  '${document.pointsAwarded} points awarded',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber,
+                      fontSize: 12),
+                ),
               ],
             ),
           ],
-          if (document.hodRemarks != null) ...[
+
+          // ── HOD Remarks ──
+          if (document.hodRemarks != null &&
+              document.hodRemarks!.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withOpacity(0.07),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.withOpacity(0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('HOD Remarks:',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 12)),
+                  const Row(
+                    children: [
+                      Icon(Icons.comment, size: 14, color: Colors.blue),
+                      SizedBox(width: 6),
+                      Text(
+                        'HOD Remarks:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: Colors.blue),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                   Text(document.hodRemarks!,
                       style: const TextStyle(fontSize: 12)),
                 ],
+              ),
+            ),
+          ],
+
+          // ── ✅ DELETE BUTTON — only visible when pending ──
+          if (isPending) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1, color: Color(0xFFEEEEEE)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.info_outline,
+                    size: 14, color: Colors.orange),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Awaiting HOD review — you can delete until it is reviewed',
+                    style:
+                    TextStyle(fontSize: 11, color: Colors.orange[700]),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _confirmDeleteDocument(document),
+                icon: const Icon(Icons.delete_outline,
+                    color: Colors.red, size: 18),
+                label: const Text(
+                  'Delete Document',
+                  style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.red),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
               ),
             ),
           ],
@@ -408,9 +551,9 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 }
 
-// ================================
+// ════════════════════════════════════════════════════════════════
 // DOCUMENT UPLOAD DIALOG — Web-safe
-// ================================
+// ════════════════════════════════════════════════════════════════
 
 class DocumentUploadDialog extends StatefulWidget {
   final String studentId;
@@ -451,7 +594,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf'],
-        withData: true, // ← loads bytes into memory (required for web)
+        withData: true,
       );
 
       if (result != null && result.files.single.bytes != null) {
@@ -489,8 +632,8 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
     if (success) {
       widget.onSuccess();
     } else {
-      _showSnackBar('Failed to upload document. Check console for details.',
-          Colors.red);
+      _showSnackBar(
+          'Failed to upload document. Check console for details.', Colors.red);
     }
   }
 
@@ -523,6 +666,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
               ),
               const SizedBox(height: 20),
 
+              // Title
               TextFormField(
                 controller: _titleController,
                 decoration: InputDecoration(
@@ -540,6 +684,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
               ),
               const SizedBox(height: 16),
 
+              // Description
               TextFormField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
@@ -552,7 +697,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
               ),
               const SizedBox(height: 16),
 
-              // File picker — web-safe
+              // File Picker
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -566,8 +711,9 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
                       _fileBytes != null
                           ? Icons.check_circle
                           : Icons.upload_file,
-                      color:
-                      _fileBytes != null ? Colors.green : Colors.grey,
+                      color: _fileBytes != null
+                          ? Colors.green
+                          : Colors.grey,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -595,6 +741,7 @@ class _DocumentUploadDialogState extends State<DocumentUploadDialog> {
               ),
               const SizedBox(height: 24),
 
+              // Actions
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
