@@ -2,7 +2,6 @@
 // Web-compatible version - uses Uint8List instead of dart:io File
 
 import 'dart:typed_data';
-import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/student_models.dart';
 
@@ -29,7 +28,7 @@ class StudentService {
       if (response == null) return null;
 
       print('✅ Student profile loaded: ${response['first_name']} ${response['last_name']}');
-      return StudentProfile.fromJson(response);
+      return StudentProfile.fromMap(response); // ✅ FIXED: fromMap not fromJson
     } catch (e) {
       print('❌ Error fetching student profile: $e');
       return null;
@@ -44,15 +43,13 @@ class StudentService {
     try {
       final leaves = await _supabase
           .from('leave_applications')
-          .select('id')
-          .eq('student_id', studentId)
-          .eq('status', 'pending');
+          .select('id, status')
+          .eq('student_id', studentId);
 
       final documents = await _supabase
           .from('student_documents')
-          .select('id, points_awarded')
-          .eq('student_id', studentId)
-          .eq('status', 'approved');
+          .select('id, points_awarded, status')
+          .eq('student_id', studentId);
 
       final student = await _supabase
           .from('students')
@@ -60,8 +57,16 @@ class StudentService {
           .eq('id', studentId)
           .maybeSingle();
 
+      final leaveList = (leaves as List);
+      final docList   = (documents as List);
+
+      final pendingLeaves  = leaveList.where((l) => l['status'] == 'pending').length;
+      final approvedLeaves = leaveList.where((l) => l['status'] == 'approved').length;
+      final pendingDocs    = docList.where((d) => d['status'] == 'pending').length;
+      final approvedDocs   = docList.where((d) => d['status'] == 'approved').toList();
+
       int totalPoints = 0;
-      for (var doc in (documents as List)) {
+      for (var doc in approvedDocs) {
         totalPoints += (doc['points_awarded'] as int? ?? 0);
       }
 
@@ -72,20 +77,14 @@ class StudentService {
         attendancePercentage: 0,
         creditsCompleted: totalPoints,
         totalCredits: 150,
-        activeClubs: 0,
-        pendingLeaves: (leaves as List).length,
-        approvedDocuments: (documents as List).length,
+        pendingLeaves:    pendingLeaves,
+        approvedLeaves:   approvedLeaves,      // ✅ FIXED: required field
+        pendingDocuments: pendingDocs,         // ✅ FIXED: required field
+        approvedDocuments: approvedDocs.length,
       );
     } catch (e) {
       print('❌ Error fetching dashboard stats: $e');
-      return DashboardStats(
-        attendancePercentage: 0,
-        creditsCompleted: 0,
-        totalCredits: 150,
-        activeClubs: 0,
-        pendingLeaves: 0,
-        approvedDocuments: 0,
-      );
+      return DashboardStats.empty();           // ✅ FIXED: use factory
     }
   }
 
@@ -103,7 +102,7 @@ class StudentService {
           .order('created_at', ascending: false);
 
       return (response as List)
-          .map((data) => LeaveApplication.fromJson(data))
+          .map((data) => LeaveApplication.fromMap(data)) // ✅ FIXED: fromMap
           .toList();
     } catch (e) {
       print('❌ Error fetching leave applications: $e');
@@ -111,7 +110,6 @@ class StudentService {
     }
   }
 
-  /// Submit leave application.
   static Future<bool> submitLeaveApplication({
     required String studentId,
     required String title,
@@ -161,16 +159,12 @@ class StudentService {
     }
   }
 
-  /// Delete a pending leave application.
-  /// ✅ Allowed only when status == 'pending' (checked both here and at DB level).
-  /// Also removes the attached PDF from storage.
   static Future<bool> deleteLeaveApplication({
     required String leaveId,
     required String studentId,
     String? documentUrl,
   }) async {
     try {
-      // Confirm it's still pending before deleting
       final leave = await _supabase
           .from('leave_applications')
           .select('status, document_url')
@@ -182,13 +176,11 @@ class StudentService {
         print('❌ Leave not found');
         return false;
       }
-
       if (leave['status'] != 'pending') {
         print('❌ Cannot delete: leave is already ${leave['status']}');
         return false;
       }
 
-      // Delete DB record (status guard ensures HOD can't have reviewed it)
       await _supabase
           .from('leave_applications')
           .delete()
@@ -197,11 +189,7 @@ class StudentService {
           .eq('status', 'pending');
 
       print('✅ Leave $leaveId deleted');
-
-      // Clean up storage file (best-effort, non-fatal)
-      final url = documentUrl ?? leave['document_url'] as String?;
-      _deleteStorageFile(url);
-
+      _deleteStorageFile(documentUrl ?? leave['document_url'] as String?);
       return true;
     } catch (e) {
       print('❌ Error deleting leave: $e');
@@ -230,7 +218,7 @@ class StudentService {
       final response = await query.order('created_at', ascending: false);
 
       return (response as List)
-          .map((data) => StudentDocument.fromJson(data))
+          .map((data) => StudentDocument.fromMap(data)) // ✅ FIXED: fromMap
           .toList();
     } catch (e) {
       print('❌ Error fetching student documents: $e');
@@ -238,7 +226,6 @@ class StudentService {
     }
   }
 
-  /// Upload student document.
   static Future<bool> uploadStudentDocument({
     required String studentId,
     required String documentType,
@@ -285,16 +272,12 @@ class StudentService {
     }
   }
 
-  /// Delete a pending student document.
-  /// ✅ Allowed only when status == 'pending' (checked both here and at DB level).
-  /// Also removes the PDF from storage.
   static Future<bool> deleteStudentDocument({
     required String documentId,
     required String studentId,
     String? documentUrl,
   }) async {
     try {
-      // Confirm it's still pending
       final doc = await _supabase
           .from('student_documents')
           .select('status, document_url')
@@ -306,13 +289,11 @@ class StudentService {
         print('❌ Document not found');
         return false;
       }
-
       if (doc['status'] != 'pending') {
         print('❌ Cannot delete: document is already ${doc['status']}');
         return false;
       }
 
-      // Delete DB record
       await _supabase
           .from('student_documents')
           .delete()
@@ -321,11 +302,7 @@ class StudentService {
           .eq('status', 'pending');
 
       print('✅ Document $documentId deleted');
-
-      // Clean up storage file (best-effort, non-fatal)
-      final url = documentUrl ?? doc['document_url'] as String?;
-      _deleteStorageFile(url);
-
+      _deleteStorageFile(documentUrl ?? doc['document_url'] as String?);
       return true;
     } catch (e) {
       print('❌ Error deleting document: $e');
@@ -334,28 +311,81 @@ class StudentService {
   }
 
   // ================================
-  // INTERNAL HELPERS
+  // ATTENDANCE
   // ================================
 
-  /// Extracts the storage path from a public URL and removes the file.
-  /// Fires-and-forgets — errors are logged but not thrown.
-  static void _deleteStorageFile(String? url) {
-    if (url == null || url.isEmpty) return;
-    Future(() async {
-      try {
-        final uri = Uri.parse(url);
-        final segments = uri.pathSegments;
-        // Public URL format: .../storage/v1/object/public/documents/<path...>
-        final bucketIndex = segments.indexOf('documents');
-        if (bucketIndex != -1 && bucketIndex + 1 < segments.length) {
-          final storagePath = segments.sublist(bucketIndex + 1).join('/');
-          await _supabase.storage.from('documents').remove([storagePath]);
-          print('✅ Storage file deleted: $storagePath');
-        }
-      } catch (e) {
-        print('⚠️ Could not delete storage file (non-fatal): $e');
-      }
+  static Future<List<AttendanceRecord>> getAttendanceRecords(
+      String studentId) async {
+    try {
+      final response = await _supabase
+          .from('attendance')
+          .select(
+        'id, student_id, course_id, date, status, '
+            'courses(course_name, faculty(first_name, last_name))',
+      )
+          .eq('student_id', studentId)
+          .order('date', ascending: false);
+
+      return (response as List)
+          .map((m) => AttendanceRecord.fromMap(m))
+          .toList();
+    } catch (e) {
+      print('❌ Error fetching attendance: $e');
+      return [];
+    }
+  }
+
+  static Future<List<SubjectAttendance>> getSubjectAttendanceSummary(
+      String studentId) async {
+    final records = await getAttendanceRecords(studentId);
+
+    final Map<int, List<AttendanceRecord>> grouped = {};
+    for (final r in records) {
+      final key = r.courseId ?? -1;
+      grouped.putIfAbsent(key, () => []).add(r);
+    }
+
+    final summaries = <SubjectAttendance>[];
+    grouped.forEach((courseId, recs) {
+      summaries.add(SubjectAttendance(
+        courseId: courseId,
+        courseName: recs.first.courseName,
+        facultyName: recs.first.facultyName,
+        total: recs.length,
+        present: recs.where((r) => r.status == 'present').length,
+        absent:  recs.where((r) => r.status == 'absent').length,
+        leave:   recs.where((r) => r.status == 'leave').length,
+        late:    recs.where((r) => r.status == 'late').length,
+      ));
     });
+
+    summaries.sort((a, b) => a.courseName.compareTo(b.courseName));
+    return summaries;
+  }
+
+  // ================================
+  // MARKS
+  // ================================
+
+  static Future<List<SubjectMarks>> getSubjectMarks(
+      String studentId) async {
+    try {
+      final response = await _supabase
+          .from('course_enrollments')
+          .select(
+        'id, course_id, internal_marks, external_marks, marks, grade, status, '
+            'courses(course_name, faculty(first_name, last_name))',
+      )
+          .eq('student_id', studentId)
+          .order('course_id', ascending: true);
+
+      return (response as List)
+          .map((m) => SubjectMarks.fromMap(m))
+          .toList();
+    } catch (e) {
+      print('❌ Error fetching marks: $e');
+      return [];
+    }
   }
 
   // ================================
@@ -369,5 +399,27 @@ class StudentService {
     } catch (e) {
       print('⚠️ Storage bucket check: $e');
     }
+  }
+
+  // ================================
+  // INTERNAL HELPERS
+  // ================================
+
+  static void _deleteStorageFile(String? url) {
+    if (url == null || url.isEmpty) return;
+    Future(() async {
+      try {
+        final uri = Uri.parse(url);
+        final segments = uri.pathSegments;
+        final bucketIndex = segments.indexOf('documents');
+        if (bucketIndex != -1 && bucketIndex + 1 < segments.length) {
+          final storagePath = segments.sublist(bucketIndex + 1).join('/');
+          await _supabase.storage.from('documents').remove([storagePath]);
+          print('✅ Storage file deleted: $storagePath');
+        }
+      } catch (e) {
+        print('⚠️ Could not delete storage file (non-fatal): $e');
+      }
+    });
   }
 }

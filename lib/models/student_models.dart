@@ -2,24 +2,181 @@
 
 import 'package:intl/intl.dart';
 
-/// Student profile with academic details
+// ─────────────────────────────────────────────
+// ATTENDANCE RECORD (one class session)
+// ─────────────────────────────────────────────
+
+class AttendanceRecord {
+  final int id;
+  final String studentId;
+  final int? courseId;
+  final String courseName;    // joined from courses table
+  final String? facultyName;  // joined from faculty table
+  final DateTime date;
+  final String status;        // present | absent | leave | late
+
+  AttendanceRecord({
+    required this.id,
+    required this.studentId,
+    this.courseId,
+    required this.courseName,
+    this.facultyName,
+    required this.date,
+    required this.status,
+  });
+
+  factory AttendanceRecord.fromMap(Map<String, dynamic> map) {
+    // courses is a joined object: { course_name: "...", faculty: { first_name, last_name } }
+    final courseRaw = map['courses'];
+    String cName = 'Unknown Subject';
+    String? fName;
+    if (courseRaw is Map) {
+      cName = courseRaw['course_name']?.toString() ?? 'Unknown Subject';
+      final facRaw = courseRaw['faculty'];
+      if (facRaw is Map) {
+        final fn = facRaw['first_name'] ?? '';
+        final ln = facRaw['last_name'] ?? '';
+        fName = '$fn $ln'.trim();
+        if (fName.isEmpty) fName = null;
+      }
+    }
+    return AttendanceRecord(
+      id: map['id'] as int,
+      studentId: map['student_id']?.toString() ?? '',
+      courseId: map['course_id'] as int?,
+      courseName: cName,
+      facultyName: fName,
+      date: DateTime.parse(map['date']),
+      status: map['status'] ?? 'absent',
+    );
+  }
+
+  bool get isPresent => status == 'present';
+  bool get isAbsent  => status == 'absent';
+  bool get isLeave   => status == 'leave';
+  bool get isLate    => status == 'late';
+}
+
+// ─────────────────────────────────────────────
+// SUBJECT ATTENDANCE SUMMARY
+// Aggregates all records for one subject
+// ─────────────────────────────────────────────
+
+class SubjectAttendance {
+  final int courseId;
+  final String courseName;
+  final String? facultyName;
+  final int total;
+  final int present;
+  final int absent;
+  final int leave;
+  final int late;
+
+  SubjectAttendance({
+    required this.courseId,
+    required this.courseName,
+    this.facultyName,
+    required this.total,
+    required this.present,
+    required this.absent,
+    required this.leave,
+    required this.late,
+  });
+
+  double get percentage =>
+      total == 0 ? 0.0 : ((present + late) / total) * 100;
+
+  bool get isLow => percentage < 75;
+}
+
+// ─────────────────────────────────────────────
+// SUBJECT MARKS
+// One row per subject (from course_enrollments)
+// ─────────────────────────────────────────────
+
+class SubjectMarks {
+  final int enrollmentId;
+  final int courseId;
+  final String courseName;
+  final String? facultyName;
+  final double? internalMarks;   // out of 30 or 40 (faculty-defined)
+  final double? externalMarks;   // out of 70 or 60
+  final double? totalMarks;      // internal + external
+  final String? grade;
+  final String status;           // enrolled | completed | failed | dropped
+
+  SubjectMarks({
+    required this.enrollmentId,
+    required this.courseId,
+    required this.courseName,
+    this.facultyName,
+    this.internalMarks,
+    this.externalMarks,
+    this.totalMarks,
+    this.grade,
+    required this.status,
+  });
+
+  /// Combined marks for display (internal + external if both present)
+  double? get combinedTotal {
+    if (internalMarks != null && externalMarks != null) {
+      return internalMarks! + externalMarks!;
+    }
+    if (totalMarks != null) return totalMarks;
+    return internalMarks ?? externalMarks;
+  }
+
+  factory SubjectMarks.fromMap(Map<String, dynamic> map) {
+    final courseRaw = map['courses'];
+    String cName = 'Unknown Subject';
+    String? fName;
+    if (courseRaw is Map) {
+      cName = courseRaw['course_name']?.toString() ?? 'Unknown Subject';
+      final facRaw = courseRaw['faculty'];
+      if (facRaw is Map) {
+        final fn = facRaw['first_name'] ?? '';
+        final ln = facRaw['last_name'] ?? '';
+        fName = '$fn $ln'.trim();
+        if (fName.isEmpty) fName = null;
+      }
+    }
+
+    double? parse(dynamic v) =>
+        v == null ? null : (v as num).toDouble();
+
+    return SubjectMarks(
+      enrollmentId: map['id'] as int,
+      courseId: map['course_id'] as int,
+      courseName: cName,
+      facultyName: fName,
+      internalMarks: parse(map['internal_marks']),
+      externalMarks: parse(map['external_marks']),
+      totalMarks: parse(map['marks']),
+      grade: map['grade'] as String?,
+      status: map['status'] ?? 'enrolled',
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// STUDENT PROFILE
+// ─────────────────────────────────────────────
+
 class StudentProfile {
-  final String id;
-  final String userId;
+  final String id;       // students.id (UUID)
+  final String userId;   // profiles.id / auth.users.id
   final String firstName;
   final String lastName;
   final String email;
   final String rollNumber;
-  final String? studentId;
-  final String? year;
-  final String? semester;
-  final String? branch;
-  final double? cgpa;
+  final String? studentIdCode;
   final String? phone;
   final String? gender;
   final String? fatherName;
-  final DateTime? dateOfBirth;
+  final String year;
   final int? departmentId;
+  final String? departmentName;
+  final double? cgpa;
   final bool isActive;
 
   StudentProfile({
@@ -29,51 +186,89 @@ class StudentProfile {
     required this.lastName,
     required this.email,
     required this.rollNumber,
-    this.studentId,
-    this.year,
-    this.semester,
-    this.branch,
-    this.cgpa,
+    this.studentIdCode,
     this.phone,
     this.gender,
     this.fatherName,
-    this.dateOfBirth,
+    required this.year,
     this.departmentId,
+    this.departmentName,
+    this.cgpa,
     required this.isActive,
   });
 
-  factory StudentProfile.fromJson(Map<String, dynamic> json) {
+  String get fullName => '$firstName $lastName'.trim();
+
+  String get displayYear => year;
+
+  factory StudentProfile.fromMap(Map<String, dynamic> map) {
+    final deptRaw = map['departments'];
+    String? deptName;
+    if (deptRaw is Map) {
+      deptName = deptRaw['name'] as String?;
+    }
+
     return StudentProfile(
-      id: json['id']?.toString() ?? '',
-      userId: json['user_id']?.toString() ?? '',
-      firstName: json['first_name']?.toString() ?? '',
-      lastName: json['last_name']?.toString() ?? '',
-      email: json['email']?.toString() ?? '',
-      rollNumber: json['roll_number']?.toString() ?? '',
-      studentId: json['student_id']?.toString(),
-      year: json['year']?.toString(),
-      semester: json['semester']?.toString(),
-      branch: json['branch']?.toString(),
-      cgpa: json['cgpa'] != null ? (json['cgpa'] as num).toDouble() : null,
-      phone: json['phone']?.toString(),
-      gender: json['gender']?.toString(),
-      fatherName: json['father_name']?.toString(),
-      dateOfBirth: json['date_of_birth'] != null
-          ? DateTime.tryParse(json['date_of_birth'].toString())
-          : null,
-      departmentId: json['department_id'] != null
-          ? int.tryParse(json['department_id'].toString())
-          : null,
-      isActive: json['is_active'] == true,
+      id: map['id']?.toString() ?? '',
+      userId: map['user_id']?.toString() ?? '',
+      firstName: map['first_name'] ?? 'Student',
+      lastName: map['last_name'] ?? '',
+      email: map['email'] ?? '',
+      rollNumber: map['roll_number'] ?? '',
+      studentIdCode: map['student_id'] as String?,
+      phone: map['phone'] as String?,
+      gender: map['gender'] as String?,
+      fatherName: map['father_name'] as String?,
+      year: map['year'] ?? 'I',
+      departmentId: map['department_id'] as int?,
+      departmentName: deptName,
+      cgpa: (map['cgpa'] as num?)?.toDouble(),
+      isActive: map['is_active'] ?? false,
     );
   }
-
-  String get fullName => '$firstName $lastName';
-
-  String get displayYear => year ?? 'N/A';
 }
 
-/// Leave Application Model
+// ─────────────────────────────────────────────
+// DASHBOARD STATS
+// ─────────────────────────────────────────────
+
+class DashboardStats {
+  final double? cgpa;
+  final double attendancePercentage;
+  final int creditsCompleted;
+  final int totalCredits;
+  final int pendingLeaves;
+  final int approvedLeaves;
+  final int pendingDocuments;
+  final int approvedDocuments;
+
+  DashboardStats({
+    this.cgpa,
+    required this.attendancePercentage,
+    required this.creditsCompleted,
+    required this.totalCredits,
+    required this.pendingLeaves,
+    required this.approvedLeaves,
+    required this.pendingDocuments,
+    required this.approvedDocuments,
+  });
+
+  factory DashboardStats.empty() => DashboardStats(
+    cgpa: null,
+    attendancePercentage: 0,
+    creditsCompleted: 0,
+    totalCredits: 150,
+    pendingLeaves: 0,
+    approvedLeaves: 0,
+    pendingDocuments: 0,
+    approvedDocuments: 0,
+  );
+}
+
+// ─────────────────────────────────────────────
+// LEAVE APPLICATION
+// ─────────────────────────────────────────────
+
 class LeaveApplication {
   final int id;
   final String studentId;
@@ -82,10 +277,8 @@ class LeaveApplication {
   final DateTime fromDate;
   final DateTime toDate;
   final String? documentUrl;
-  final String status;
+  final String status;         // pending | approved | rejected
   final String? hodRemarks;
-  final String? approvedBy;
-  final DateTime? approvedAt;
   final DateTime createdAt;
 
   LeaveApplication({
@@ -98,39 +291,36 @@ class LeaveApplication {
     this.documentUrl,
     required this.status,
     this.hodRemarks,
-    this.approvedBy,
-    this.approvedAt,
     required this.createdAt,
   });
 
-  factory LeaveApplication.fromJson(Map<String, dynamic> json) {
-    return LeaveApplication(
-      id: int.parse(json['id'].toString()),
-      studentId: json['student_id']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
-      fromDate: DateTime.parse(json['from_date'].toString()),
-      toDate: DateTime.parse(json['to_date'].toString()),
-      documentUrl: json['document_url']?.toString(),
-      status: json['status']?.toString() ?? 'pending',
-      hodRemarks: json['hod_remarks']?.toString(),
-      approvedBy: json['approved_by']?.toString(),
-      approvedAt: json['approved_at'] != null
-          ? DateTime.tryParse(json['approved_at'].toString())
-          : null,
-      createdAt: DateTime.parse(json['created_at'].toString()),
-    );
-  }
+  int get durationDays => toDate.difference(fromDate).inDays + 1;
 
   String get formattedDateRange {
-    final formatter = DateFormat('MMM dd, yyyy');
-    return '${formatter.format(fromDate)} - ${formatter.format(toDate)}';
+    final fmt = DateFormat('MMM dd, yyyy');
+    return '${fmt.format(fromDate)} – ${fmt.format(toDate)}';
   }
 
-  int get durationDays => toDate.difference(fromDate).inDays + 1;
+  factory LeaveApplication.fromMap(Map<String, dynamic> map) {
+    return LeaveApplication(
+      id: map['id'] as int,
+      studentId: map['student_id']?.toString() ?? '',
+      title: map['title'] ?? '',
+      description: map['description'] ?? '',
+      fromDate: DateTime.parse(map['from_date']),
+      toDate: DateTime.parse(map['to_date']),
+      documentUrl: map['document_url'] as String?,
+      status: map['status'] ?? 'pending',
+      hodRemarks: map['hod_remarks'] as String?,
+      createdAt: DateTime.parse(map['created_at']),
+    );
+  }
 }
 
-/// Student Document Model
+// ─────────────────────────────────────────────
+// STUDENT DOCUMENT
+// ─────────────────────────────────────────────
+
 class StudentDocument {
   final int id;
   final String studentId;
@@ -138,11 +328,10 @@ class StudentDocument {
   final String title;
   final String? description;
   final String documentUrl;
-  final String status;
+  final String status;         // pending | approved | rejected
   final int pointsAwarded;
   final String? hodRemarks;
-  final String? approvedBy;
-  final DateTime? approvedAt;
+  final String? fileName;
   final DateTime createdAt;
 
   StudentDocument({
@@ -155,63 +344,33 @@ class StudentDocument {
     required this.status,
     required this.pointsAwarded,
     this.hodRemarks,
-    this.approvedBy,
-    this.approvedAt,
+    this.fileName,
     required this.createdAt,
   });
 
-  factory StudentDocument.fromJson(Map<String, dynamic> json) {
-    return StudentDocument(
-      id: int.parse(json['id'].toString()),
-      studentId: json['student_id']?.toString() ?? '',
-      documentType: json['document_type']?.toString() ?? 'other',
-      title: json['title']?.toString() ?? '',
-      description: json['description']?.toString(),
-      documentUrl: json['document_url']?.toString() ?? '',
-      status: json['status']?.toString() ?? 'pending',
-      pointsAwarded: int.tryParse(json['points_awarded']?.toString() ?? '0') ?? 0,
-      hodRemarks: json['hod_remarks']?.toString(),
-      approvedBy: json['approved_by']?.toString(),
-      approvedAt: json['approved_at'] != null
-          ? DateTime.tryParse(json['approved_at'].toString())
-          : null,
-      createdAt: DateTime.parse(json['created_at'].toString()),
-    );
-  }
-
   String get displayType {
     switch (documentType) {
-      case 'technical_skill':
-        return 'Technical Skill';
-      case 'internship':
-        return 'Internship';
-      case 'seminar':
-        return 'Seminar';
-      case 'certification':
-        return 'Certification';
-      default:
-        return 'Other';
+      case 'technical_skill': return 'Technical Skill';
+      case 'internship':      return 'Internship';
+      case 'seminar':         return 'Seminar';
+      case 'certification':   return 'Certification';
+      default:                return 'Other';
     }
   }
-}
 
-/// Dashboard Statistics
-class DashboardStats {
-  final double? cgpa;
-  final double attendancePercentage;
-  final int creditsCompleted;
-  final int totalCredits;
-  final int activeClubs;
-  final int pendingLeaves;
-  final int approvedDocuments;
-
-  DashboardStats({
-    this.cgpa,
-    required this.attendancePercentage,
-    required this.creditsCompleted,
-    required this.totalCredits,
-    required this.activeClubs,
-    required this.pendingLeaves,
-    required this.approvedDocuments,
-  });
+  factory StudentDocument.fromMap(Map<String, dynamic> map) {
+    return StudentDocument(
+      id: map['id'] as int,
+      studentId: map['student_id']?.toString() ?? '',
+      documentType: map['document_type'] ?? 'other',
+      title: map['title'] ?? '',
+      description: map['description'] as String?,
+      documentUrl: map['document_url'] ?? '',
+      status: map['status'] ?? 'pending',
+      pointsAwarded: map['points_awarded'] ?? 0,
+      hodRemarks: map['hod_remarks'] as String?,
+      fileName: map['file_name'] as String?,
+      createdAt: DateTime.parse(map['created_at']),
+    );
+  }
 }
