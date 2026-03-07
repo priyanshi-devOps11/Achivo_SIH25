@@ -197,9 +197,6 @@ class StudentService {
     }
   }
 
-  // ================================
-  // STUDENT DOCUMENTS
-  // ================================
 
   static Future<List<StudentDocument>> getStudentDocuments(
       String studentId, {
@@ -310,9 +307,7 @@ class StudentService {
     }
   }
 
-  // ================================
-  // ATTENDANCE
-  // ================================
+
 
   static Future<List<AttendanceRecord>> getAttendanceRecords(
       String studentId) async {
@@ -363,9 +358,7 @@ class StudentService {
     return summaries;
   }
 
-  // ================================
-  // MARKS
-  // ================================
+
 
   static Future<List<SubjectMarks>> getSubjectMarks(
       String studentId) async {
@@ -388,9 +381,6 @@ class StudentService {
     }
   }
 
-  // ================================
-  // STORAGE BUCKET CHECK
-  // ================================
 
   static Future<void> ensureStorageBuckets() async {
     try {
@@ -400,10 +390,6 @@ class StudentService {
       print('⚠️ Storage bucket check: $e');
     }
   }
-
-  // ================================
-  // INTERNAL HELPERS
-  // ================================
 
   static void _deleteStorageFile(String? url) {
     if (url == null || url.isEmpty) return;
