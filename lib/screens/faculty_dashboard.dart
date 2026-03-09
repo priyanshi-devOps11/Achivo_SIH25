@@ -1,5 +1,7 @@
 // lib/screens/faculty_dashboard.dart
 // PRODUCTION VERSION - Real-time, department-filtered, subject-based attendance
+// FIX: Marks now use courses linked by faculty_id (not ilike name search)
+// FIX: Attendance also uses the same course lookup approach
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -13,9 +15,9 @@ SupabaseClient get supabase => Supabase.instance.client;
 // ============================================================
 
 class FacultyProfile {
-  final String id;         // faculty table UUID
-  final String userId;     // auth UUID
-  final String facultyId;  // e.g. FAC001
+  final String id;
+  final String userId;
+  final String facultyId;
   final String firstName;
   final String lastName;
   final String email;
@@ -55,6 +57,26 @@ class FacultyProfile {
       designation: m['designation'] ?? 'Faculty',
     );
   }
+}
+
+// A course row fetched from DB, linked to this faculty
+class CourseItem {
+  final int id;
+  final String courseName;
+  final String courseCode;
+
+  CourseItem({required this.id, required this.courseName, required this.courseCode});
+
+  factory CourseItem.fromMap(Map<String, dynamic> m) {
+    return CourseItem(
+      id: m['id'] as int,
+      courseName: m['course_name']?.toString() ?? 'Unknown',
+      courseCode: m['course_code']?.toString() ?? '',
+    );
+  }
+
+  /// Display label shown in dropdowns
+  String get displayName => courseName;
 }
 
 class DeptStudent {
@@ -100,34 +122,6 @@ class AttendanceSummary {
   double get percentage => total == 0 ? 0 : (present / total) * 100;
 }
 
-class StudentMark {
-  final String studentId;
-  final String subjectName;
-  final int marks;
-  final int maxMarks;
-  final String examType;
-
-  StudentMark({
-    required this.studentId,
-    required this.subjectName,
-    required this.marks,
-    required this.maxMarks,
-    required this.examType,
-  });
-
-  double get percentage => maxMarks == 0 ? 0 : (marks / maxMarks) * 100;
-
-  factory StudentMark.fromMap(Map<String, dynamic> m) {
-    return StudentMark(
-      studentId: m['student_id']?.toString() ?? '',
-      subjectName: m['subject'] ?? '',
-      marks: m['marks'] ?? 0,
-      maxMarks: m['max_marks'] ?? 100,
-      examType: m['exam_type'] ?? 'internal',
-    );
-  }
-}
-
 // ============================================================
 // FACULTY DASHBOARD
 // ============================================================
@@ -140,29 +134,28 @@ class FacultyDashboard extends StatefulWidget {
 }
 
 class _FacultyDashboardState extends State<FacultyDashboard> {
-  // Profile & data
   FacultyProfile? _faculty;
   List<DeptStudent> _students = [];
+  // ✅ FIX: Load actual courses linked to this faculty from DB
+  List<CourseItem> _courses = [];
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Navigation
   int _selectedIndex = 0;
 
-  // Attendance state
-  String? _selectedSubject;
+  // Attendance state — uses CourseItem, not raw subject name
+  CourseItem? _selectedCourse;
   DateTime _selectedDate = DateTime.now();
-  Map<String, String> _attendanceMap = {}; // studentId -> 'present'|'absent'|'leave'|'late'
+  Map<String, String> _attendanceMap = {};
   bool _isSavingAttendance = false;
   Map<String, AttendanceSummary> _attendanceSummaryMap = {};
 
   // Marks state
-  String? _selectedMarkSubject;
+  CourseItem? _selectedMarkCourse;
   String _selectedExamType = 'internal';
   Map<String, TextEditingController> _markControllers = {};
   bool _isSavingMarks = false;
 
-  // Real-time subscriptions
   StreamSubscription? _studentsSub;
   StreamSubscription? _attendanceSub;
 
@@ -201,7 +194,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
         return;
       }
 
-      // Load faculty profile
       final resp = await supabase
           .from('faculty')
           .select()
@@ -218,22 +210,12 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
       _faculty = FacultyProfile.fromMap(resp);
 
-      // Default subject selection
-      if (_faculty!.subjects.isNotEmpty) {
-        _selectedSubject = _faculty!.subjects.first;
-        _selectedMarkSubject = _faculty!.subjects.first;
-      }
+      // ✅ FIX: Load courses from DB that belong to this faculty
+      await _loadFacultyCourses();
 
-      // Load students from same department
       await _loadStudents();
-
-      // Load today's attendance for selected subject
       await _loadTodaysAttendance();
-
-      // Load attendance summaries
       await _loadAttendanceSummaries();
-
-      // Setup real-time listeners
       _setupRealTimeListeners();
 
       setState(() => _isLoading = false);
@@ -242,6 +224,30 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
         _errorMessage = 'Failed to load dashboard: $e';
         _isLoading = false;
       });
+    }
+  }
+
+  /// ✅ FIX: Fetch courses where faculty_id = this faculty's id
+  Future<void> _loadFacultyCourses() async {
+    if (_faculty == null) return;
+    try {
+      final resp = await supabase
+          .from('courses')
+          .select('id, course_name, course_code')
+          .eq('faculty_id', _faculty!.id)
+          .eq('is_active', true)
+          .order('course_name', ascending: true);
+
+      _courses = (resp as List).map((m) => CourseItem.fromMap(m)).toList();
+
+      if (_courses.isNotEmpty) {
+        _selectedCourse     = _courses.first;
+        _selectedMarkCourse = _courses.first;
+      }
+
+      print('✅ Loaded ${_courses.length} courses for faculty ${_faculty!.fullName}');
+    } catch (e) {
+      debugPrint('Error loading faculty courses: $e');
     }
   }
 
@@ -277,43 +283,23 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   }
 
   Future<void> _loadTodaysAttendance() async {
-    if (_faculty == null || _selectedSubject == null || _students.isEmpty) return;
+    if (_selectedCourse == null || _students.isEmpty) return;
 
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
     try {
-      // Find course for selected subject
-      final courseResp = await supabase
-          .from('courses')
-          .select('id')
-          .eq('faculty_id', _faculty!.id)
-          .ilike('course_name', '%${_selectedSubject!}%')
-          .maybeSingle();
-
-      final courseId = courseResp?['id'] as int?;
-
-      final query = supabase
+      final resp = await supabase
           .from('attendance')
           .select('student_id, status')
+          .eq('course_id', _selectedCourse!.id)   // ✅ use real course id
           .eq('date', dateStr)
           .inFilter('student_id', _students.map((s) => s.id).toList());
 
-      if (courseId != null) {
-        final resp = await query.eq('course_id', courseId);
-        final map = <String, String>{};
-        for (final r in (resp as List)) {
-          map[r['student_id'].toString()] = r['status'].toString();
-        }
-        if (mounted) setState(() => _attendanceMap = map);
-      } else {
-        // Fallback: load without course filter (subject stored as remarks or subject field)
-        final resp = await query;
-        final map = <String, String>{};
-        for (final r in (resp as List)) {
-          map[r['student_id'].toString()] = r['status'].toString();
-        }
-        if (mounted) setState(() => _attendanceMap = map);
+      final map = <String, String>{};
+      for (final r in (resp as List)) {
+        map[r['student_id'].toString()] = r['status'].toString();
       }
+      if (mounted) setState(() => _attendanceMap = map);
     } catch (e) {
       debugPrint('Error loading attendance: $e');
     }
@@ -328,7 +314,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           .select('student_id, status')
           .inFilter('student_id', _students.map((s) => s.id).toList());
 
-      // Group by student
       final grouped = <String, List<String>>{};
       for (final r in (resp as List)) {
         final sid = r['student_id'].toString();
@@ -351,7 +336,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   void _setupRealTimeListeners() {
     if (_faculty?.departmentId == null) return;
 
-    // Listen to students table changes for this department
     _studentsSub = supabase
         .from('students')
         .stream(primaryKey: ['id'])
@@ -368,7 +352,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
       }
     });
 
-    // Listen to attendance changes
     _attendanceSub = supabase
         .from('attendance')
         .stream(primaryKey: ['id'])
@@ -385,7 +368,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   void _toggleAttendance(String studentId, String status) {
     setState(() {
       if (_attendanceMap[studentId] == status) {
-        // Deselect
         _attendanceMap.remove(studentId);
       } else {
         _attendanceMap[studentId] = status;
@@ -406,8 +388,8 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   }
 
   Future<void> _saveAttendance() async {
-    if (_faculty == null || _selectedSubject == null) {
-      _showSnack('Please select a subject first.', Colors.orange);
+    if (_selectedCourse == null) {
+      _showSnack('Please select a course first.', Colors.orange);
       return;
     }
     if (_attendanceMap.isEmpty) {
@@ -420,42 +402,18 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
-      // Find course ID for the selected subject
-      final courseResp = await supabase
-          .from('courses')
-          .select('id')
-          .eq('faculty_id', _faculty!.id)
-          .ilike('course_name', '%${_selectedSubject!}%')
-          .maybeSingle();
-
-      final courseId = courseResp?['id'] as int?;
-
-      // Build upsert records
-      final records = _attendanceMap.entries.map((e) {
-        final rec = <String, dynamic>{
-          'student_id': e.key,
-          'date': dateStr,
-          'status': e.value,
-          'marked_by': _faculty!.id,
-          'remarks': _selectedSubject,
-        };
-        if (courseId != null) rec['course_id'] = courseId;
-        return rec;
-      }).toList();
-
-      // Upsert (unique: student_id + course_id + date)
-      if (courseId != null) {
-        for (final rec in records) {
-          await supabase.from('attendance').upsert(
-            rec,
-            onConflict: 'student_id,course_id,date',
-          );
-        }
-      } else {
-        // If no course found, insert/update manually
-        for (final rec in records) {
-          await supabase.from('attendance').insert(rec);
-        }
+      for (final entry in _attendanceMap.entries) {
+        await supabase.from('attendance').upsert(
+          {
+            'student_id': entry.key,
+            'course_id': _selectedCourse!.id,   // ✅ real course id
+            'date': dateStr,
+            'status': entry.value,
+            'marked_by': _faculty!.id,
+            'remarks': _selectedCourse!.courseName,
+          },
+          onConflict: 'student_id,course_id,date',
+        );
       }
 
       _showSnack('Attendance saved for ${_attendanceMap.length} students!', Colors.green);
@@ -472,15 +430,15 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   // ============================================================
 
   Future<void> _loadExistingMarks() async {
-    if (_faculty == null || _selectedMarkSubject == null || _students.isEmpty) return;
+    if (_selectedMarkCourse == null || _students.isEmpty) return;
 
     try {
       final resp = await supabase
           .from('course_enrollments')
           .select('student_id, internal_marks, external_marks, marks')
+          .eq('course_id', _selectedMarkCourse!.id)   // ✅ use real course id
           .inFilter('student_id', _students.map((s) => s.id).toList());
 
-      // Pre-fill controllers if data exists
       for (final r in (resp as List)) {
         final sid = r['student_id']?.toString() ?? '';
         if (_markControllers.containsKey(sid)) {
@@ -488,7 +446,9 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               ? r['internal_marks']
               : r['external_marks'] ?? r['marks'];
           if (val != null) {
-            _markControllers[sid]!.text = val.toString();
+            _markControllers[sid]!.text = val.toString().replaceAll('.0', '');
+          } else {
+            _markControllers[sid]!.clear();
           }
         }
       }
@@ -499,22 +459,9 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   }
 
   Future<void> _saveMarks() async {
-    if (_faculty == null || _selectedMarkSubject == null) {
-      _showSnack('Please select a subject.', Colors.orange);
-      return;
-    }
-
-    // Find course
-    final courseResp = await supabase
-        .from('courses')
-        .select('id')
-        .eq('faculty_id', _faculty!.id)
-        .ilike('course_name', '%${_selectedMarkSubject!}%')
-        .maybeSingle();
-
-    final courseId = courseResp?['id'] as int?;
-    if (courseId == null) {
-      _showSnack('Course not found in database for "$_selectedMarkSubject". Make sure courses are linked.', Colors.orange);
+    // ✅ FIX: No more ilike search — we already have the course id
+    if (_selectedMarkCourse == null) {
+      _showSnack('Please select a course.', Colors.orange);
       return;
     }
 
@@ -538,11 +485,10 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ? {'internal_marks': marks.toDouble()}
             : {'external_marks': marks.toDouble()};
 
-        // Upsert enrollment record
         await supabase.from('course_enrollments').upsert(
           {
             'student_id': s.id,
-            'course_id': courseId,
+            'course_id': _selectedMarkCourse!.id,   // ✅ real course id
             ...updateData,
           },
           onConflict: 'student_id,course_id',
@@ -676,18 +622,17 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
       foregroundColor: Colors.black87,
       elevation: 1,
       actions: [
-        // Refresh button
         IconButton(
           icon: const Icon(Icons.refresh),
           tooltip: 'Refresh',
           onPressed: () async {
+            await _loadFacultyCourses();
             await _loadStudents();
             await _loadTodaysAttendance();
             await _loadAttendanceSummaries();
             _showSnack('Data refreshed!', Colors.green);
           },
         ),
-        // Sign out
         IconButton(
           icon: const Icon(Icons.logout, color: Colors.red),
           tooltip: 'Sign Out',
@@ -754,7 +699,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${_students.length} Students in Dept',
+                    '${_students.length} Students  •  ${_courses.length} Courses',
                     style: const TextStyle(color: Colors.white, fontSize: 11),
                   ),
                 ),
@@ -787,7 +732,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                     onTap: () {
                       setState(() => _selectedIndex = item['index'] as int);
                       Navigator.pop(context);
-                      // Load marks when switching to marks tab
                       if (item['index'] == 3) _loadExistingMarks();
                     },
                   ),
@@ -802,16 +746,11 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   Widget _buildBody() {
     switch (_selectedIndex) {
-      case 0:
-        return _buildOverviewTab();
-      case 1:
-        return _buildAttendanceTab();
-      case 2:
-        return _buildAttendanceHistoryTab();
-      case 3:
-        return _buildMarksTab();
-      default:
-        return _buildOverviewTab();
+      case 0: return _buildOverviewTab();
+      case 1: return _buildAttendanceTab();
+      case 2: return _buildAttendanceHistoryTab();
+      case 3: return _buildMarksTab();
+      default: return _buildOverviewTab();
     }
   }
 
@@ -820,15 +759,12 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   // ============================================================
 
   Widget _buildOverviewTab() {
-    final totalStudents = _students.length;
-    final activeStudents = _students.where((s) => s.isActive).length;
-
-    // Today's attendance stats for all subjects
     final todayPresent = _attendanceMap.values.where((v) => v == 'present').length;
-    final todayMarked = _attendanceMap.length;
+    final todayMarked  = _attendanceMap.length;
 
     return RefreshIndicator(
       onRefresh: () async {
+        await _loadFacultyCourses();
         await _loadStudents();
         await _loadTodaysAttendance();
         await _loadAttendanceSummaries();
@@ -839,7 +775,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Welcome card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -870,7 +805,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
             const SizedBox(height: 20),
 
-            // Stats grid
             GridView.count(
               crossAxisCount: 2,
               shrinkWrap: true,
@@ -879,24 +813,24 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               mainAxisSpacing: 12,
               childAspectRatio: 1.3,
               children: [
-                _statCard('Total Students', '$totalStudents', Icons.school, Colors.blue),
-                _statCard('Active Students', '$activeStudents', Icons.check_circle, Colors.green),
-                _statCard('Your Subjects', '${_faculty?.subjects.length ?? 0}', Icons.book, Colors.purple),
+                _statCard('Total Students', '${_students.length}', Icons.school, Colors.blue),
+                _statCard('Active Students', '${_students.where((s) => s.isActive).length}', Icons.check_circle, Colors.green),
+                _statCard('Your Courses', '${_courses.length}', Icons.book, Colors.purple),
                 _statCard('Marked Today', '$todayMarked', Icons.today, Colors.orange),
               ],
             ),
 
             const SizedBox(height: 20),
 
-            // Subjects list
-            if (_faculty != null && _faculty!.subjects.isNotEmpty) ...[
-              const Text('Your Subjects',
+            // ✅ Show actual DB courses (not just subjects array)
+            if (_courses.isNotEmpty) ...[
+              const Text('Your Courses',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _faculty!.subjects.map((sub) {
+                children: _courses.map((c) {
                   return Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
@@ -904,16 +838,40 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: const Color(0xFF3B82F6).withOpacity(0.3)),
                     ),
-                    child: Text(sub,
+                    child: Text(c.displayName,
                         style: const TextStyle(
                             color: Color(0xFF2563EB), fontWeight: FontWeight.w500)),
                   );
                 }).toList(),
               ),
               const SizedBox(height: 20),
+            ] else ...[
+              // ✅ Helpful message when no courses are linked in DB
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_amber, color: Colors.orange),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'No courses linked to your account in the database.\n'
+                            'Ask admin to add courses and assign them to you.',
+                        style: TextStyle(color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
 
-            // Students with low attendance warning
             _buildLowAttendanceWarnings(),
           ],
         ),
@@ -1010,36 +968,41 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   Widget _buildAttendanceTab() {
     final presentCount = _attendanceMap.values.where((v) => v == 'present').length;
-    final absentCount = _attendanceMap.values.where((v) => v == 'absent').length;
-    final leaveCount = _attendanceMap.values.where((v) => v == 'leave').length;
-    final lateCount = _attendanceMap.values.where((v) => v == 'late').length;
+    final absentCount  = _attendanceMap.values.where((v) => v == 'absent').length;
+    final leaveCount   = _attendanceMap.values.where((v) => v == 'leave').length;
+    final lateCount    = _attendanceMap.values.where((v) => v == 'late').length;
     final unmarkedCount = _students.length - _attendanceMap.length;
 
     return Column(
       children: [
-        // Controls bar
         Container(
           color: Colors.white,
           padding: const EdgeInsets.all(12),
           child: Column(
             children: [
-              // Subject selector
+              // ✅ Course dropdown from DB
               Row(
                 children: [
                   const Icon(Icons.book, color: Color(0xFF3B82F6), size: 20),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedSubject,
-                        hint: const Text('Select Subject'),
+                    child: _courses.isEmpty
+                        ? const Text('No courses linked — contact admin',
+                        style: TextStyle(color: Colors.orange))
+                        : DropdownButtonHideUnderline(
+                      child: DropdownButton<CourseItem>(
+                        value: _selectedCourse,
+                        hint: const Text('Select Course'),
                         isExpanded: true,
-                        items: (_faculty?.subjects ?? []).map((sub) {
-                          return DropdownMenuItem(value: sub, child: Text(sub));
+                        items: _courses.map((c) {
+                          return DropdownMenuItem(
+                            value: c,
+                            child: Text(c.displayName),
+                          );
                         }).toList(),
                         onChanged: (val) async {
                           setState(() {
-                            _selectedSubject = val;
+                            _selectedCourse = val;
                             _attendanceMap.clear();
                           });
                           await _loadTodaysAttendance();
@@ -1051,7 +1014,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               ),
               const Divider(height: 1),
               const SizedBox(height: 8),
-              // Date picker
               Row(
                 children: [
                   const Icon(Icons.calendar_today, color: Color(0xFF3B82F6), size: 18),
@@ -1072,7 +1034,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           ),
         ),
 
-        // Stats row
         Container(
           color: Colors.grey[50],
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1088,7 +1049,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           ),
         ),
 
-        // Quick actions
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
@@ -1114,7 +1074,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           ),
         ),
 
-        // Student list
         Expanded(
           child: _students.isEmpty
               ? Center(
@@ -1139,7 +1098,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           ),
         ),
 
-        // Save button
         Container(
           padding: const EdgeInsets.all(12),
           color: Colors.white,
@@ -1199,7 +1157,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
-            // Avatar
             CircleAvatar(
               radius: 18,
               backgroundColor: const Color(0xFF3B82F6).withOpacity(0.1),
@@ -1210,8 +1167,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               ),
             ),
             const SizedBox(width: 10),
-
-            // Student info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1223,8 +1178,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                 ],
               ),
             ),
-
-            // Attendance buttons
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1280,7 +1233,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   Widget _buildAttendanceHistoryTab() {
     return Column(
       children: [
-        // Header
         Container(
           padding: const EdgeInsets.all(16),
           color: Colors.white,
@@ -1302,8 +1254,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
             ],
           ),
         ),
-
-        // List
         Expanded(
           child: _students.isEmpty
               ? Center(
@@ -1327,14 +1277,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
 
   Widget _buildAttendanceHistoryCard(DeptStudent student, AttendanceSummary summary) {
     final pct = summary.percentage;
-    Color pctColor;
-    if (pct >= 75) {
-      pctColor = Colors.green;
-    } else if (pct >= 60) {
-      pctColor = Colors.orange;
-    } else {
-      pctColor = Colors.red;
-    }
+    final pctColor = pct >= 75 ? Colors.green : pct >= 60 ? Colors.orange : Colors.red;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -1362,7 +1305,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                   Text('${student.rollNumber} • Year ${student.year}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                   const SizedBox(height: 6),
-                  // Progress bar
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
@@ -1406,28 +1348,33 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
   Widget _buildMarksTab() {
     return Column(
       children: [
-        // Controls
         Container(
           color: Colors.white,
           padding: const EdgeInsets.all(12),
           child: Column(
             children: [
-              // Subject selector
+              // ✅ Course dropdown from DB
               Row(
                 children: [
                   const Icon(Icons.book, color: Color(0xFF3B82F6), size: 20),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedMarkSubject,
-                        hint: const Text('Select Subject'),
+                    child: _courses.isEmpty
+                        ? const Text('No courses linked — contact admin',
+                        style: TextStyle(color: Colors.orange))
+                        : DropdownButtonHideUnderline(
+                      child: DropdownButton<CourseItem>(
+                        value: _selectedMarkCourse,
+                        hint: const Text('Select Course'),
                         isExpanded: true,
-                        items: (_faculty?.subjects ?? []).map((sub) {
-                          return DropdownMenuItem(value: sub, child: Text(sub));
+                        items: _courses.map((c) {
+                          return DropdownMenuItem(
+                            value: c,
+                            child: Text(c.displayName),
+                          );
                         }).toList(),
                         onChanged: (val) {
-                          setState(() => _selectedMarkSubject = val);
+                          setState(() => _selectedMarkCourse = val);
                           _loadExistingMarks();
                         },
                       ),
@@ -1436,7 +1383,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
                 ],
               ),
               const Divider(height: 12),
-              // Exam type
               Row(
                 children: [
                   const Text('Exam Type:', style: TextStyle(fontWeight: FontWeight.w500)),
@@ -1472,7 +1418,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           ),
         ),
 
-        // Column headers
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           color: Colors.grey[100],
@@ -1486,7 +1431,6 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           ),
         ),
 
-        // Students marks list
         Expanded(
           child: _students.isEmpty
               ? Center(
@@ -1496,14 +1440,10 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               : ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             itemCount: _students.length,
-            itemBuilder: (context, index) {
-              final student = _students[index];
-              return _buildMarkRow(student);
-            },
+            itemBuilder: (context, index) => _buildMarkRow(_students[index]),
           ),
         ),
 
-        // Save button
         Container(
           padding: const EdgeInsets.all(12),
           color: Colors.white,
@@ -1537,12 +1477,11 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
     Color? gradeColor;
     String grade = '';
     if (marks != null) {
-      final pct = (marks / 100 * 100).toInt();
-      if (pct >= 90) { grade = 'A+'; gradeColor = Colors.green.shade700; }
-      else if (pct >= 80) { grade = 'A'; gradeColor = Colors.green; }
-      else if (pct >= 70) { grade = 'B+'; gradeColor = Colors.blue; }
-      else if (pct >= 60) { grade = 'B'; gradeColor = Colors.blue.shade300; }
-      else if (pct >= 50) { grade = 'C'; gradeColor = Colors.orange; }
+      if (marks >= 90) { grade = 'A+'; gradeColor = Colors.green.shade700; }
+      else if (marks >= 80) { grade = 'A';  gradeColor = Colors.green; }
+      else if (marks >= 70) { grade = 'B+'; gradeColor = Colors.blue; }
+      else if (marks >= 60) { grade = 'B';  gradeColor = Colors.blue.shade300; }
+      else if (marks >= 50) { grade = 'C';  gradeColor = Colors.orange; }
       else { grade = 'F'; gradeColor = Colors.red; }
     }
 
@@ -1556,14 +1495,9 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
           children: [
             Expanded(
               flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(student.fullName,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis),
-                ],
-              ),
+              child: Text(student.fullName,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
             ),
             Expanded(
               flex: 1,
@@ -1600,9 +1534,7 @@ class _FacultyDashboardState extends State<FacultyDashboard> {
               child: grade.isNotEmpty
                   ? Text(grade,
                   style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: gradeColor),
+                      fontSize: 12, fontWeight: FontWeight.bold, color: gradeColor),
                   textAlign: TextAlign.center)
                   : const SizedBox.shrink(),
             ),

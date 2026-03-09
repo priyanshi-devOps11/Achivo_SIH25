@@ -28,7 +28,7 @@ class StudentService {
       if (response == null) return null;
 
       print('✅ Student profile loaded: ${response['first_name']} ${response['last_name']}');
-      return StudentProfile.fromMap(response); // ✅ FIXED: fromMap not fromJson
+      return StudentProfile.fromMap(response);
     } catch (e) {
       print('❌ Error fetching student profile: $e');
       return null;
@@ -41,24 +41,43 @@ class StudentService {
 
   static Future<DashboardStats> getDashboardStats(String studentId) async {
     try {
+      // --- Leaves ---
       final leaves = await _supabase
           .from('leave_applications')
           .select('id, status')
           .eq('student_id', studentId);
 
+      // --- Documents / credits ---
       final documents = await _supabase
           .from('student_documents')
           .select('id, points_awarded, status')
           .eq('student_id', studentId);
 
+      // --- CGPA from students table ---
       final student = await _supabase
           .from('students')
           .select('cgpa')
           .eq('id', studentId)
           .maybeSingle();
 
+      // --- Real attendance from attendance table ---
+      final attendanceRows = await _supabase
+          .from('attendance')
+          .select('status')
+          .eq('student_id', studentId);
+
       final leaveList = (leaves as List);
       final docList   = (documents as List);
+      final attList   = (attendanceRows as List);
+
+      // Attendance percentage (present + late count as attended)
+      double attendancePct = 0.0;
+      if (attList.isNotEmpty) {
+        final attended = attList
+            .where((r) => r['status'] == 'present' || r['status'] == 'late')
+            .length;
+        attendancePct = (attended / attList.length) * 100;
+      }
 
       final pendingLeaves  = leaveList.where((l) => l['status'] == 'pending').length;
       final approvedLeaves = leaveList.where((l) => l['status'] == 'approved').length;
@@ -74,17 +93,17 @@ class StudentService {
         cgpa: student?['cgpa'] != null
             ? (student!['cgpa'] as num).toDouble()
             : null,
-        attendancePercentage: 0,
+        attendancePercentage: attendancePct,
         creditsCompleted: totalPoints,
         totalCredits: 150,
-        pendingLeaves:    pendingLeaves,
-        approvedLeaves:   approvedLeaves,      // ✅ FIXED: required field
-        pendingDocuments: pendingDocs,         // ✅ FIXED: required field
+        pendingLeaves:     pendingLeaves,
+        approvedLeaves:    approvedLeaves,
+        pendingDocuments:  pendingDocs,
         approvedDocuments: approvedDocs.length,
       );
     } catch (e) {
       print('❌ Error fetching dashboard stats: $e');
-      return DashboardStats.empty();           // ✅ FIXED: use factory
+      return DashboardStats.empty();
     }
   }
 
@@ -102,7 +121,7 @@ class StudentService {
           .order('created_at', ascending: false);
 
       return (response as List)
-          .map((data) => LeaveApplication.fromMap(data)) // ✅ FIXED: fromMap
+          .map((data) => LeaveApplication.fromMap(data))
           .toList();
     } catch (e) {
       print('❌ Error fetching leave applications: $e');
@@ -197,6 +216,9 @@ class StudentService {
     }
   }
 
+  // ================================
+  // STUDENT DOCUMENTS
+  // ================================
 
   static Future<List<StudentDocument>> getStudentDocuments(
       String studentId, {
@@ -215,7 +237,7 @@ class StudentService {
       final response = await query.order('created_at', ascending: false);
 
       return (response as List)
-          .map((data) => StudentDocument.fromMap(data)) // ✅ FIXED: fromMap
+          .map((data) => StudentDocument.fromMap(data))
           .toList();
     } catch (e) {
       print('❌ Error fetching student documents: $e');
@@ -307,7 +329,9 @@ class StudentService {
     }
   }
 
-
+  // ================================
+  // ATTENDANCE
+  // ================================
 
   static Future<List<AttendanceRecord>> getAttendanceRecords(
       String studentId) async {
@@ -346,7 +370,7 @@ class StudentService {
         courseId: courseId,
         courseName: recs.first.courseName,
         facultyName: recs.first.facultyName,
-        total: recs.length,
+        total:   recs.length,
         present: recs.where((r) => r.status == 'present').length,
         absent:  recs.where((r) => r.status == 'absent').length,
         leave:   recs.where((r) => r.status == 'leave').length,
@@ -358,7 +382,9 @@ class StudentService {
     return summaries;
   }
 
-
+  // ================================
+  // MARKS
+  // ================================
 
   static Future<List<SubjectMarks>> getSubjectMarks(
       String studentId) async {
@@ -381,6 +407,9 @@ class StudentService {
     }
   }
 
+  // ================================
+  // STORAGE HELPERS
+  // ================================
 
   static Future<void> ensureStorageBuckets() async {
     try {
