@@ -25,24 +25,104 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Future<void> _loadUsers() async {
     setState(() => isLoading = true);
     try {
-      dynamic query = supabase
-          .from('profiles')
-          .select('*')
-          .order('created_at', ascending: false);
+      // ✅ FIX 1: Apply .eq() BEFORE .order() — Supabase requires filters before transforms
+      dynamic query = supabase.from('profiles').select('*');
 
       if (filterRole != 'all') {
         query = query.eq('role', filterRole);
       }
 
-      final response = await query;
+      // .order() comes LAST, after all filters
+      final response = await query.order('created_at', ascending: false);
+
+      // ✅ FIX 2: Enrich users who have null first_name from hods/faculty tables
+      final rawUsers = List<Map<String, dynamic>>.from(response);
+      final enrichedUsers = await _enrichUserNames(rawUsers);
+
       setState(() {
-        users = List<Map<String, dynamic>>.from(response);
+        users = enrichedUsers;
         isLoading = false;
       });
     } catch (e) {
       setState(() => isLoading = false);
       _showSnackBar('Error loading users: $e', Colors.red);
     }
+  }
+
+  /// For HOD/Faculty users whose first_name is null in profiles,
+  /// look up their real name from the hods / faculty tables.
+  Future<List<Map<String, dynamic>>> _enrichUserNames(
+      List<Map<String, dynamic>> rawUsers) async {
+    final enriched = <Map<String, dynamic>>[];
+
+    for (final user in rawUsers) {
+      final copy = Map<String, dynamic>.from(user);
+      final firstName = (copy['first_name'] ?? '').toString().trim();
+      final lastName = (copy['last_name'] ?? '').toString().trim();
+
+      // Only look up if name is missing
+      if (firstName.isEmpty && lastName.isEmpty) {
+        final role = copy['role'] ?? '';
+        final userId = copy['id'];
+
+        try {
+          if (role == 'hod') {
+            final result = await supabase
+                .from('hods')
+                .select('first_name, last_name')
+                .eq('user_id', userId)
+                .maybeSingle();
+            if (result != null) {
+              copy['first_name'] = result['first_name'] ?? '';
+              copy['last_name'] = result['last_name'] ?? '';
+            }
+          } else if (role == 'faculty') {
+            final result = await supabase
+                .from('faculty')
+                .select('first_name, last_name')
+                .eq('user_id', userId)
+                .maybeSingle();
+            if (result != null) {
+              copy['first_name'] = result['first_name'] ?? '';
+              copy['last_name'] = result['last_name'] ?? '';
+            }
+          } else if (role == 'student') {
+            final result = await supabase
+                .from('students')
+                .select('first_name, last_name')
+                .eq('user_id', userId)
+                .maybeSingle();
+            if (result != null) {
+              copy['first_name'] = result['first_name'] ?? '';
+              copy['last_name'] = result['last_name'] ?? '';
+            }
+          }
+        } catch (_) {
+          // If lookup fails, keep as-is
+        }
+      }
+
+      enriched.add(copy);
+    }
+
+    return enriched;
+  }
+
+  /// Returns a display name, falling back to email prefix if name is empty
+  String _getDisplayName(Map<String, dynamic> user) {
+    final first = (user['first_name'] ?? '').toString().trim();
+    final last = (user['last_name'] ?? '').toString().trim();
+    final full = '$first $last'.trim();
+    if (full.isNotEmpty) return full;
+    // Fallback: use part before @ in email
+    final email = (user['email'] ?? '').toString();
+    return email.isNotEmpty ? email.split('@').first : 'Unknown User';
+  }
+
+  /// Returns the first character for the avatar
+  String _getAvatarChar(Map<String, dynamic> user) {
+    final name = _getDisplayName(user);
+    return name.isNotEmpty ? name[0].toUpperCase() : '?';
   }
 
   Future<void> _toggleUserStatus(String userId, bool currentStatus) async {
@@ -88,8 +168,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
   Widget build(BuildContext context) {
     final filteredUsers = users.where((user) {
       if (searchQuery.isEmpty) return true;
-      final name = '${user['first_name']} ${user['last_name']}'.toLowerCase();
-      final email = user['email'].toString().toLowerCase();
+      final name = _getDisplayName(user).toLowerCase();
+      final email = (user['email'] ?? '').toString().toLowerCase();
       return name.contains(searchQuery.toLowerCase()) ||
           email.contains(searchQuery.toLowerCase());
     }).toList();
@@ -131,7 +211,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      const Text('Filter by Role: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text('Filter by Role: ',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
                       _buildFilterChip('all', 'All'),
                       _buildFilterChip('admin', 'Admin'),
                       _buildFilterChip('hod', 'HOD'),
@@ -159,7 +240,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
                 Expanded(
                   child: _buildStatCard(
                     'Active Users',
-                    users.where((u) => u['is_active'] == true).length.toString(),
+                    users
+                        .where((u) => u['is_active'] == true)
+                        .length
+                        .toString(),
                     Icons.check_circle,
                     Colors.green.shade600,
                   ),
@@ -175,55 +259,67 @@ class _UserManagementPageState extends State<UserManagementPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
+                  Icon(Icons.people_outline,
+                      size: 64, color: Colors.grey.shade400),
                   const SizedBox(height: 16),
                   Text(
                     'No users found',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                    style: TextStyle(
+                        color: Colors.grey.shade600, fontSize: 16),
                   ),
                 ],
               ),
             )
                 : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 16),
               itemCount: filteredUsers.length,
               itemBuilder: (context, index) {
                 final user = filteredUsers[index];
                 final isActive = user['is_active'] ?? true;
+                final role = (user['role'] ?? '').toString();
+                final displayName = _getDisplayName(user);
+
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   elevation: 2,
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: _getRoleColor(user['role']).withValues(alpha: 0.2),
+                      backgroundColor: _getRoleColor(role)
+                          .withValues(alpha: 0.2),
                       child: Text(
-                        user['first_name'][0].toUpperCase(),
+                        _getAvatarChar(user),
                         style: TextStyle(
-                          color: _getRoleColor(user['role']),
+                          color: _getRoleColor(role),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                     title: Text(
-                      '${user['first_name']} ${user['last_name']}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      displayName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold),
                     ),
                     subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                      CrossAxisAlignment.start,
                       children: [
-                        Text(user['email']),
+                        Text(user['email'] ?? ''),
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: _getRoleColor(user['role']).withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
+                                color: _getRoleColor(role)
+                                    .withValues(alpha: 0.2),
+                                borderRadius:
+                                BorderRadius.circular(8),
                               ),
                               child: Text(
-                                user['role'].toUpperCase(),
+                                role.toUpperCase(),
                                 style: TextStyle(
-                                  color: _getRoleColor(user['role']),
+                                  color: _getRoleColor(role),
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -231,15 +327,21 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: isActive ? Colors.green.shade100 : Colors.red.shade100,
-                                borderRadius: BorderRadius.circular(8),
+                                color: isActive
+                                    ? Colors.green.shade100
+                                    : Colors.red.shade100,
+                                borderRadius:
+                                BorderRadius.circular(8),
                               ),
                               child: Text(
                                 isActive ? 'ACTIVE' : 'INACTIVE',
                                 style: TextStyle(
-                                  color: isActive ? Colors.green.shade700 : Colors.red.shade700,
+                                  color: isActive
+                                      ? Colors.green.shade700
+                                      : Colors.red.shade700,
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -256,11 +358,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           child: Row(
                             children: [
                               Icon(
-                                isActive ? Icons.block : Icons.check_circle,
+                                isActive
+                                    ? Icons.block
+                                    : Icons.check_circle,
                                 size: 18,
                               ),
                               const SizedBox(width: 8),
-                              Text(isActive ? 'Deactivate' : 'Activate'),
+                              Text(isActive
+                                  ? 'Deactivate'
+                                  : 'Activate'),
                             ],
                           ),
                         ),
@@ -277,7 +383,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       ],
                       onSelected: (value) {
                         if (value == 'toggle') {
-                          _toggleUserStatus(user['id'], isActive);
+                          _toggleUserStatus(
+                              user['id'], isActive);
                         } else if (value == 'view') {
                           _showUserDetails(user);
                         }
@@ -303,8 +410,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
         onSelected: (selected) {
           setState(() {
             filterRole = value;
-            _loadUsers();
           });
+          _loadUsers();
         },
         backgroundColor: Colors.grey.shade200,
         selectedColor: Colors.indigo.shade100,
@@ -313,7 +420,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -332,7 +440,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
             ),
             Text(
               title,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              style:
+              TextStyle(color: Colors.grey.shade600, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ],
@@ -342,23 +451,32 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   void _showUserDetails(Map<String, dynamic> user) {
+    final displayName = _getDisplayName(user);
+    final isActive = user['is_active'] ?? true;
+    final emailVerified = user['email_verified'] ?? false;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${user['first_name']} ${user['last_name']}'),
+        title: Text(displayName),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetailRow('Email', user['email']),
-              _buildDetailRow('Role', user['role'].toUpperCase()),
+              _buildDetailRow('Email', user['email'] ?? 'N/A'),
+              _buildDetailRow(
+                  'Role', (user['role'] ?? '').toString().toUpperCase()),
               _buildDetailRow('Phone', user['phone'] ?? 'N/A'),
               _buildDetailRow('Gender', user['gender'] ?? 'N/A'),
-              _buildDetailRow('Status', user['is_active'] ? 'Active' : 'Inactive'),
-              _buildDetailRow('Email Verified', user['email_verified'] ? 'Yes' : 'No'),
-              _buildDetailRow('Last Login', user['last_login'] ?? 'N/A'),
-              _buildDetailRow('Created At', user['created_at'] ?? 'N/A'),
+              _buildDetailRow(
+                  'Status', isActive ? 'Active' : 'Inactive'),
+              _buildDetailRow(
+                  'Email Verified', emailVerified ? 'Yes' : 'No'),
+              _buildDetailRow(
+                  'Last Login', user['last_login'] ?? 'N/A'),
+              _buildDetailRow(
+                  'Created At', user['created_at'] ?? 'N/A'),
             ],
           ),
         ),
@@ -385,9 +503,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
-          Expanded(
-            child: Text(value),
-          ),
+          Expanded(child: Text(value)),
         ],
       ),
     );
