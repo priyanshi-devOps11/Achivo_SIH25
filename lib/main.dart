@@ -590,10 +590,6 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 }
 
-// ============================================================================
-// CORRECTED DATA MODELS - Uses first_name + last_name from database
-// ============================================================================
-
 class Faculty {
   final String id;
   final String name;
