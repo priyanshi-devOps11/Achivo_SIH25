@@ -271,7 +271,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
     );
   }
 
-  // ── Body ───────────────────────────────────────────────────
+
 
   Widget _buildBody() {
     switch (_selectedIndex) {
@@ -313,9 +313,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// OVERVIEW PAGE
-// ════════════════════════════════════════════════════════════════
+
 
 class OverviewPage extends StatelessWidget {
   final StudentProfile student;
@@ -610,9 +608,6 @@ class OverviewPage extends StatelessWidget {
   }
 }
 
-// ════════════════════════════════════════════════════════════════
-// CREDIT ACTIVITIES PAGE (placeholder)
-// ════════════════════════════════════════════════════════════════
 
 class CreditActivitiesPage extends StatelessWidget {
   final String studentId;
