@@ -36,6 +36,10 @@ dependencies:
   shared_preferences: ^2.2.3
   supabase_flutter: ^2.8.0
 
+  pdf: ^3.10.8
+  printing: ^5.13.1
+  share_plus: ^9.0.0
+
   flutter_dotenv: ^5.1.0
 dependency_overrides:
   vector_math: ^2.2.0
