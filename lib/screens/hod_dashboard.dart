@@ -10,6 +10,9 @@ import 'hod_document_review_page.dart';
 import '../services/hod_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// ── Fee Management ────────────────────────────────────────────
+import 'hod_fee_dashboard.dart';
+
 SupabaseClient get supabase => Supabase.instance.client;
 
 // ─────────────────────────────────────────────
@@ -31,40 +34,32 @@ class Student {
   final String admissionDate;
 
   Student({
-    required this.id,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.rollNumber,
-    required this.year,
-    required this.branch,
-    required this.cgpa,
-    required this.departmentId,
-    required this.parentContact,
-    required this.status,
-    required this.admissionDate,
+    required this.id, required this.name, required this.email,
+    required this.phone, required this.rollNumber, required this.year,
+    required this.branch, required this.cgpa, required this.departmentId,
+    required this.parentContact, required this.status, required this.admissionDate,
   });
 
   factory Student.fromMap(Map<String, dynamic> map) {
     final firstName = map['first_name'] ?? '';
-    final lastName = map['last_name'] ?? '';
-    final fullName = '$firstName $lastName'.trim();
-    final deptId = map['department_id'];
+    final lastName  = map['last_name']  ?? '';
+    final fullName  = '$firstName $lastName'.trim();
+    final deptId    = map['department_id'];
     final departmentBigInt =
     deptId is int ? BigInt.from(deptId) : (deptId is BigInt ? deptId : BigInt.zero);
     return Student(
-      id: map['id']?.toString() ?? '',
-      name: fullName.isNotEmpty ? fullName : 'Unknown',
-      email: map['email'] ?? '',
-      phone: map['phone'] ?? '',
-      rollNumber: map['roll_number'] ?? '',
-      year: map['year'] ?? 'N/A',
-      branch: map['branch'] ?? 'N/A',
-      cgpa: (map['cgpa'] ?? 0.0).toDouble(),
-      departmentId: departmentBigInt,
-      parentContact: map['parent_phone'] ?? '',
-      status: map['is_active'] == false ? 'Inactive' : 'Active',
-      admissionDate: map['admission_date'] ?? '',
+      id:             map['id']?.toString() ?? '',
+      name:           fullName.isNotEmpty ? fullName : 'Unknown',
+      email:          map['email'] ?? '',
+      phone:          map['phone'] ?? '',
+      rollNumber:     map['roll_number'] ?? '',
+      year:           map['year'] ?? 'N/A',
+      branch:         map['branch'] ?? 'N/A',
+      cgpa:           (map['cgpa'] ?? 0.0).toDouble(),
+      departmentId:   departmentBigInt,
+      parentContact:  map['parent_phone'] ?? '',
+      status:         map['is_active'] == false ? 'Inactive' : 'Active',
+      admissionDate:  map['admission_date'] ?? '',
     );
   }
 }
@@ -83,42 +78,34 @@ class Faculty {
   final String qualification;
 
   Faculty({
-    required this.id,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.departmentId,
-    required this.designation,
-    required this.experience,
-    required this.subjects,
-    required this.joiningDate,
-    required this.status,
-    required this.qualification,
+    required this.id, required this.name, required this.email,
+    required this.phone, required this.departmentId, required this.designation,
+    required this.experience, required this.subjects, required this.joiningDate,
+    required this.status, required this.qualification,
   });
 
   factory Faculty.fromMap(Map<String, dynamic> map) {
     final subjectsData = map['subjects'];
-    List<String> subjectsList = [];
-    if (subjectsData is List) {
-      subjectsList = List<String>.from(subjectsData.map((e) => e.toString()));
-    }
+    List<String> subjectsList = subjectsData is List
+        ? List<String>.from(subjectsData.map((e) => e.toString()))
+        : [];
     final firstName = map['first_name'] ?? '';
-    final lastName = map['last_name'] ?? '';
-    final fullName = '$firstName $lastName'.trim();
-    final deptId = map['department_id'];
+    final lastName  = map['last_name']  ?? '';
+    final fullName  = '$firstName $lastName'.trim();
+    final deptId    = map['department_id'];
     final departmentBigInt =
     deptId is int ? BigInt.from(deptId) : (deptId is BigInt ? deptId : BigInt.zero);
     return Faculty(
-      id: map['id']?.toString() ?? '',
-      name: fullName.isNotEmpty ? fullName : 'Unknown',
-      email: map['email'] ?? '',
-      phone: map['phone'] ?? '',
-      departmentId: departmentBigInt,
-      designation: map['designation'] ?? '',
-      experience: map['experience_years'] ?? 0,
-      subjects: subjectsList,
-      joiningDate: map['joining_date'] ?? '',
-      status: map['is_active'] == false ? 'Inactive' : 'Active',
+      id:            map['id']?.toString() ?? '',
+      name:          fullName.isNotEmpty ? fullName : 'Unknown',
+      email:         map['email'] ?? '',
+      phone:         map['phone'] ?? '',
+      departmentId:  departmentBigInt,
+      designation:   map['designation'] ?? '',
+      experience:    map['experience_years'] ?? 0,
+      subjects:      subjectsList,
+      joiningDate:   map['joining_date'] ?? '',
+      status:        map['is_active'] == false ? 'Inactive' : 'Active',
       qualification: map['qualification'] ?? '',
     );
   }
@@ -136,30 +123,24 @@ class ApprovalRequest {
   final int points;
 
   ApprovalRequest({
-    required this.id,
-    required this.studentId,
-    required this.studentName,
-    required this.type,
-    required this.title,
-    required this.description,
-    required this.submittedDate,
-    required this.status,
-    required this.points,
+    required this.id, required this.studentId, required this.studentName,
+    required this.type, required this.title, required this.description,
+    required this.submittedDate, required this.status, required this.points,
   });
 
   factory ApprovalRequest.fromMap(Map<String, dynamic> map, String studentName) {
     return ApprovalRequest(
-      id: map['id']?.toString() ?? '',
-      studentId: map['student_id']?.toString() ?? '',
-      studentName: studentName,
-      type: map['category'] ?? 'General',
-      title: map['title'] ?? 'N/A',
-      description: map['description'] ?? '',
+      id:            map['id']?.toString() ?? '',
+      studentId:     map['student_id']?.toString() ?? '',
+      studentName:   studentName,
+      type:          map['category'] ?? 'General',
+      title:         map['title'] ?? 'N/A',
+      description:   map['description'] ?? '',
       submittedDate: map['created_at'] != null
           ? DateTime.parse(map['created_at']).toIso8601String().substring(0, 10)
           : 'N/A',
-      status: map['status'] ?? 'pending',
-      points: map['points'] ?? 0,
+      status:  map['status'] ?? 'pending',
+      points:  map['points'] ?? 0,
     );
   }
 }
@@ -177,39 +158,40 @@ class HODDashboardMain extends StatefulWidget {
 
 class _HODDashboardMainState extends State<HODDashboardMain>
     with SingleTickerProviderStateMixin {
+  // ── 7 tabs: Overview | Documents | Leaves | Activities | Students | Faculty | Fees ──
   late TabController _tabController;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Auth & Department
   BigInt? _hodDepartmentId;
 
-  // ── NEW: real HOD info ──
-  String _hodFullName = 'HOD';
-  String _hodEmail = '';
+  // HOD info
+  String _hodFullName    = 'HOD';
+  String _hodEmail       = '';
   String _hodDesignation = 'Head of Department';
   String _departmentName = '';
   String _departmentCode = '';
-  String _instituteName = '';
+  String _instituteName  = '';
 
-  bool isAuthReady = false;
-  bool isLoading = true;
+  bool isAuthReady  = false;
+  bool isLoading    = true;
   bool isRefreshing = false;
 
   // Stats
   HODStats? _stats;
 
-  // Data
-  List<Student> students = [];
-  List<Faculty> faculty = [];
-  List<DocumentForReview> documents = [];
-  List<LeaveForReview> leaves = [];
-  List<ApprovalRequest> activities = [];
+  // Data lists
+  List<Student>          students   = [];
+  List<Faculty>          faculty    = [];
+  List<DocumentForReview> documents  = [];
+  List<LeaveForReview>   leaves     = [];
+  List<ApprovalRequest>  activities = [];
 
   // Real-time subscriptions
   StreamSubscription? _documentsSubscription;
   StreamSubscription? _leavesSubscription;
 
-  // ── Search controllers ──
+  // Search
   final _studentSearchController = TextEditingController();
   final _facultySearchController = TextEditingController();
   String _studentSearch = '';
@@ -218,8 +200,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   @override
   void initState() {
     super.initState();
-    // 6 tabs: Overview | Documents | Leaves | Activities | Students | Faculty
-    _tabController = TabController(length: 6, vsync: this);
+    // ── 7 tabs (was 6) ─────────────────────────────────────────────
+    _tabController = TabController(length: 7, vsync: this);
     _checkAuthAndSetupData();
   }
 
@@ -261,10 +243,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         return;
       }
 
-      // ── Fetch HOD name from hods table (most accurate) ──
       await _fetchHODProfile(user.id);
-
-      // ── Fetch department name ──
       await _fetchDepartmentInfo();
 
       setState(() => isAuthReady = true);
@@ -277,10 +256,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }
   }
 
-  /// Fetch HOD's real name from `hods` table first, fallback to `profiles`.
   Future<void> _fetchHODProfile(String userId) async {
     try {
-      // Try hods table first — has first_name / last_name / designation
       final hodRow = await supabase
           .from('hods')
           .select('first_name, last_name, email, designation')
@@ -289,14 +266,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
       if (hodRow != null) {
         final fn = hodRow['first_name'] ?? '';
-        final ln = hodRow['last_name'] ?? '';
-        _hodFullName = '$fn $ln'.trim().isNotEmpty ? '$fn $ln'.trim() : 'HOD';
-        _hodEmail = hodRow['email'] ?? '';
+        final ln = hodRow['last_name']  ?? '';
+        _hodFullName    = '$fn $ln'.trim().isNotEmpty ? '$fn $ln'.trim() : 'HOD';
+        _hodEmail       = hodRow['email'] ?? '';
         _hodDesignation = hodRow['designation'] ?? 'Head of Department';
         return;
       }
 
-      // Fallback to profiles table
       final profileRow = await supabase
           .from('profiles')
           .select('first_name, last_name, email')
@@ -305,16 +281,15 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
       if (profileRow != null) {
         final fn = profileRow['first_name'] ?? '';
-        final ln = profileRow['last_name'] ?? '';
+        final ln = profileRow['last_name']  ?? '';
         _hodFullName = '$fn $ln'.trim().isNotEmpty ? '$fn $ln'.trim() : 'HOD';
-        _hodEmail = profileRow['email'] ?? '';
+        _hodEmail    = profileRow['email'] ?? '';
       }
     } catch (e) {
       debugPrint('⚠️ Error fetching HOD profile: $e');
     }
   }
 
-  /// Fetch department name and institute name from `departments` table.
   Future<void> _fetchDepartmentInfo() async {
     if (_hodDepartmentId == null) return;
     try {
@@ -328,9 +303,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         _departmentName = deptRow['name'] ?? '';
         _departmentCode = deptRow['code'] ?? '';
         final inst = deptRow['institutes'];
-        if (inst is Map) {
-          _instituteName = inst['name'] ?? '';
-        }
+        if (inst is Map) _instituteName = inst['name'] ?? '';
       }
     } catch (e) {
       debugPrint('⚠️ Error fetching department: $e');
@@ -344,11 +317,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   Future<void> _loadAllData() async {
     if (_hodDepartmentId == null) return;
     try {
-      _stats = await HODService.getHODStats(_hodDepartmentId!);
+      _stats    = await HODService.getHODStats(_hodDepartmentId!);
       await _loadStudents();
       await _loadFaculty();
       documents = await HODService.getDocumentsForReview(departmentId: _hodDepartmentId);
-      leaves = await HODService.getLeavesForReview(departmentId: _hodDepartmentId);
+      leaves    = await HODService.getLeavesForReview(departmentId: _hodDepartmentId);
       await _loadActivities();
       if (mounted) setState(() {});
     } catch (e) {
@@ -364,9 +337,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           .eq('department_id', _hodDepartmentId!.toInt())
           .order('roll_number', ascending: true);
       students = (response as List).map((s) => Student.fromMap(s)).toList();
-    } catch (e) {
-      debugPrint('Error loading students: $e');
-    }
+    } catch (e) { debugPrint('Error loading students: $e'); }
   }
 
   Future<void> _loadFaculty() async {
@@ -377,19 +348,14 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           .eq('department_id', _hodDepartmentId!.toInt())
           .order('first_name', ascending: true);
       faculty = (response as List).map((f) => Faculty.fromMap(f)).toList();
-    } catch (e) {
-      debugPrint('Error loading faculty: $e');
-    }
+    } catch (e) { debugPrint('Error loading faculty: $e'); }
   }
 
   Future<void> _loadActivities() async {
     try {
       final response = await supabase
           .from('activities')
-          .select('''
-            *,
-            students!inner(id, first_name, last_name, department_id)
-          ''')
+          .select('*, students!inner(id, first_name, last_name, department_id)')
           .eq('students.department_id', _hodDepartmentId!.toInt())
           .order('created_at', ascending: false);
 
@@ -398,9 +364,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         final sid = a['student_id']?.toString() ?? '';
         return ApprovalRequest.fromMap(a, studentNamesMap[sid] ?? 'Unknown');
       }).toList();
-    } catch (e) {
-      debugPrint('Error loading activities: $e');
-    }
+    } catch (e) { debugPrint('Error loading activities: $e'); }
   }
 
   Future<void> _setupRealTimeSubscriptions() async {
@@ -433,20 +397,16 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   void _showSnackbar(String message, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(color == Colors.green ? Icons.check_circle : Icons.error,
-                color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [
+        Icon(color == Colors.green ? Icons.check_circle : Icons.error,
+            color: Colors.white),
+        const SizedBox(width: 8),
+        Expanded(child: Text(message)),
+      ]),
+      backgroundColor: color,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
   // ─────────────────────────────────────────────
@@ -459,14 +419,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       return Scaffold(
         backgroundColor: const Color(0xFFF8F9FA),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text('Loading HOD Dashboard...', style: TextStyle(color: Colors.grey[600])),
-            ],
-          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('Loading HOD Dashboard...', style: TextStyle(color: Colors.grey[600])),
+          ]),
         ),
       );
     }
@@ -474,29 +431,23 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF8F9FA),
-      // ── Side Drawer ──
       drawer: _buildProfileDrawer(),
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('HOD Dashboard',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text(
-              // ── Shows real HOD name + department name ──
-              'Dr. $_hodFullName  •  ${_departmentName.isNotEmpty ? _departmentName : 'Dept #${_hodDepartmentId ?? "N/A"}'}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-            ),
-          ],
-        ),
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('HOD Dashboard',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            'Dr. $_hodFullName  •  ${_departmentName.isNotEmpty ? _departmentName : 'Dept #${_hodDepartmentId ?? "N/A"}'}',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+          ),
+        ]),
         backgroundColor: Colors.blue.shade700,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: isRefreshing
                 ? const SizedBox(
-                width: 20,
-                height: 20,
+                width: 20, height: 20,
                 child: CircularProgressIndicator(
                     strokeWidth: 2,
                     valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
@@ -519,7 +470,10 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           tabs: [
+            // ── Tab 0: Overview ──────────────────────────────────
             const Tab(icon: Icon(Icons.dashboard), text: 'Overview'),
+
+            // ── Tab 1: Documents ─────────────────────────────────
             Tab(
               icon: Stack(clipBehavior: Clip.none, children: [
                 const Icon(Icons.description),
@@ -528,6 +482,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               ]),
               text: 'Documents',
             ),
+
+            // ── Tab 2: Leaves ────────────────────────────────────
             Tab(
               icon: Stack(clipBehavior: Clip.none, children: [
                 const Icon(Icons.event_busy),
@@ -536,6 +492,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               ]),
               text: 'Leaves',
             ),
+
+            // ── Tab 3: Activities ────────────────────────────────
             Tab(
               icon: Stack(clipBehavior: Clip.none, children: [
                 const Icon(Icons.star),
@@ -544,20 +502,31 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               ]),
               text: 'Activities',
             ),
+
+            // ── Tab 4: Students ──────────────────────────────────
             const Tab(icon: Icon(Icons.school), text: 'Students'),
+
+            // ── Tab 5: Faculty ───────────────────────────────────
             const Tab(icon: Icon(Icons.people), text: 'Faculty'),
+
+            // ── Tab 6: Fees (NEW) ────────────────────────────────
+            const Tab(icon: Icon(Icons.account_balance_wallet), text: 'Fees'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildOverviewTab(),
-          _buildDocumentsTab(),
-          _buildLeavesTab(),
-          _buildActivitiesTab(),
-          _buildStudentsTab(),
-          _buildFacultyTab(),
+          _buildOverviewTab(),      // 0
+          _buildDocumentsTab(),     // 1
+          _buildLeavesTab(),        // 2
+          _buildActivitiesTab(),    // 3
+          _buildStudentsTab(),      // 4
+          _buildFacultyTab(),       // 5
+          // ── 6: Fee Dashboard ──────────────────────────────────
+          _hodDepartmentId != null
+              ? HodFeeDashboard(departmentId: _hodDepartmentId!.toInt())
+              : const Center(child: Text('Department not assigned')),
         ],
       ),
     );
@@ -565,8 +534,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   Widget _buildBadge(int count) {
     return Positioned(
-      right: -8,
-      top: -8,
+      right: -8, top: -8,
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
@@ -585,134 +553,129 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   Widget _buildProfileDrawer() {
     return Drawer(
-      child: Column(
-        children: [
-          // Header
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade800, Colors.blue.shade500],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.blue.shade800, Colors.blue.shade500],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 56, 16, 24),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            CircleAvatar(
+              radius: 36,
+              backgroundColor: Colors.white.withOpacity(0.3),
+              child: Text(
+                _hodFullName.isNotEmpty ? _hodFullName[0].toUpperCase() : 'H',
+                style: const TextStyle(
+                    fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
-            padding: const EdgeInsets.fromLTRB(16, 56, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: Colors.white.withOpacity(0.3),
-                  child: Text(
-                    _hodFullName.isNotEmpty ? _hodFullName[0].toUpperCase() : 'H',
-                    style: const TextStyle(
-                        fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text('Dr. $_hodFullName',
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 2),
-                Text(_hodDesignation,
-                    style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13)),
-                if (_hodEmail.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(_hodEmail,
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.75), fontSize: 12)),
-                ],
-              ],
-            ),
-          ),
+            const SizedBox(height: 12),
+            Text('Dr. $_hodFullName',
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text(_hodDesignation,
+                style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13)),
+            if (_hodEmail.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(_hodEmail,
+                  style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+            ],
+          ]),
+        ),
 
-          // Department Info
-          Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.blue.shade100),
+        // Department Info
+        Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.blue.shade100),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(Icons.apartment, size: 16, color: Colors.blue.shade700),
+              const SizedBox(width: 6),
+              Text('Department',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.w600)),
+            ]),
+            const SizedBox(height: 6),
+            Text(
+              _departmentName.isNotEmpty
+                  ? _departmentName
+                  : 'Dept #${_hodDepartmentId ?? "N/A"}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Icon(Icons.apartment, size: 16, color: Colors.blue.shade700),
-                  const SizedBox(width: 6),
-                  Text('Department',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.blue.shade700,
-                          fontWeight: FontWeight.w600)),
-                ]),
-                const SizedBox(height: 6),
-                Text(
-                  _departmentName.isNotEmpty
-                      ? _departmentName
-                      : 'Dept #${_hodDepartmentId ?? "N/A"}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                if (_departmentCode.isNotEmpty)
-                  Text('Code: $_departmentCode',
+            if (_departmentCode.isNotEmpty)
+              Text('Code: $_departmentCode',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            if (_instituteName.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(children: [
+                Icon(Icons.school, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(_instituteName,
                       style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                if (_instituteName.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    Icon(Icons.school, size: 14, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(_instituteName,
-                          style:
-                          TextStyle(color: Colors.grey[600], fontSize: 12)),
-                    ),
-                  ]),
-                ],
-              ],
-            ),
+                ),
+              ]),
+            ],
+          ]),
+        ),
+
+        const Divider(height: 1),
+
+        // Quick stats
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _drawerStat('${students.length}', 'Students', Colors.blue),
+              _drawerStat('${faculty.length}', 'Faculty', Colors.purple),
+              _drawerStat(
+                  '${(documents.where((d) => d.isPending).length) + (leaves.where((l) => l.isPending).length)}',
+                  'Pending', Colors.orange),
+            ],
           ),
+        ),
 
-          const Divider(height: 1),
+        const Divider(height: 1),
 
-          // Quick stats in drawer
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _drawerStat('${students.length}', 'Students', Colors.blue),
-                _drawerStat('${faculty.length}', 'Faculty', Colors.purple),
-                _drawerStat(
-                    '${(documents.where((d) => d.isPending).length) + (leaves.where((l) => l.isPending).length)}',
-                    'Pending',
-                    Colors.orange),
-              ],
-            ),
-          ),
+        // ── Quick link to Fees tab ─────────────────────────────
+        ListTile(
+          leading: const Icon(Icons.account_balance_wallet, color: Colors.teal),
+          title: const Text('Fee Overview',
+              style: TextStyle(color: Colors.teal, fontWeight: FontWeight.w600)),
+          onTap: () {
+            Navigator.pop(context);
+            _tabController.animateTo(6);
+          },
+        ),
 
-          const Divider(height: 1),
-
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Sign Out', style: TextStyle(color: Colors.red)),
-            onTap: () => _handleSignOut(context),
-          ),
-        ],
-      ),
+        ListTile(
+          leading: const Icon(Icons.logout, color: Colors.red),
+          title: const Text('Sign Out', style: TextStyle(color: Colors.red)),
+          onTap: () => _handleSignOut(context),
+        ),
+      ]),
     );
   }
 
   Widget _drawerStat(String value, String label, Color color) {
-    return Column(
-      children: [
-        Text(value,
-            style: TextStyle(
-                fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-      ],
-    );
+    return Column(children: [
+      Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+      Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+    ]);
   }
 
   // ─────────────────────────────────────────────
@@ -720,49 +683,34 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   // ─────────────────────────────────────────────
 
   Widget _buildOverviewTab() {
-    if (_stats == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_stats == null) return const Center(child: CircularProgressIndicator());
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Department banner ──
-          if (_departmentName.isNotEmpty) _buildDepartmentBanner(),
-          const SizedBox(height: 16),
-
-          // Stats grid
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.3,
-            children: [
-              _buildStatCard('Total Students', '${_stats!.totalStudents}',
-                  Icons.school, Colors.blue),
-              _buildStatCard('Active Students', '${_stats!.activeStudents}',
-                  Icons.check_circle, Colors.green),
-              _buildStatCard('Faculty Members', '${_stats!.totalFaculty}',
-                  Icons.people, Colors.purple),
-              _buildStatCard('Pending Items', '${_stats!.totalPendingItems}',
-                  Icons.pending_actions, Colors.orange),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          _buildPendingActionsSummary(),
-          const SizedBox(height: 20),
-
-          _buildQuickActions(),
-          const SizedBox(height: 20),
-
-          _buildTodayActivity(),
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (_departmentName.isNotEmpty) _buildDepartmentBanner(),
+        const SizedBox(height: 16),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.3,
+          children: [
+            _buildStatCard('Total Students',  '${_stats!.totalStudents}',  Icons.school,            Colors.blue),
+            _buildStatCard('Active Students', '${_stats!.activeStudents}', Icons.check_circle,       Colors.green),
+            _buildStatCard('Faculty Members', '${_stats!.totalFaculty}',   Icons.people,             Colors.purple),
+            _buildStatCard('Pending Items',   '${_stats!.totalPendingItems}', Icons.pending_actions, Colors.orange),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _buildPendingActionsSummary(),
+        const SizedBox(height: 20),
+        _buildQuickActions(),
+        const SizedBox(height: 20),
+        _buildTodayActivity(),
+      ]),
     );
   }
 
@@ -772,56 +720,37 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue.shade700, Colors.blue.shade400],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+            colors: [Colors.blue.shade700, Colors.blue.shade400],
+            begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.apartment, color: Colors.white, size: 28),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_departmentName,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-                if (_departmentCode.isNotEmpty)
-                  Text('Code: $_departmentCode',
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.8), fontSize: 12)),
-                if (_instituteName.isNotEmpty)
-                  Text(_instituteName,
-                      style: TextStyle(
-                          color: Colors.white.withOpacity(0.75), fontSize: 12)),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('${_stats?.totalStudents ?? 0}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold)),
-              const Text('Students',
-                  style: TextStyle(color: Colors.white70, fontSize: 11)),
-            ],
-          ),
-        ],
-      ),
+      child: Row(children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10)),
+          child: const Icon(Icons.apartment, color: Colors.white, size: 28),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_departmentName,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            if (_departmentCode.isNotEmpty)
+              Text('Code: $_departmentCode',
+                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12)),
+            if (_instituteName.isNotEmpty)
+              Text(_instituteName,
+                  style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12)),
+          ]),
+        ),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('${_stats?.totalStudents ?? 0}',
+              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+          const Text('Students', style: TextStyle(color: Colors.white70, fontSize: 11)),
+        ]),
+      ]),
     );
   }
 
@@ -830,10 +759,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-              color: color.withOpacity(0.1), blurRadius: 6, offset: const Offset(0, 3))
-        ],
+        boxShadow: [BoxShadow(color: color.withOpacity(0.1), blurRadius: 6, offset: const Offset(0, 3))],
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -847,12 +773,10 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           ),
           const SizedBox(height: 12),
           Text(value,
-              style: const TextStyle(
-                  fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
           const SizedBox(height: 4),
           Text(title,
-              style: TextStyle(
-                  color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w500),
+              style: TextStyle(color: Colors.grey[600], fontSize: 12, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center),
         ]),
       ),
@@ -865,30 +789,16 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
-        ],
+        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2))],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Pending Approvals',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          _buildPendingItem(
-              'Documents', _stats!.pendingDocuments, Colors.blue, Icons.description,
-                  () => _tabController.animateTo(1)),
-          _buildPendingItem(
-              'Leave Applications', _stats!.pendingLeaves, Colors.orange, Icons.event_busy,
-                  () => _tabController.animateTo(2)),
-          _buildPendingItem(
-              'Activity Requests', _stats!.pendingActivities, Colors.purple, Icons.star,
-                  () => _tabController.animateTo(3)),
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Pending Approvals',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 16),
+        _buildPendingItem('Documents',         _stats!.pendingDocuments,  Colors.blue,   Icons.description, () => _tabController.animateTo(1)),
+        _buildPendingItem('Leave Applications', _stats!.pendingLeaves,    Colors.orange, Icons.event_busy,   () => _tabController.animateTo(2)),
+        _buildPendingItem('Activity Requests',  _stats!.pendingActivities, Colors.purple, Icons.star,        () => _tabController.animateTo(3)),
+      ]),
     );
   }
 
@@ -907,14 +817,12 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8)),
+                color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
             child: Icon(icon, color: color, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
-              child: Text(title,
-                  style: const TextStyle(fontWeight: FontWeight.w600))),
+              child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600))),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -922,9 +830,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 borderRadius: BorderRadius.circular(20)),
             child: Text('$count',
                 style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14)),
+                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
           ),
           if (count > 0) ...[
             const SizedBox(width: 8),
@@ -936,49 +842,21 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   }
 
   Widget _buildQuickActions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Quick Actions',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _quickActionButton(
-                  Icons.description_outlined,
-                  'Review\nDocuments',
-                  Colors.blue,
-                      () => _tabController.animateTo(1)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _quickActionButton(
-                  Icons.event_busy_outlined,
-                  'Review\nLeaves',
-                  Colors.orange,
-                      () => _tabController.animateTo(2)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _quickActionButton(
-                  Icons.star_outline,
-                  'Review\nActivities',
-                  Colors.purple,
-                      () => _tabController.animateTo(3)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _quickActionButton(
-                  Icons.bar_chart_outlined,
-                  'View\nStats',
-                  Colors.teal,
-                      () => _showDeptStatsDialog()),
-            ),
-          ],
-        ),
-      ],
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Quick Actions',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 12),
+      Row(children: [
+        Expanded(child: _quickActionButton(Icons.description_outlined, 'Review\nDocuments', Colors.blue, () => _tabController.animateTo(1))),
+        const SizedBox(width: 10),
+        Expanded(child: _quickActionButton(Icons.event_busy_outlined, 'Review\nLeaves', Colors.orange, () => _tabController.animateTo(2))),
+        const SizedBox(width: 10),
+        Expanded(child: _quickActionButton(Icons.star_outline, 'Review\nActivities', Colors.purple, () => _tabController.animateTo(3))),
+        const SizedBox(width: 10),
+        // ── Quick link to Fees tab ───────────────────────────────
+        Expanded(child: _quickActionButton(Icons.account_balance_wallet_outlined, 'Dept\nFees', Colors.teal, () => _tabController.animateTo(6))),
+      ]),
+    ]);
   }
 
   Widget _quickActionButton(
@@ -993,17 +871,67 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.2)),
         ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 26),
-            const SizedBox(height: 6),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11, color: color, fontWeight: FontWeight.w600),
-                textAlign: TextAlign.center),
-          ],
-        ),
+        child: Column(children: [
+          Icon(icon, color: color, size: 26),
+          const SizedBox(height: 6),
+          Text(label,
+              style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center),
+        ]),
       ),
+    );
+  }
+
+  Widget _buildTodayActivity() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2))
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.today, color: Colors.blue),
+          const SizedBox(width: 8),
+          const Text("Today's Activity",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          Text(DateFormat('d MMM y').format(DateTime.now()),
+              style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+        ]),
+        const SizedBox(height: 16),
+        Row(children: [
+          Expanded(
+            child: Column(children: [
+              Text('${_stats?.documentsReviewedToday ?? 0}',
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.green)),
+              const Text('Docs Reviewed',
+                  style: TextStyle(color: Colors.grey, fontSize: 12), textAlign: TextAlign.center),
+            ]),
+          ),
+          Container(width: 1, height: 50, color: Colors.grey[300]),
+          Expanded(
+            child: Column(children: [
+              Text('${_stats?.leavesReviewedToday ?? 0}',
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue)),
+              const Text('Leaves Processed',
+                  style: TextStyle(color: Colors.grey, fontSize: 12), textAlign: TextAlign.center),
+            ]),
+          ),
+          Container(width: 1, height: 50, color: Colors.grey[300]),
+          Expanded(
+            child: Column(children: [
+              Text('${activities.where((a) => a.status == 'approved').length}',
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.purple)),
+              const Text('Activities\nApproved',
+                  style: TextStyle(color: Colors.grey, fontSize: 12), textAlign: TextAlign.center),
+            ]),
+          ),
+        ]),
+      ]),
     );
   }
 
@@ -1017,30 +945,25 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           const Text('Department Statistics'),
         ]),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _statRow('Department', _departmentName),
-              _statRow('Code', _departmentCode),
-              _statRow('Institute', _instituteName),
-              const Divider(),
-              _statRow('Total Students', '${_stats?.totalStudents ?? 0}'),
-              _statRow('Active Students', '${_stats?.activeStudents ?? 0}'),
-              _statRow(
-                  'Inactive Students',
-                  '${(_stats?.totalStudents ?? 0) - (_stats?.activeStudents ?? 0)}'),
-              const Divider(),
-              _statRow('Faculty Members', '${_stats?.totalFaculty ?? 0}'),
-              const Divider(),
-              _statRow('Pending Documents', '${_stats?.pendingDocuments ?? 0}'),
-              _statRow('Pending Leaves', '${_stats?.pendingLeaves ?? 0}'),
-              _statRow('Pending Activities', '${_stats?.pendingActivities ?? 0}'),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _statRow('Department',  _departmentName),
+            _statRow('Code',        _departmentCode),
+            _statRow('Institute',   _instituteName),
+            const Divider(),
+            _statRow('Total Students',  '${_stats?.totalStudents ?? 0}'),
+            _statRow('Active Students', '${_stats?.activeStudents ?? 0}'),
+            _statRow('Inactive Students',
+                '${(_stats?.totalStudents ?? 0) - (_stats?.activeStudents ?? 0)}'),
+            const Divider(),
+            _statRow('Faculty Members',    '${_stats?.totalFaculty ?? 0}'),
+            const Divider(),
+            _statRow('Pending Documents',  '${_stats?.pendingDocuments ?? 0}'),
+            _statRow('Pending Leaves',     '${_stats?.pendingLeaves ?? 0}'),
+            _statRow('Pending Activities', '${_stats?.pendingActivities ?? 0}'),
+          ]),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text('Close'))
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))
         ],
       ),
     );
@@ -1053,79 +976,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: Colors.grey[700])),
-          Text(value,
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTodayActivity() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 2))
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            const Icon(Icons.today, color: Colors.blue),
-            const SizedBox(width: 8),
-            const Text("Today's Activity",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const Spacer(),
-            Text(DateFormat('d MMM y').format(DateTime.now()),
-                style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-          ]),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-              child: Column(children: [
-                Text('${_stats?.documentsReviewedToday ?? 0}',
-                    style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green)),
-                const Text('Docs Reviewed',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                    textAlign: TextAlign.center),
-              ]),
-            ),
-            Container(width: 1, height: 50, color: Colors.grey[300]),
-            Expanded(
-              child: Column(children: [
-                Text('${_stats?.leavesReviewedToday ?? 0}',
-                    style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue)),
-                const Text('Leaves Processed',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                    textAlign: TextAlign.center),
-              ]),
-            ),
-            Container(width: 1, height: 50, color: Colors.grey[300]),
-            Expanded(
-              child: Column(children: [
-                Text('${activities.where((a) => a.status == 'approved').length}',
-                    style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.purple)),
-                const Text('Activities\nApproved',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                    textAlign: TextAlign.center),
-              ]),
-            ),
-          ]),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -1136,7 +987,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   // ─────────────────────────────────────────────
 
   Widget _buildDocumentsTab() {
-    final pendingDocs = documents.where((d) => d.isPending).toList();
+    final pendingDocs  = documents.where((d) => d.isPending).toList();
     final approvedDocs = documents.where((d) => d.isApproved).toList();
     final rejectedDocs = documents.where((d) => d.isRejected).toList();
 
@@ -1171,13 +1022,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   Widget _buildDocumentsList(List<DocumentForReview> docs) {
     if (docs.isEmpty) {
-      return Center(
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.folder_open, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text('No documents found', style: TextStyle(color: Colors.grey[600])),
-        ]),
-      );
+      return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.folder_open, size: 64, color: Colors.grey[400]),
+        const SizedBox(height: 16),
+        Text('No documents found', style: TextStyle(color: Colors.grey[600])),
+      ]));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -1210,8 +1059,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(doc.title,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text('${doc.studentName} (${doc.rollNumber})',
                       style: TextStyle(fontSize: 14, color: Colors.grey[600])),
@@ -1230,8 +1078,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               const SizedBox(height: 12),
               Text(doc.description!,
                   style: TextStyle(color: Colors.grey[700], fontSize: 14),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
             if (doc.isPending) ...[
               const SizedBox(height: 12),
@@ -1242,10 +1089,9 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   icon: const Icon(Icons.visibility, size: 18),
                   label: const Text('Review Document'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12)),
                 ),
               ),
             ],
@@ -1259,9 +1105,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const Icon(Icons.comment, size: 16, color: Colors.blue),
                   const SizedBox(width: 8),
-                  Expanded(
-                      child: Text(doc.hodRemarks!,
-                          style: const TextStyle(fontSize: 12))),
+                  Expanded(child: Text(doc.hodRemarks!, style: const TextStyle(fontSize: 12))),
                 ]),
               ),
             ],
@@ -1274,10 +1118,10 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   IconData _getDocumentTypeIcon(String type) {
     switch (type) {
       case 'technical_skill': return Icons.computer;
-      case 'internship': return Icons.work;
-      case 'seminar': return Icons.school;
-      case 'certification': return Icons.verified;
-      default: return Icons.description;
+      case 'internship':      return Icons.work;
+      case 'seminar':         return Icons.school;
+      case 'certification':   return Icons.verified;
+      default:                return Icons.description;
     }
   }
 
@@ -1287,8 +1131,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       decoration: BoxDecoration(
           color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
       child: Text(label,
-          style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
     );
   }
 
@@ -1296,8 +1139,8 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     Color color;
     switch (status.toLowerCase()) {
       case 'approved': color = Colors.green; break;
-      case 'rejected': color = Colors.red; break;
-      default: color = Colors.orange;
+      case 'rejected': color = Colors.red;   break;
+      default:         color = Colors.orange;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1307,8 +1150,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         border: Border.all(color: color),
       ),
       child: Text(status.toUpperCase(),
-          style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 
@@ -1329,7 +1171,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   // ─────────────────────────────────────────────
 
   Widget _buildLeavesTab() {
-    final pending = leaves.where((l) => l.isPending).toList();
+    final pending  = leaves.where((l) => l.isPending).toList();
     final approved = leaves.where((l) => l.isApproved).toList();
     final rejected = leaves.where((l) => l.isRejected).toList();
 
@@ -1364,13 +1206,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   Widget _buildLeaveList(List<LeaveForReview> list) {
     if (list.isEmpty) {
-      return Center(
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.event_available, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text('No leave applications', style: TextStyle(color: Colors.grey[600])),
-        ]),
-      );
+      return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.event_available, size: 64, color: Colors.grey[400]),
+        const SizedBox(height: 16),
+        Text('No leave applications', style: TextStyle(color: Colors.grey[600])),
+      ]));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -1388,7 +1228,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // ── Header: icon + student name + status badge ──
           Row(children: [
             Container(
               padding: const EdgeInsets.all(8),
@@ -1401,8 +1240,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(leave.title,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
                 Text(leave.studentName,
                     style: TextStyle(fontSize: 14, color: Colors.grey[600])),
@@ -1411,15 +1249,12 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             _buildStatusBadge(leave.status),
           ]),
           const SizedBox(height: 12),
-
-          // ── Date range row ──
           Row(children: [
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8)),
+                    color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('From', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
                   Text(DateFormat('dd MMM yyyy').format(leave.fromDate),
@@ -1439,8 +1274,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(8)),
+                    color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('To', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
                   Text(DateFormat('dd MMM yyyy').format(leave.toDate),
@@ -1449,23 +1283,17 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               ),
             ),
           ]),
-
-          // ── Description ──
           if (leave.description.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(leave.description,
                 style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
-
-          // ── ✅ NEW: View Attached Document button ──
           if (leave.documentUrl != null && leave.documentUrl!.isNotEmpty) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () async {
                 final url = leave.documentUrl!;
-                // Try to get a signed URL if it's not already an http URL
                 String? openUrl;
                 if (url.startsWith('http')) {
                   openUrl = url;
@@ -1473,45 +1301,25 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   openUrl = await HODService.getDocumentDownloadUrl(url);
                 }
                 if (openUrl == null) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Could not load document URL'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
+                  if (mounted) _showSnackbar('Could not load document URL', Colors.red);
                   return;
                 }
                 final uri = Uri.parse(openUrl);
                 if (await canLaunchUrl(uri)) {
                   await launchUrl(uri, mode: LaunchMode.externalApplication);
                 } else {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Could not open document'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                  }
+                  if (mounted) _showSnackbar('Could not open document', Colors.red);
                 }
               },
               icon: const Icon(Icons.picture_as_pdf, color: Colors.red, size: 18),
-              label: const Text(
-                'View Attached Document',
-                style: TextStyle(color: Colors.deepOrange, fontSize: 13),
-              ),
+              label: const Text('View Attached Document',
+                  style: TextStyle(color: Colors.deepOrange, fontSize: 13)),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.deepOrange),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              ),
+                  side: const BorderSide(color: Colors.deepOrange),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8)),
             ),
           ],
-
-          // ── Approve / Reject buttons (pending only) ──
           if (leave.isPending) ...[
             const SizedBox(height: 12),
             Row(children: [
@@ -1521,8 +1329,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   icon: const Icon(Icons.close, size: 16),
                   label: const Text('Reject'),
                   style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red)),
+                      foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1532,27 +1339,21 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   icon: const Icon(Icons.check, size: 16),
                   label: const Text('Approve'),
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white),
+                      backgroundColor: Colors.green, foregroundColor: Colors.white),
                 ),
               ),
             ]),
           ],
-
-          // ── HOD remarks (if already reviewed) ──
           if (leave.hodRemarks != null && leave.hodRemarks!.isNotEmpty) ...[
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8)),
+                  color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
               child: Row(children: [
                 const Icon(Icons.comment, size: 14, color: Colors.grey),
                 const SizedBox(width: 6),
-                Expanded(
-                    child: Text(leave.hodRemarks!,
-                        style: const TextStyle(fontSize: 12))),
+                Expanded(child: Text(leave.hodRemarks!, style: const TextStyle(fontSize: 12))),
               ]),
             ),
           ],
@@ -1568,26 +1369,21 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       builder: (_) => AlertDialog(
         title: Text(approve ? 'Approve Leave' : 'Reject Leave'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(
-            approve
-                ? 'Approve leave for ${leave.studentName}?'
-                : 'Reject leave for ${leave.studentName}?',
-            style: TextStyle(color: Colors.grey[700]),
-          ),
+          Text(approve
+              ? 'Approve leave for ${leave.studentName}?'
+              : 'Reject leave for ${leave.studentName}?',
+              style: TextStyle(color: Colors.grey[700])),
           const SizedBox(height: 16),
           TextField(
             controller: remarksController,
             decoration: const InputDecoration(
-              labelText: 'Remarks (optional)',
-              border: OutlineInputBorder(),
-            ),
+                labelText: 'Remarks (optional)', border: OutlineInputBorder()),
             maxLines: 2,
           ),
         ]),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
@@ -1601,7 +1397,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
     if (confirmed == true) {
       try {
-        // Matches HODService.reviewLeave(leaveId: String, action: String, remarks: String?)
         final success = await HODService.reviewLeave(
           leaveId: leave.id,
           action: approve ? 'approve' : 'reject',
@@ -1610,12 +1405,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               : remarksController.text.trim(),
         );
         if (success) {
-          _showSnackbar(
-              approve ? 'Leave approved successfully' : 'Leave rejected',
+          _showSnackbar(approve ? 'Leave approved' : 'Leave rejected',
               approve ? Colors.green : Colors.red);
           await _refreshData();
         } else {
-          _showSnackbar('Failed to update leave. Please try again.', Colors.red);
+          _showSnackbar('Failed to update leave.', Colors.red);
         }
       } catch (e) {
         _showSnackbar('Error: $e', Colors.red);
@@ -1628,7 +1422,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
   // ─────────────────────────────────────────────
 
   Widget _buildActivitiesTab() {
-    final pending = activities.where((a) => a.status == 'pending').toList();
+    final pending  = activities.where((a) => a.status == 'pending').toList();
     final approved = activities.where((a) => a.status == 'approved').toList();
     final rejected = activities.where((a) => a.status == 'rejected').toList();
 
@@ -1663,13 +1457,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
 
   Widget _buildActivityList(List<ApprovalRequest> list) {
     if (list.isEmpty) {
-      return Center(
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.star_outline, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text('No activities found', style: TextStyle(color: Colors.grey[600])),
-        ]),
-      );
+      return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.star_outline, size: 64, color: Colors.grey[400]),
+        const SizedBox(height: 16),
+        Text('No activities found', style: TextStyle(color: Colors.grey[600])),
+      ]));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -1698,8 +1490,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(activity.title,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 Text(activity.studentName,
                     style: TextStyle(color: Colors.grey[600], fontSize: 13)),
               ]),
@@ -1717,8 +1508,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
             const SizedBox(height: 8),
             Text(activity.description,
                 style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
           if (activity.status == 'pending') ...[
             const SizedBox(height: 12),
@@ -1729,8 +1519,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   icon: const Icon(Icons.close, size: 16),
                   label: const Text('Reject'),
                   style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red)),
+                      foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1740,8 +1529,7 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                   icon: const Icon(Icons.check, size: 16),
                   label: const Text('Approve'),
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white),
+                      backgroundColor: Colors.green, foregroundColor: Colors.white),
                 ),
               ),
             ]),
@@ -1764,16 +1552,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           TextField(
             controller: remarksController,
             decoration: const InputDecoration(
-              labelText: 'Remarks (optional)',
-              border: OutlineInputBorder(),
-            ),
+                labelText: 'Remarks (optional)', border: OutlineInputBorder()),
             maxLines: 2,
           ),
         ]),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
@@ -1788,13 +1573,12 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     if (confirmed == true) {
       try {
         await supabase.from('activities').update({
-          'status': approve ? 'approved' : 'rejected',
+          'status':     approve ? 'approved' : 'rejected',
           'updated_at': DateTime.now().toIso8601String(),
         }).eq('id', int.parse(activity.id));
 
         setState(() => activity.status = approve ? 'approved' : 'rejected');
-        _showSnackbar(
-            approve ? 'Activity approved' : 'Activity rejected',
+        _showSnackbar(approve ? 'Activity approved' : 'Activity rejected',
             approve ? Colors.green : Colors.red);
         await _refreshData();
       } catch (e) {
@@ -1817,7 +1601,6 @@ class _HODDashboardMainState extends State<HODDashboardMain>
     }).toList();
 
     return Column(children: [
-      // Search bar
       Padding(
         padding: const EdgeInsets.all(12),
         child: TextField(
@@ -1834,14 +1617,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 })
                 : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            contentPadding:
-            const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+            contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
           ),
           onChanged: (v) => setState(() => _studentSearch = v),
         ),
       ),
-
-      // Count header
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: Row(children: [
@@ -1849,15 +1629,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               style: TextStyle(color: Colors.grey[600], fontSize: 13)),
         ]),
       ),
-
       Expanded(
         child: filtered.isEmpty
-            ? Center(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.school, size: 64, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text('No students found', style: TextStyle(color: Colors.grey[600])),
-            ]))
+            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.school, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text('No students found', style: TextStyle(color: Colors.grey[600])),
+        ]))
             : ListView.builder(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           itemCount: filtered.length,
@@ -1876,26 +1654,18 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         leading: CircleAvatar(
           backgroundColor: Colors.blue.shade100,
           child: Text(student.name[0].toUpperCase(),
-              style: TextStyle(
-                  color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
+              style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
         ),
-        title: Text(student.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-            '${student.rollNumber} • Year ${student.year} • CGPA: ${student.cgpa.toStringAsFixed(2)}'),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: student.status == 'Active' ? Colors.green : Colors.red,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(student.status,
-                  style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ),
-          ],
+        title: Text(student.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text('${student.rollNumber} • Year ${student.year} • CGPA: ${student.cgpa.toStringAsFixed(2)}'),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: student.status == 'Active' ? Colors.green : Colors.red,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(student.status,
+              style: const TextStyle(color: Colors.white, fontSize: 11)),
         ),
         onTap: () => _showStudentDetail(student),
       ),
@@ -1918,11 +1688,9 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(
               child: Container(
-                  width: 40,
-                  height: 4,
+                  width: 40, height: 4,
                   decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2))),
+                      color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
             ),
             const SizedBox(height: 20),
             Row(children: [
@@ -1931,39 +1699,32 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 backgroundColor: Colors.blue.shade100,
                 child: Text(student.name[0].toUpperCase(),
                     style: TextStyle(
-                        fontSize: 24,
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.bold)),
+                        fontSize: 24, color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(student.name,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text(student.rollNumber,
-                      style: TextStyle(color: Colors.grey[600])),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(student.rollNumber, style: TextStyle(color: Colors.grey[600])),
                 ]),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                    color: student.status == 'Active'
-                        ? Colors.green
-                        : Colors.red,
+                    color: student.status == 'Active' ? Colors.green : Colors.red,
                     borderRadius: BorderRadius.circular(20)),
                 child: Text(student.status,
                     style: const TextStyle(color: Colors.white, fontSize: 12)),
               ),
             ]),
             const Divider(height: 28),
-            _detailRow(Icons.email, 'Email', student.email),
-            _detailRow(Icons.phone, 'Phone', student.phone),
-            _detailRow(Icons.calendar_today, 'Year', student.year),
-            _detailRow(Icons.account_tree, 'Branch', student.branch),
-            _detailRow(Icons.grade, 'CGPA', student.cgpa.toStringAsFixed(2)),
-            _detailRow(
-                Icons.contact_phone, 'Parent Contact', student.parentContact),
+            _detailRow(Icons.email,         'Email',          student.email),
+            _detailRow(Icons.phone,         'Phone',          student.phone),
+            _detailRow(Icons.calendar_today, 'Year',          student.year),
+            _detailRow(Icons.account_tree,  'Branch',         student.branch),
+            _detailRow(Icons.grade,         'CGPA',           student.cgpa.toStringAsFixed(2)),
+            _detailRow(Icons.contact_phone, 'Parent Contact', student.parentContact),
             if (student.admissionDate.isNotEmpty)
               _detailRow(Icons.event, 'Admission Date', student.admissionDate),
           ]),
@@ -1978,11 +1739,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
       child: Row(children: [
         Icon(icon, size: 18, color: Colors.blue.shade400),
         const SizedBox(width: 10),
-        Text('$label: ',
-            style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+        Text('$label: ', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
         Expanded(
-            child: Text(value.isNotEmpty ? value : 'N/A',
-                style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13))),
+          child: Text(value.isNotEmpty ? value : 'N/A',
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+        ),
       ]),
     );
   }
@@ -2017,13 +1778,11 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 })
                 : null,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            contentPadding:
-            const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+            contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
           ),
           onChanged: (v) => setState(() => _facultySearch = v),
         ),
       ),
-
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: Row(children: [
@@ -2031,16 +1790,13 @@ class _HODDashboardMainState extends State<HODDashboardMain>
               style: TextStyle(color: Colors.grey[600], fontSize: 13)),
         ]),
       ),
-
       Expanded(
         child: filtered.isEmpty
-            ? Center(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.people, size: 64, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              Text('No faculty members found',
-                  style: TextStyle(color: Colors.grey[600])),
-            ]))
+            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.people, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text('No faculty members found', style: TextStyle(color: Colors.grey[600])),
+        ]))
             : ListView.builder(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           itemCount: filtered.length,
@@ -2059,26 +1815,17 @@ class _HODDashboardMainState extends State<HODDashboardMain>
         leading: CircleAvatar(
           backgroundColor: Colors.purple.shade100,
           child: Text(member.name[0].toUpperCase(),
-              style: TextStyle(
-                  color: Colors.purple.shade700, fontWeight: FontWeight.bold)),
+              style: TextStyle(color: Colors.purple.shade700, fontWeight: FontWeight.bold)),
         ),
-        title: Text(member.name,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-            '${member.designation} • ${member.experience} yrs exp'),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: member.status == 'Active' ? Colors.green : Colors.red,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(member.status,
-                  style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ),
-          ],
+        title: Text(member.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text('${member.designation} • ${member.experience} yrs exp'),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+              color: member.status == 'Active' ? Colors.green : Colors.red,
+              borderRadius: BorderRadius.circular(12)),
+          child: Text(member.status,
+              style: const TextStyle(color: Colors.white, fontSize: 11)),
         ),
         onTap: () => _showFacultyDetail(member),
       ),
@@ -2101,11 +1848,9 @@ class _HODDashboardMainState extends State<HODDashboardMain>
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Center(
               child: Container(
-                  width: 40,
-                  height: 4,
+                  width: 40, height: 4,
                   decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2))),
+                      color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
             ),
             const SizedBox(height: 20),
             Row(children: [
@@ -2114,40 +1859,32 @@ class _HODDashboardMainState extends State<HODDashboardMain>
                 backgroundColor: Colors.purple.shade100,
                 child: Text(member.name[0].toUpperCase(),
                     style: TextStyle(
-                        fontSize: 24,
-                        color: Colors.purple.shade700,
-                        fontWeight: FontWeight.bold)),
+                        fontSize: 24, color: Colors.purple.shade700, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(member.name,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
-                  Text(member.designation,
-                      style: TextStyle(color: Colors.grey[600])),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(member.designation, style: TextStyle(color: Colors.grey[600])),
                 ]),
               ),
             ]),
             const Divider(height: 28),
-            _detailRow(Icons.email, 'Email', member.email),
-            _detailRow(Icons.phone, 'Phone', member.phone),
+            _detailRow(Icons.email,  'Email',         member.email),
+            _detailRow(Icons.phone,  'Phone',         member.phone),
             _detailRow(Icons.school, 'Qualification', member.qualification),
-            _detailRow(
-                Icons.work, 'Experience', '${member.experience} years'),
+            _detailRow(Icons.work,   'Experience',    '${member.experience} years'),
             if (member.joiningDate.isNotEmpty)
               _detailRow(Icons.event, 'Joined', member.joiningDate),
             if (member.subjects.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text('Subjects',
                   style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600)),
+                      color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: 6, runSpacing: 6,
                 children: member.subjects
                     .map((s) => _buildInfoChip(s, Colors.purple))
                     .toList(),
@@ -2173,9 +1910,7 @@ Future<void> _handleSignOut(BuildContext context) async {
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Error signing out: $e'),
-            backgroundColor: Colors.red),
+        SnackBar(content: Text('Error signing out: $e'), backgroundColor: Colors.red),
       );
     }
   }
