@@ -7,8 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../models/fee_models.dart';
 import '../services/fee_service.dart';
 
-/// Hardcoded SCRIET institute id — adjust if you have dynamic selection.
-const int _kInstituteId = 1;
+// Institute ID is resolved dynamically from the DB — no hardcoding needed.
+// FeeService.createFeeStructure and getFeeStructures handle null instituteId.
 
 class AdminFeeManagementPage extends StatefulWidget {
   const AdminFeeManagementPage({super.key});
@@ -25,6 +25,9 @@ class _AdminFeeManagementPageState extends State<AdminFeeManagementPage>
   List<FeeStructure> _structures = [];
   List<Map<String, dynamic>> _pendingPayments = [];
 
+  // Institute ID resolved once from DB — avoids hardcoding
+  int? _resolvedInstituteId;
+
   String _filterYear = DateTime.now().year.toString();
   bool _loading = true;
 
@@ -38,15 +41,23 @@ class _AdminFeeManagementPageState extends State<AdminFeeManagementPage>
   @override
   void dispose() { _tab.dispose(); super.dispose(); }
 
-  String get _academicYear => '$_filterYear-${(_filterYear.length == 4 ? int.parse(_filterYear) + 1 : 0).toString().substring(2)}';
+  String get _academicYear {
+    final y = int.tryParse(_filterYear) ?? DateTime.now().year;
+    final next = (y + 1).toString().substring(2);
+    return '$y-$next';
+  }
 
   Future<void> _load() async {
     setState(() => _loading = true);
+
+    // Resolve institute ID once (fetches from DB — no hardcoding)
+    _resolvedInstituteId ??= await FeeService.resolveInstituteId();
+
     final results = await Future.wait([
       FeeService.getAdminFeeStats(
-          instituteId: _kInstituteId, academicYear: _academicYear),
+          instituteId: _resolvedInstituteId, academicYear: _academicYear),
       FeeService.getFeeStructures(
-          instituteId: _kInstituteId, academicYear: _academicYear),
+          instituteId: _resolvedInstituteId, academicYear: _academicYear),
       FeeService.getPendingPayments(),
     ]);
     if (!mounted) return;
@@ -574,7 +585,7 @@ class _AdminFeeManagementPageState extends State<AdminFeeManagementPage>
       context: context,
       barrierDismissible: false,
       builder: (_) => _CreateFeeStructureDialog(
-        instituteId: _kInstituteId,
+        instituteId: _resolvedInstituteId,  // null = auto-resolved by FeeService
         onCreated: _load,
       ),
     );
@@ -620,7 +631,7 @@ class _AdminFeeManagementPageState extends State<AdminFeeManagementPage>
 // ═════════════════════════════════════════════════
 
 class _CreateFeeStructureDialog extends StatefulWidget {
-  final int instituteId;
+  final int? instituteId;       // nullable — FeeService resolves from DB if null
   final VoidCallback onCreated;
   const _CreateFeeStructureDialog({
     required this.instituteId,

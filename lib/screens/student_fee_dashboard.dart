@@ -37,14 +37,17 @@ class _StudentFeeDashboardState extends State<StudentFeeDashboard>
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    print('🔍 StudentFeeDashboard loading fees for studentId: ${widget.studentId}');
     final results = await Future.wait([
       FeeService.getStudentFees(widget.studentId),
       FeeService.getStudentPaymentHistory(widget.studentId),
       FeeService.getStudentReceipts(widget.studentId),
     ]);
     if (!mounted) return;
+    final fees = results[0] as List<StudentFee>;
+    print('✅ StudentFeeDashboard: loaded ${fees.length} fee records');
     setState(() {
-      _fees     = results[0] as List<StudentFee>;
+      _fees     = fees;
       _payments = results[1] as List<FeePayment>;
       _receipts = results[2] as List<PaymentReceipt>;
       _loading  = false;
@@ -108,8 +111,42 @@ class _StudentFeeDashboardState extends State<StudentFeeDashboard>
 
   Widget _buildFeesTab() {
     if (_fees.isEmpty) {
-      return _emptyState(Icons.account_balance_wallet_outlined,
-          'No fee records assigned yet.');
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.all(32),
+          children: [
+            const SizedBox(height: 60),
+            Icon(Icons.account_balance_wallet_outlined,
+                size: 80, color: Colors.grey.shade300),
+            const SizedBox(height: 20),
+            Text('No fees assigned yet',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700)),
+            const SizedBox(height: 10),
+            Text(
+              'Your fees will appear here once the admin assigns them.\n\n'
+                  'Pull down to refresh after the admin has set up fee structures.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+            ),
+            const SizedBox(height: 24),
+            Center(
+              child: OutlinedButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Refresh'),
+                style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.indigo,
+                    side: const BorderSide(color: Colors.indigo)),
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     // Summary totals
