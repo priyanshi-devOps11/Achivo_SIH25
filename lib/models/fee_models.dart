@@ -12,6 +12,36 @@ String _fmt(num? v) {
 }
 
 // ─────────────────────────────────────────────
+// SAFE CAST HELPERS
+// ─────────────────────────────────────────────
+
+int _toInt(dynamic v, {int fallback = 0}) {
+  if (v == null) return fallback;
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  final parsed = int.tryParse(v.toString());
+  return parsed ?? fallback;
+}
+
+double _toDouble(dynamic v, {double fallback = 0.0}) {
+  if (v == null) return fallback;
+  if (v is double) return v;
+  if (v is num) return v.toDouble();
+  final parsed = double.tryParse(v.toString());
+  return parsed ?? fallback;
+}
+
+DateTime _parseDate(dynamic v) {
+  if (v == null) return DateTime.now();
+  if (v is DateTime) return v;
+  try {
+    return DateTime.parse(v.toString());
+  } catch (_) {
+    return DateTime.now();
+  }
+}
+
+// ─────────────────────────────────────────────
 // FEE STRUCTURE
 // ─────────────────────────────────────────────
 
@@ -51,22 +81,26 @@ class FeeStructure {
     final instList = <FeeInstallment>[];
     if (instRaw is List) {
       for (final i in instRaw) {
-        instList.add(FeeInstallment.fromMap(i));
+        if (i is Map<String, dynamic>) {
+          instList.add(FeeInstallment.fromMap(i));
+        }
       }
     }
     return FeeStructure(
-      id: map['id'] as int,
-      instituteId: map['institute_id'] as int,
-      departmentId: map['department_id'] as int?,
-      academicYear: map['academic_year'] ?? '',
-      studentYear: map['student_year'] ?? 'ALL',
-      feeName: map['fee_name'] ?? '',
-      totalAmount: (map['total_amount'] as num).toDouble(),
-      installmentCount: map['installment_count'] ?? 1,
-      isActive: map['is_active'] ?? true,
-      createdBy: map['created_by'] as String?,
-      createdAt: DateTime.parse(map['created_at']),
-      installments: instList,
+      id:               _toInt(map['id']),
+      instituteId:      _toInt(map['institute_id']),
+      departmentId:     map['department_id'] != null
+          ? _toInt(map['department_id'])
+          : null,
+      academicYear:     map['academic_year']?.toString() ?? '',
+      studentYear:      map['student_year']?.toString() ?? 'ALL',
+      feeName:          map['fee_name']?.toString() ?? '',
+      totalAmount:      _toDouble(map['total_amount']),
+      installmentCount: _toInt(map['installment_count'], fallback: 1),
+      isActive:         map['is_active'] as bool? ?? true,
+      createdBy:        map['created_by']?.toString(),
+      createdAt:        _parseDate(map['created_at']),
+      installments:     instList,
     );
   }
 }
@@ -92,18 +126,19 @@ class FeeInstallment {
     required this.label,
   });
 
-  String get formattedAmount => _fmt(amount);
-  bool get isOverdue => dueDate.isBefore(DateTime.now());
+  String get formattedAmount  => _fmt(amount);
+  bool   get isOverdue        => dueDate.isBefore(DateTime.now());
   String get formattedDueDate => DateFormat('dd MMM yyyy').format(dueDate);
 
   factory FeeInstallment.fromMap(Map<String, dynamic> map) {
     return FeeInstallment(
-      id: map['id'] as int,
-      feeStructureId: map['fee_structure_id'] as int,
-      installmentNumber: map['installment_number'] as int,
-      amount: (map['amount'] as num).toDouble(),
-      dueDate: DateTime.parse(map['due_date']),
-      label: map['label'] ?? 'Installment ${map['installment_number']}',
+      id:                _toInt(map['id']),
+      feeStructureId:    _toInt(map['fee_structure_id']),
+      installmentNumber: _toInt(map['installment_number']),
+      amount:            _toDouble(map['amount']),
+      dueDate:           _parseDate(map['due_date']),
+      label:             map['label']?.toString() ??
+          'Installment ${_toInt(map['installment_number'])}',
     );
   }
 }
@@ -126,7 +161,7 @@ class StudentFee {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  // Optional joins
+  // Optional join
   final FeeStructure? feeStructure;
 
   StudentFee({
@@ -148,15 +183,15 @@ class StudentFee {
   double get percentagePaid =>
       totalAmount == 0 ? 0 : (amountPaid / totalAmount).clamp(0, 1);
 
-  String get formattedTotal   => _fmt(totalAmount);
-  String get formattedPaid    => _fmt(amountPaid);
-  String get formattedDue     => _fmt(amountDue);
-  String get formattedWaiver  => _fmt(waiverAmount);
+  String get formattedTotal  => _fmt(totalAmount);
+  String get formattedPaid   => _fmt(amountPaid);
+  String get formattedDue    => _fmt(amountDue);
+  String get formattedWaiver => _fmt(waiverAmount);
 
-  bool get isPaid     => paymentStatus == 'paid';
-  bool get isUnpaid   => paymentStatus == 'unpaid';
-  bool get isPartial  => paymentStatus == 'partial';
-  bool get isOverdue  => paymentStatus == 'overdue';
+  bool get isPaid    => paymentStatus == 'paid';
+  bool get isUnpaid  => paymentStatus == 'unpaid';
+  bool get isPartial => paymentStatus == 'partial';
+  bool get isOverdue => paymentStatus == 'overdue';
 
   factory StudentFee.fromMap(Map<String, dynamic> map) {
     final fsRaw = map['fee_structures'];
@@ -165,19 +200,19 @@ class StudentFee {
       fs = FeeStructure.fromMap(fsRaw);
     }
     return StudentFee(
-      id: map['id'] as int,
-      studentId: map['student_id'].toString(),
-      feeStructureId: map['fee_structure_id'] as int,
-      academicYear: map['academic_year'] ?? '',
-      totalAmount: (map['total_amount'] as num).toDouble(),
-      amountPaid: (map['amount_paid'] as num? ?? 0).toDouble(),
-      amountDue: (map['amount_due'] as num? ?? 0).toDouble(),
-      paymentStatus: map['payment_status'] ?? 'unpaid',
-      waiverAmount: (map['waiver_amount'] as num? ?? 0).toDouble(),
-      waiverReason: map['waiver_reason'] as String?,
-      createdAt: DateTime.parse(map['created_at']),
-      updatedAt: DateTime.parse(map['updated_at']),
-      feeStructure: fs,
+      id:             _toInt(map['id']),
+      studentId:      map['student_id']?.toString() ?? '',
+      feeStructureId: _toInt(map['fee_structure_id']),
+      academicYear:   map['academic_year']?.toString() ?? '',
+      totalAmount:    _toDouble(map['total_amount']),
+      amountPaid:     _toDouble(map['amount_paid']),
+      amountDue:      _toDouble(map['amount_due']),
+      paymentStatus:  map['payment_status']?.toString() ?? 'unpaid',
+      waiverAmount:   _toDouble(map['waiver_amount']),
+      waiverReason:   map['waiver_reason']?.toString(),
+      createdAt:      _parseDate(map['created_at']),
+      updatedAt:      _parseDate(map['updated_at']),
+      feeStructure:   fs,
     );
   }
 }
@@ -233,19 +268,19 @@ class FeePayment {
   String get formattedDate   => DateFormat('dd MMM yyyy').format(paymentDate);
 
   String get displayMethod {
-    const map = {
-      'online': 'Online Payment',
-      'upi': 'UPI',
+    const methodMap = {
+      'online':      'Online Payment',
+      'upi':         'UPI',
       'net_banking': 'Net Banking',
       'credit_card': 'Credit Card',
-      'debit_card': 'Debit Card',
-      'cash': 'Cash',
-      'dd': 'Demand Draft',
-      'cheque': 'Cheque',
-      'neft': 'NEFT',
-      'rtgs': 'RTGS',
+      'debit_card':  'Debit Card',
+      'cash':        'Cash',
+      'dd':          'Demand Draft',
+      'cheque':      'Cheque',
+      'neft':        'NEFT',
+      'rtgs':        'RTGS',
     };
-    return map[paymentMethod] ?? paymentMethod;
+    return methodMap[paymentMethod] ?? paymentMethod;
   }
 
   bool get isPending  => status == 'pending';
@@ -255,28 +290,30 @@ class FeePayment {
   factory FeePayment.fromMap(Map<String, dynamic> map) {
     final instRaw = map['fee_installments'];
     String? instLabel;
-    if (instRaw is Map) instLabel = instRaw['label'] as String?;
+    if (instRaw is Map) instLabel = instRaw['label']?.toString();
 
     return FeePayment(
-      id: map['id'] as int,
-      studentFeeId: map['student_fee_id'] as int,
-      studentId: map['student_id'].toString(),
-      feeInstallmentId: map['fee_installment_id'] as int?,
-      paymentMethod: map['payment_method'] ?? 'cash',
-      amount: (map['amount'] as num).toDouble(),
-      transactionId: map['transaction_id'] as String?,
-      transactionRef: map['transaction_ref'] as String?,
-      paymentDate: DateTime.parse(map['payment_date']),
-      bankName: map['bank_name'] as String?,
-      proofUrl: map['proof_url'] as String?,
-      status: map['status'] ?? 'pending',
-      verifiedBy: map['verified_by'] as String?,
-      verifiedAt: map['verified_at'] != null
-          ? DateTime.parse(map['verified_at'])
+      id:               _toInt(map['id']),
+      studentFeeId:     _toInt(map['student_fee_id']),
+      studentId:        map['student_id']?.toString() ?? '',
+      feeInstallmentId: map['fee_installment_id'] != null
+          ? _toInt(map['fee_installment_id'])
           : null,
-      refundAmount: (map['refund_amount'] as num? ?? 0).toDouble(),
-      remarks: map['remarks'] as String?,
-      createdAt: DateTime.parse(map['created_at']),
+      paymentMethod:    map['payment_method']?.toString() ?? 'cash',
+      amount:           _toDouble(map['amount']),
+      transactionId:    map['transaction_id']?.toString(),
+      transactionRef:   map['transaction_ref']?.toString(),
+      paymentDate:      _parseDate(map['payment_date']),
+      bankName:         map['bank_name']?.toString(),
+      proofUrl:         map['proof_url']?.toString(),
+      status:           map['status']?.toString() ?? 'pending',
+      verifiedBy:       map['verified_by']?.toString(),
+      verifiedAt:       map['verified_at'] != null
+          ? _parseDate(map['verified_at'])
+          : null,
+      refundAmount:     _toDouble(map['refund_amount']),
+      remarks:          map['remarks']?.toString(),
+      createdAt:        _parseDate(map['created_at']),
       installmentLabel: instLabel,
     );
   }
@@ -306,6 +343,15 @@ class PaymentReceipt {
   final bool isCancelled;
   final DateTime createdAt;
 
+  // ── Extra fields used by receipt_pdf_service.dart ────────────────
+  /// Institute name snapshot. Falls back to empty string if the DB row
+  /// doesn't carry this column yet.
+  final String instituteName;
+
+  /// The date the payment was actually made (fee_payments.payment_date).
+  /// Defaults to createdAt when not available.
+  final DateTime paymentDate;
+
   PaymentReceipt({
     required this.id,
     required this.receiptNumber,
@@ -325,33 +371,46 @@ class PaymentReceipt {
     this.receiptPdfUrl,
     this.isCancelled = false,
     required this.createdAt,
-  });
+    this.instituteName = '',
+    DateTime? paymentDate,
+  }) : paymentDate = paymentDate ?? createdAt;
 
-  String get formattedAmountPaid    => _fmt(amountPaid);
-  String get formattedTotalFee      => _fmt(totalFee);
-  String get formattedRemaining     => _fmt(remainingAfter);
-  String get formattedDate          => DateFormat('dd MMM yyyy').format(createdAt);
+  String get formattedAmountPaid  => _fmt(amountPaid);
+  String get formattedTotalFee    => _fmt(totalFee);
+  String get formattedRemaining   => _fmt(remainingAfter);
+  String get formattedDate        => DateFormat('dd MMM yyyy').format(createdAt);
+  String get formattedPaymentDate => DateFormat('dd MMM yyyy').format(paymentDate);
 
   factory PaymentReceipt.fromMap(Map<String, dynamic> map) {
+    // payment_date may be a top-level field or nested in fee_payments join
+    final rawPaymentDate = map['payment_date'] ??
+        (map['fee_payments'] is Map
+            ? (map['fee_payments'] as Map)['payment_date']
+            : null);
+
     return PaymentReceipt(
-      id: map['id'] as int,
-      receiptNumber: map['receipt_number'] ?? '',
-      feePaymentId: map['fee_payment_id'] as int,
-      studentName: map['student_name'] ?? '',
-      rollNumber: map['roll_number'] ?? '',
-      departmentName: map['department_name'] ?? '',
-      academicYear: map['academic_year'] ?? '',
-      feeStructureName: map['fee_structure_name'] ?? '',
-      installmentLabel: map['installment_label'] as String?,
-      amountPaid: (map['amount_paid'] as num).toDouble(),
-      totalFee: (map['total_fee'] as num).toDouble(),
-      amountPaidBefore: (map['amount_paid_before'] as num? ?? 0).toDouble(),
-      remainingAfter: (map['remaining_after'] as num? ?? 0).toDouble(),
-      paymentMethod: map['payment_method'] ?? '',
-      transactionId: map['transaction_id'] as String?,
-      receiptPdfUrl: map['receipt_pdf_url'] as String?,
-      isCancelled: map['is_cancelled'] ?? false,
-      createdAt: DateTime.parse(map['created_at']),
+      id:               _toInt(map['id']),
+      receiptNumber:    map['receipt_number']?.toString() ?? '',
+      feePaymentId:     _toInt(map['fee_payment_id']),
+      studentName:      map['student_name']?.toString() ?? '',
+      rollNumber:       map['roll_number']?.toString() ?? '',
+      departmentName:   map['department_name']?.toString() ?? '',
+      academicYear:     map['academic_year']?.toString() ?? '',
+      feeStructureName: map['fee_structure_name']?.toString() ?? '',
+      installmentLabel: map['installment_label']?.toString(),
+      amountPaid:       _toDouble(map['amount_paid']),
+      totalFee:         _toDouble(map['total_fee']),
+      amountPaidBefore: _toDouble(map['amount_paid_before']),
+      remainingAfter:   _toDouble(map['remaining_after']),
+      paymentMethod:    map['payment_method']?.toString() ?? '',
+      transactionId:    map['transaction_id']?.toString(),
+      receiptPdfUrl:    map['receipt_pdf_url']?.toString(),
+      isCancelled:      map['is_cancelled'] as bool? ?? false,
+      createdAt:        _parseDate(map['created_at']),
+      instituteName:    map['institute_name']?.toString() ?? '',
+      paymentDate:      rawPaymentDate != null
+          ? _parseDate(rawPaymentDate)
+          : null,
     );
   }
 }
@@ -384,7 +443,9 @@ class AdminFeeStats {
   });
 
   double get collectionRate =>
-      totalFeeAmount == 0 ? 0 : (totalCollected / totalFeeAmount).clamp(0, 1);
+      totalFeeAmount == 0
+          ? 0
+          : (totalCollected / totalFeeAmount).clamp(0, 1);
 
   String get formattedCollected => _fmt(totalCollected);
   String get formattedPending   => _fmt(totalPending);
@@ -423,13 +484,13 @@ class HodFeeSummary {
 
   factory HodFeeSummary.fromMap(Map<String, dynamic> map) {
     return HodFeeSummary(
-      totalStudents: (map['total_students'] as num? ?? 0).toInt(),
-      paidCount: (map['paid'] as num? ?? 0).toInt(),
-      partialCount: (map['partial'] as num? ?? 0).toInt(),
-      unpaidCount: (map['unpaid'] as num? ?? 0).toInt(),
-      totalCollected: (map['total_collected'] as num? ?? 0).toDouble(),
-      totalPending: (map['total_pending'] as num? ?? 0).toDouble(),
-      totalFee: (map['total_fee'] as num? ?? 0).toDouble(),
+      totalStudents:  _toInt(map['total_students']),
+      paidCount:      _toInt(map['paid']),
+      partialCount:   _toInt(map['partial']),
+      unpaidCount:    _toInt(map['unpaid']),
+      totalCollected: _toDouble(map['total_collected']),
+      totalPending:   _toDouble(map['total_pending']),
+      totalFee:       _toDouble(map['total_fee']),
     );
   }
 }
