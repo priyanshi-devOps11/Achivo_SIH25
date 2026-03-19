@@ -1,8 +1,21 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ── Permissions ─────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- READ_EXTERNAL_STORAGE removed — deprecated on Android 13+, not needed -->
+    <!-- file_picker uses scoped storage / MediaStore APIs automatically -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:label="achivo"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        tools:ignore="GoogleAppIndexingWarning">
+
+        <!-- ── Main Flutter Activity ──────────────────────────── -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -14,27 +27,39 @@
             android:windowSoftInputMode="adjustResize">
 
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+
+        <!-- ── Razorpay Checkout Activity ─────────────────────── -->
+        <activity
+            android:name="com.razorpay.CheckoutActivity"
+            android:exported="false"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            tools:replace="android:theme" />
+
+        <!-- Flutter tool meta-data — do not delete -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
     </application>
 
+    <!-- ── Intent queries (Android 11+ visibility) ────────────── -->
     <queries>
+        <!-- Text processing -->
         <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
         </intent>
-        <!-- ADD THIS - required for url_launcher to open PDFs in browser -->
+
+        <!-- url_launcher — HTTPS / HTTP links -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
@@ -43,5 +68,27 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="http" />
         </intent>
+
+        <!-- UPI payment apps (Razorpay) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+
+        <!-- PhonePe -->
+        <package android:name="com.phonepe.app" />
+
+        <!-- Google Pay / Tez -->
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+
+        <!-- Paytm -->
+        <package android:name="net.one97.paytm" />
+
+        <!-- BHIM -->
+        <package android:name="in.org.npci.upiapp" />
+
+        <!-- Amazon Pay -->
+        <package android:name="in.amazon.mShop.android.shopping" />
     </queries>
+
 </manifest>

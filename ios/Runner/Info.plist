@@ -45,5 +45,19 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Razorpay: required for UPI app deep-linking on iOS -->
+	<!-- Without these, iOS blocks Razorpay from opening    -->
+	<!-- GPay, PhonePe, Paytm, BHIM etc.                   -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>upi</string>
+		<string>phonepe</string>
+		<string>paytmmp</string>
+		<string>bhim</string>
+		<string>tez</string>
+		<string>gpay</string>
+		<string>credpay</string>
+		<string>amazonpay</string>
+	</array>
 </dict>
 </plist>
