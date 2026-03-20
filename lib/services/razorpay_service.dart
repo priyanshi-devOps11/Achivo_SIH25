@@ -315,18 +315,3 @@ class RazorpayService {
     _pendingOrderId       = null;
   }
 }
-
-// ═════════════════════════════════════════════════════════════════════
-// iOS INFO.PLIST ADDITIONS (add manually to ios/Runner/Info.plist)
-// ═════════════════════════════════════════════════════════════════════
-//
-// <key>LSApplicationQueriesSchemes</key>
-// <array>
-//   <string>upi</string>
-//   <string>phonepe</string>
-//   <string>paytmmp</string>
-//   <string>bhim</string>
-//   <string>tez</string>
-//   <string>gpay</string>
-//   <string>credpay</string>
-// </array>
