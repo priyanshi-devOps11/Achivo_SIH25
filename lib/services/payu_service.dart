@@ -2,13 +2,11 @@
 // ══════════════════════════════════════════════════════════════════════
 // PAYU PAYMENT INTEGRATION — payu_checkoutpro_flutter 1.4.0
 //
-// EXACT API from source:
-//   Class:    PayUCheckoutProFlutter (NOT PayUCheckoutPro)
-//   Protocol: PayUCheckoutProProtocol
-//   Open:     instance.openCheckoutScreen(payUPaymentParams, payUCheckoutProConfig)
-//   Hash:     instance.hashGenerated(hash: {...})
-//   Param keys: transactionId, productInfo, firstName (camelCase)
-//   URL keys:   android_surl, android_furl, ios_surl, ios_furl
+// Credentials (Test Mode):
+//   Key  : EWVUgs
+//   Salt : uM9Awu56sQDRMBTs5kvzxY28FXEkB3Ig
+//   MID  : 9215014
+//   Supabase Project: ftobgrnueipmvfrsjlqx
 // ══════════════════════════════════════════════════════════════════════
 
 import 'dart:convert';
@@ -28,6 +26,13 @@ class PayUConfig {
   static const String merchantSalt = 'uM9Awu56sQDRMBTs5kvzxY28FXEkB3Ig';
   static const String mid          = '9215014';
   static const bool   isTestMode   = true;
+
+  // ── Supabase Edge Function URLs ───────────────────────────────────
+  static const String _supabaseRef = 'ftobgrnueipmvfrsjlqx';
+  static const String successUrl   =
+      'https://$_supabaseRef.supabase.co/functions/v1/payu-success';
+  static const String failureUrl   =
+      'https://$_supabaseRef.supabase.co/functions/v1/payu-failure';
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -87,24 +92,21 @@ class PayUHashHelper {
     return expected.toLowerCase() == receivedHash.toLowerCase();
   }
 
-  /// Generate hash for SDK hash challenges (V1 and V2)
-  static String generateSdkHash(String hashString) {
-    return sha512.convert(utf8.encode(hashString)).toString();
-  }
+  static String generateSdkHash(String hashString) =>
+      sha512.convert(utf8.encode(hashString)).toString();
 
   static String generateTxnId() =>
       'ACH${DateTime.now().millisecondsSinceEpoch}';
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// PAYU SERVICE  — implements PayUCheckoutProProtocol exactly
+// PAYU SERVICE
 // ─────────────────────────────────────────────────────────────────────
 
 class PayUService implements PayUCheckoutProProtocol {
   static final _db = Supabase.instance.client;
   static SupabaseClient get supabaseClient => _db;
 
-  // SDK instance — holds the MethodChannel listener
   late PayUCheckoutProFlutter _payUFlutter;
 
   String? _pendingTxnId;
@@ -139,32 +141,34 @@ class PayUService implements PayUCheckoutProProtocol {
         ? studentEmail : 'student@achivo.app';
 
     final hash = PayUHashHelper.generatePaymentHash(
-      txnId: _pendingTxnId!, amount: amount,
-      productInfo: productInfo, firstName: firstName, email: email,
+      txnId:       _pendingTxnId!,
+      amount:      amount,
+      productInfo: productInfo,
+      firstName:   firstName,
+      email:       email,
     );
 
-    // ── Payment params — use EXACT keys from PayUPaymentParamKey ──
+    // ── Payment params — exact keys from PayUPaymentParamKey ──────
     final payUPaymentParams = {
-      PayUPaymentParamKey.key:          PayUConfig.merchantKey,
+      PayUPaymentParamKey.key:           PayUConfig.merchantKey,
       PayUPaymentParamKey.transactionId: _pendingTxnId,
       PayUPaymentParamKey.amount:        amount.toStringAsFixed(2),
       PayUPaymentParamKey.productInfo:   productInfo,
       PayUPaymentParamKey.firstName:     firstName,
       PayUPaymentParamKey.email:         email,
       PayUPaymentParamKey.phone:         phone,
-      PayUPaymentParamKey.android_surl:  'https://achivo.app/payu/success',
-      PayUPaymentParamKey.android_furl:  'https://achivo.app/payu/failure',
-      PayUPaymentParamKey.ios_surl:      'https://achivo.app/payu/success',
-      PayUPaymentParamKey.ios_furl:      'https://achivo.app/payu/failure',
+      PayUPaymentParamKey.android_surl:  PayUConfig.successUrl,
+      PayUPaymentParamKey.android_furl:  PayUConfig.failureUrl,
+      PayUPaymentParamKey.ios_surl:      PayUConfig.successUrl,
+      PayUPaymentParamKey.ios_furl:      PayUConfig.failureUrl,
       PayUPaymentParamKey.environment:
       PayUConfig.isTestMode ? 'test' : 'production',
-      // Hash must be passed in additionalParam for v1.4
       PayUPaymentParamKey.additionalParam: {
         'hash': hash,
       },
     };
 
-    // ── Checkout config — use EXACT keys from PayUCheckoutProConfigKeys ──
+    // ── Checkout config — exact keys from PayUCheckoutProConfigKeys
     final payUCheckoutProConfig = {
       PayUCheckoutProConfigKeys.primaryColor:   '#1565C0',
       PayUCheckoutProConfigKeys.secondaryColor: '#FFFFFF',
@@ -175,12 +179,9 @@ class PayUService implements PayUCheckoutProProtocol {
     };
 
     try {
-      // Instantiate with THIS as the protocol delegate
       _payUFlutter = PayUCheckoutProFlutter(this);
-
-      // Open the checkout screen
       await _payUFlutter.openCheckoutScreen(
-        payUPaymentParams:    payUPaymentParams,
+        payUPaymentParams:     payUPaymentParams,
         payUCheckoutProConfig: payUCheckoutProConfig,
       );
     } catch (e) {
@@ -190,22 +191,16 @@ class PayUService implements PayUCheckoutProProtocol {
     }
   }
 
-  // ── PayUCheckoutProProtocol — EXACT signatures from source ────────
+  // ── PayUCheckoutProProtocol — exact signatures from source ────────
 
-  // generateHash(Map response)  — no return type, no callback param
-  // SDK sends hash request; we compute and call hashGenerated()
   @override
   generateHash(Map response) {
-    debugPrint('🔐 generateHash called: $response');
+    debugPrint('🔐 generateHash called');
     try {
       final hashName   = response[PayUHashConstantsKeys.hashName]?.toString() ?? '';
       final hashString = response[PayUHashConstantsKeys.hashString]?.toString() ?? '';
-
       if (hashString.isEmpty) return;
-
       final digest = PayUHashHelper.generateSdkHash(hashString);
-
-      // Send computed hash back to SDK
       _payUFlutter.hashGenerated(hash: {hashName: digest});
     } catch (e) {
       debugPrint('❌ generateHash error: $e');
@@ -221,7 +216,7 @@ class PayUService implements PayUCheckoutProProtocol {
     final status    = data['status']?.toString() ?? 'success';
     final hash      = data['hash']?.toString() ?? '';
 
-    // Verify response hash
+    // Verify response hash (fraud prevention)
     final isValid = PayUHashHelper.verifyResponseHash(
       receivedHash: hash,
       txnId:        _pendingTxnId ?? '',
@@ -240,21 +235,25 @@ class PayUService implements PayUCheckoutProProtocol {
       return;
     }
 
-    // Record payment in DB
+    // Record payment in DB via Edge Function
     try {
-      final res = await _db.functions.invoke('verify-payu-payment', body: {
-        'txn_id':         _pendingTxnId,
-        'payu_txn_id':    payuTxnId,
-        'student_fee_id': _pendingStudentFeeId,
-        'installment_id': _pendingInstallmentId,
-        'amount':         _pendingAmount,
-        'status':         status,
-        'payu_response':  data,
-      });
+      final res = await _db.functions.invoke(
+        'verify-payu-payment',
+        body: {
+          'txn_id':         _pendingTxnId,
+          'payu_txn_id':    payuTxnId,
+          'student_fee_id': _pendingStudentFeeId,
+          'installment_id': _pendingInstallmentId,
+          'amount':         _pendingAmount,
+          'status':         status,
+          'payu_response':  data,
+        },
+      );
 
       if (res.status == 200 && res.data?['success'] == true) {
         _onResult?.call(PayUPaymentResult(
-          success: true, txnId: _pendingTxnId,
+          success:   true,
+          txnId:     _pendingTxnId,
           payuTxnId: payuTxnId,
           receiptNo: res.data?['receipt_no'] as String?,
         ));
@@ -267,7 +266,9 @@ class PayUService implements PayUCheckoutProProtocol {
     } catch (e) {
       debugPrint('❌ verify error: $e | txnId: $_pendingTxnId');
       _onResult?.call(PayUPaymentResult(
-        success: false, txnId: _pendingTxnId, payuTxnId: payuTxnId,
+        success:   false,
+        txnId:     _pendingTxnId,
+        payuTxnId: payuTxnId,
         error: 'Payment captured but verification failed. '
             'Contact support with txnId: $_pendingTxnId',
       ));
@@ -287,7 +288,6 @@ class PayUService implements PayUCheckoutProProtocol {
     _clearPending();
   }
 
-  // onPaymentCancel(Map? response)  — takes Map? not dynamic
   @override
   void onPaymentCancel(Map? response) {
     debugPrint('⚠️ PayU cancelled: $response');
@@ -296,7 +296,6 @@ class PayUService implements PayUCheckoutProProtocol {
     _clearPending();
   }
 
-  // onError(Map? response)  — takes Map? not dynamic
   @override
   void onError(Map? response) {
     debugPrint('❌ PayU error: $response');
