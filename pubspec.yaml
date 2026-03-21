@@ -19,6 +19,8 @@ dependencies:
   url_launcher: ^6.2.6
   intl: ^0.19.0
   file_picker: ^10.3.3
+  payu_checkoutpro_flutter: 1.4.0
+  crypto: ^3.0.7
 
   # SQLite support
   sqflite: ^2.3.3+1
