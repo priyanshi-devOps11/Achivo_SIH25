@@ -4,8 +4,6 @@
     <!-- ── Permissions ─────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- READ_EXTERNAL_STORAGE removed — deprecated on Android 13+, not needed -->
-    <!-- file_picker uses scoped storage / MediaStore APIs automatically -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
@@ -13,7 +11,7 @@
         android:label="achivo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        tools:ignore="GoogleAppIndexingWarning">
+        tools:replace="android:label">
 
         <!-- ── Main Flutter Activity ──────────────────────────── -->
         <activity
@@ -36,14 +34,6 @@
             </intent-filter>
         </activity>
 
-        <!-- ── Razorpay Checkout Activity ─────────────────────── -->
-        <activity
-            android:name="com.razorpay.CheckoutActivity"
-            android:exported="false"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
-            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
-            tools:replace="android:theme" />
-
         <!-- Flutter tool meta-data — do not delete -->
         <meta-data
             android:name="flutterEmbedding"
@@ -59,7 +49,7 @@
             <data android:mimeType="text/plain" />
         </intent>
 
-        <!-- url_launcher — HTTPS / HTTP links -->
+        <!-- url_launcher — web links and PDF viewing -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
@@ -69,25 +59,17 @@
             <data android:scheme="http" />
         </intent>
 
-        <!-- UPI payment apps (Razorpay) -->
+        <!-- UPI deep-link scheme (PayU) -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="upi" />
         </intent>
 
-        <!-- PhonePe -->
+        <!-- UPI wallet apps -->
         <package android:name="com.phonepe.app" />
-
-        <!-- Google Pay / Tez -->
         <package android:name="com.google.android.apps.nbu.paisa.user" />
-
-        <!-- Paytm -->
         <package android:name="net.one97.paytm" />
-
-        <!-- BHIM -->
         <package android:name="in.org.npci.upiapp" />
-
-        <!-- Amazon Pay -->
         <package android:name="in.amazon.mShop.android.shopping" />
     </queries>
 

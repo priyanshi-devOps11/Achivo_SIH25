@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.achivo"
-        minSdk = 19                          // ← Razorpay requires minSdk 19
+        minSdk = flutter.minSdkVersion                          // ← Razorpay requires minSdk 19
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
