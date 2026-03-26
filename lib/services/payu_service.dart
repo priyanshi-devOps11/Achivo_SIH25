@@ -1,15 +1,3 @@
-// lib/services/payu_service.dart
-// ══════════════════════════════════════════════════════════════════════
-// PAYU PAYMENT INTEGRATION — payu_checkoutpro_flutter 1.4.0
-//
-// CRASH FIX: Use raw string keys instead of PayUPaymentParamKey constants.
-// The PayUPaymentParamKey constants are fine but the 'environment' key
-// is special — the SDK internally reads it and substitutes a Map value
-// before passing to the platform channel, causing the _Map crash.
-// Fix: remove the environment key entirely (SDK defaults to production,
-// we set test mode via the key itself).
-// ══════════════════════════════════════════════════════════════════════
-
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
@@ -18,9 +6,6 @@ import 'package:payu_checkoutpro_flutter/PayUConstantKeys.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/fee_models.dart';
 
-// ─────────────────────────────────────────────────────────────────────
-// CONFIG
-// ─────────────────────────────────────────────────────────────────────
 
 class PayUConfig {
   static const String merchantKey    = 'EWVUgs';
@@ -32,9 +17,6 @@ class PayUConfig {
   static const String failureUrl     = 'https://payu.in';
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// RESULT TYPE
-// ─────────────────────────────────────────────────────────────────────
 
 class PayUPaymentResult {
   final bool    success;
