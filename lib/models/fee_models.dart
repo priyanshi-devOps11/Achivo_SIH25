@@ -415,9 +415,6 @@ class PaymentReceipt {
   }
 }
 
-// ─────────────────────────────────────────────
-// ADMIN FEE STATS  (dashboard summary)
-// ─────────────────────────────────────────────
 
 class AdminFeeStats {
   final int totalStudents;
@@ -452,9 +449,6 @@ class AdminFeeStats {
   String get formattedTotal     => _fmt(totalFeeAmount);
 }
 
-// ─────────────────────────────────────────────
-// HOD FEE SUMMARY  (from RPC)
-// ─────────────────────────────────────────────
 
 class HodFeeSummary {
   final int totalStudents;
