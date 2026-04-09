@@ -21,8 +21,6 @@ Arun Kumar
 
 Email: arunsharma73177@gmail.com
 
-Co-authored-by: Arun Kumar <arun sharma73177@gmail.com>
-
 Priyanshi Srivastava
 
 Email: srivastavapriyanshi8081@gmail.com
