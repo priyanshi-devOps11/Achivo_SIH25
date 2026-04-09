@@ -20,7 +20,8 @@ This project serves as the foundation for building a clean, scalable, and visual
 Arun Kumar
 
 Email: arunsharma73177@gmail.com
-Co-authored-by: Arun Kumar <arunsharma73177@gmail.com>
+
+Co-authored-by: Arun Kumar <arun sharma73177@gmail.com>
 
 Priyanshi Srivastava
 
