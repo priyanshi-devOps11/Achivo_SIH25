@@ -25,7 +25,7 @@ Priyanshi Srivastava
 
 Email: srivastavapriyanshi8081@gmail.com
 
-We welcome developers, designers, and contributors to join this project.
+We welcome developers, designers, and contributors to join this project
 
 📂 Project Structure
 achivo/
