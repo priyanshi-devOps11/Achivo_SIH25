@@ -560,9 +560,7 @@ class _StudentAttendancePageState extends State<StudentAttendancePage>
   /// How many consecutive present classes needed to reach 75%
   int _classesNeeded(SubjectAttendance s) {
     if (s.percentage >= 75) return 0;
-    // (present + x) / (total + x) >= 0.75
-    // present + x >= 0.75 * total + 0.75x
-    // 0.25x >= 0.75*total - present
+
     final need = (0.75 * s.total - (s.present + s.late)) / 0.25;
     return need.ceil().clamp(0, 9999);
   }
