@@ -395,7 +395,6 @@ class _StudentAttendancePageState extends State<StudentAttendancePage>
         ),
         const Divider(height: 1),
 
-        // Records list
         Expanded(
           child: _filteredRecords.isEmpty
               ? _buildEmpty('No records found for this filter.')
@@ -425,7 +424,6 @@ class _StudentAttendancePageState extends State<StudentAttendancePage>
       ),
       child: Row(
         children: [
-          // Status icon
           Container(
             width: 36,
             height: 36,
@@ -437,7 +435,6 @@ class _StudentAttendancePageState extends State<StudentAttendancePage>
           ),
           const SizedBox(width: 12),
 
-          // Subject + faculty
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,7 +450,6 @@ class _StudentAttendancePageState extends State<StudentAttendancePage>
             ),
           ),
 
-          // Date
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -487,8 +483,6 @@ class _StudentAttendancePageState extends State<StudentAttendancePage>
       ),
     );
   }
-
-  // ── Helpers ───────────────────────────────────────────────
 
   Widget _statChip(
       IconData icon, String value, Color color, String label) {
