@@ -17,11 +17,11 @@ This project serves as the foundation for building a clean, scalable, and visual
 
 👥 Collaboration & Contact
 
-Arun Kumar
+Arun Kumar.  
 
 Email: arunsharma73177@gmail.com
 
-Priyanshi Srivastava
+Priyanshi Srivastava.   
 
 Email: srivastavapriyanshi8081@gmail.com
 
