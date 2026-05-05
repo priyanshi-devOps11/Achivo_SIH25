@@ -382,9 +382,6 @@ class StudentService {
     return summaries;
   }
 
-  // ================================
-  // MARKS
-  // ================================
 
   static Future<List<SubjectMarks>> getSubjectMarks(
       String studentId) async {
