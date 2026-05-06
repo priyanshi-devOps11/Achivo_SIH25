@@ -56,6 +56,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   final List<String> genders = ['Male', 'Female', 'Other'];
   final List<String> years = ['I', 'II', 'III', 'IV', 'V'];
 
+  // ============================================================
+  // LIFECYCLE
+  // ============================================================
+
   @override
   void initState() {
     super.initState();
@@ -68,7 +72,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         AnimationController(duration: const Duration(seconds: 60), vsync: this);
 
     _backgroundAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-        CurvedAnimation(parent: _backgroundController, curve: Curves.easeOut));
+        CurvedAnimation(
+            parent: _backgroundController, curve: Curves.easeOut));
     _contentAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
         CurvedAnimation(parent: _contentController, curve: Curves.easeOut));
 
@@ -112,6 +117,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     super.dispose();
   }
 
+  // ============================================================
+  // DATA FETCHING
+  // ============================================================
+
   Future<void> _fetchDepartments() async {
     try {
       final response = await supabase
@@ -137,17 +146,17 @@ class _AuthStudentPageState extends State<AuthStudentPage>
           _departmentsLoaded = true;
         });
       } else {
-        setState(() {
-          _departmentsLoaded = true;
-        });
+        setState(() => _departmentsLoaded = true);
       }
     } catch (e) {
       print('Department fetch error: $e');
-      setState(() {
-        _departmentsLoaded = true;
-      });
+      setState(() => _departmentsLoaded = true);
     }
   }
+
+  // ============================================================
+  // CAPTCHA
+  // ============================================================
 
   void _generateCaptcha() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -160,10 +169,12 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     });
   }
 
+  // ============================================================
+  // OTP TIMER
+  // ============================================================
+
   void _startOtpTimer() {
-    setState(() {
-      _otpCountdown = 60;
-    });
+    setState(() => _otpCountdown = 60);
     _otpTimerController.reset();
     _otpTimerController.forward();
 
@@ -177,8 +188,9 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // SEND OTP - Create account immediately but don't complete profile
+  // SEND OTP
   // ============================================================
+
   Future<void> _sendOTP() async {
     if (_emailController.text.isEmpty) {
       _showErrorMessage('Please enter a valid email first.');
@@ -198,39 +210,30 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       return;
     }
 
-    // Validate form fields before sending OTP
     if (!_formKey.currentState!.validate()) {
       _showErrorMessage('Please fill all required fields correctly.');
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       print('📧 Sending OTP to: ${_emailController.text.trim()}');
 
-      // Check if email already exists in profiles (completed registrations)
       final profileResponse = await supabase
           .from('profiles')
           .select('email, email_verified')
           .eq('email', _emailController.text.trim())
           .maybeSingle();
 
-      if (profileResponse != null) {
-        // If profile exists and is verified, user should login
-        if (profileResponse['email_verified'] == true) {
-          _showErrorMessage(
-              'Email already registered. Please use login instead.');
-          setState(() {
-            _isLoading = false;
-          });
-          return;
-        }
+      if (profileResponse != null &&
+          profileResponse['email_verified'] == true) {
+        _showErrorMessage(
+            'Email already registered. Please use login instead.');
+        setState(() => _isLoading = false);
+        return;
       }
 
-      // Use signInWithOtp which creates account and sends OTP
       await supabase.auth.signInWithOtp(
         email: _emailController.text.trim(),
         emailRedirectTo: 'achivo://email-verified',
@@ -251,17 +254,14 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       print('✅ OTP sent successfully via Supabase Auth');
     } on AuthException catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       print('❌ OTP Send Error: ${e.message}');
       _showErrorMessage('Failed to send verification code: ${e.message}');
     } catch (error) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       print('❌ Unexpected Error: $error');
-      _showErrorMessage('Failed to send verification code: ${error.toString()}');
+      _showErrorMessage(
+          'Failed to send verification code: ${error.toString()}');
     }
   }
 
@@ -272,22 +272,20 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // VERIFY OTP - Complete the registration after verification
+  // VERIFY OTP
   // ============================================================
+
   Future<void> _verifyOTP() async {
     if (_otpController.text.isEmpty || _otpController.text.length != 6) {
       _showErrorMessage('Please enter the 6-digit verification code.');
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       print('🔐 Verifying OTP: ${_otpController.text.trim()}');
 
-      // Verify OTP using Supabase Auth
       final response = await supabase.auth.verifyOTP(
         email: _emailController.text.trim(),
         token: _otpController.text.trim(),
@@ -295,9 +293,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       );
 
       if (response.session == null || response.user == null) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
         _showErrorMessage('Invalid verification code. Please try again.');
         return;
       }
@@ -307,23 +303,21 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       print('📧 Email confirmed: ${response.user!.emailConfirmedAt}');
       print('👤 User ID: $userId');
 
-      // Now complete the student registration
       await _completeRegistration(userId);
-
     } on AuthException catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       print('❌ OTP Verification Error: ${e.message}');
       _showErrorMessage('Verification failed: ${e.message}');
     } catch (error) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       print('❌ Unexpected Error: $error');
       _showErrorMessage('Verification failed: ${error.toString()}');
     }
   }
+
+  // ============================================================
+  // COMPLETE REGISTRATION
+  // ============================================================
 
   Future<void> _completeRegistration(String userId) async {
     if (_profileData['institute_id'] == null) {
@@ -338,7 +332,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     try {
       print('📝 Completing registration for user: $userId');
 
-      // Update auth user metadata with password - keeps session alive
       await supabase.auth.updateUser(
         UserAttributes(
           password: _passwordController.text.trim(),
@@ -356,12 +349,11 @@ class _AuthStudentPageState extends State<AuthStudentPage>
 
       print('✅ User metadata updated');
 
-      // Wait for trigger to update profile
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Call registration RPC to create student record
       print('📞 Calling register_student_rpc');
-      final rpcResponse = await supabase.rpc('register_student_rpc', params: {
+      final rpcResponse =
+      await supabase.rpc('register_student_rpc', params: {
         'p_user_id': userId,
         'p_email': _emailController.text.trim(),
         'p_first_name': _firstNameController.text.trim(),
@@ -386,93 +378,38 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       print('📦 RPC Response: $rpcResponse');
 
       if (rpcResponse == null || rpcResponse['success'] != true) {
-        // If registration fails, clean up and throw
         try {
           await supabase.auth.signOut();
         } catch (_) {}
         throw Exception(rpcResponse?['error'] ?? 'Registration failed');
       }
 
-      // ✅ DO NOT sign out - keep session active and go straight to dashboard
       setState(() {
         _isLoading = false;
         _otpTimerController.stop();
       });
 
       print('✅ Registration completed successfully - redirecting to dashboard');
-
       _showSuccessMessage('Account created successfully! Welcome to Achivo 🎉');
 
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/student-dashboard');
       }
-
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       print('❌ Registration completion error: $e');
       throw Exception('Registration failed: ${e.toString()}');
     }
   }
 
-  bool _isPasswordValid(String password) {
-    RegExp passwordRegex = RegExp(
-        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
-    return passwordRegex.hasMatch(password);
-  }
-
-  Future<void> _handleSubmit() async {
-    if (_formKey.currentState!.validate()) {
-      // For registration, check OTP was sent
-      if (!_isLogin && !_isOtpSent) {
-        _showErrorMessage(
-            'Please verify your email first by clicking "Send OTP" and entering the code');
-        return;
-      }
-
-      if (_captchaController.text.toUpperCase() != _captchaText) {
-        _showErrorMessage('Incorrect captcha. Please refresh and try again.');
-        _generateCaptcha();
-        _captchaController.clear();
-        return;
-      }
-
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        if (_isLogin) {
-          await _handleLogin();
-        } else {
-          // For registration, verify OTP which will complete registration
-          await _verifyOTP();
-        }
-      } catch (error) {
-        _showErrorMessage(error is Exception
-            ? error.toString().replaceFirst('Exception: ', '')
-            : 'An unexpected error occurred.');
-      } finally {
-        if (_isLogin) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-        _generateCaptcha();
-        _captchaController.clear();
-      }
-    } else {
-      _generateCaptcha();
-      _captchaController.clear();
-    }
-  }
+  // ============================================================
+  // LOGIN
+  // ============================================================
 
   Future<void> _handleLogin() async {
     try {
       print('🔐 Starting login for roll number: ${_rollNoController.text}');
 
-      // Get email from roll number
       final studentResponse = await supabase
           .from('students')
           .select('email, is_active')
@@ -495,7 +432,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
         );
       }
 
-      // Use AuthService for login
       final result = await AuthService.login(
         email: email,
         password: _passwordController.text.trim(),
@@ -518,10 +454,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 
   // ============================================================
-  // REGISTRATION - Now removed, handled by completeRegistration
+  // FORGOT PASSWORD
   // ============================================================
-  // This function is no longer needed as registration is completed
-  // in _completeRegistration() after OTP verification
 
   Future<void> _handleForgotPassword() async {
     if (_rollNoController.text.isEmpty) {
@@ -529,9 +463,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final response = await supabase
@@ -553,11 +485,63 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     } catch (error) {
       _showErrorMessage('Failed to send reset link: ${error.toString()}');
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
+
+  // ============================================================
+  // FORM SUBMIT
+  // ============================================================
+
+  bool _isPasswordValid(String password) {
+    RegExp passwordRegex = RegExp(
+        r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$');
+    return passwordRegex.hasMatch(password);
+  }
+
+  Future<void> _handleSubmit() async {
+    if (_formKey.currentState!.validate()) {
+      if (!_isLogin && !_isOtpSent) {
+        _showErrorMessage(
+            'Please verify your email first by clicking "Send OTP" and entering the code');
+        return;
+      }
+
+      if (_captchaController.text.toUpperCase() != _captchaText) {
+        _showErrorMessage('Incorrect captcha. Please refresh and try again.');
+        _generateCaptcha();
+        _captchaController.clear();
+        return;
+      }
+
+      setState(() => _isLoading = true);
+
+      try {
+        if (_isLogin) {
+          await _handleLogin();
+        } else {
+          await _verifyOTP();
+        }
+      } catch (error) {
+        _showErrorMessage(error is Exception
+            ? error.toString().replaceFirst('Exception: ', '')
+            : 'An unexpected error occurred.');
+      } finally {
+        if (_isLogin) {
+          setState(() => _isLoading = false);
+        }
+        _generateCaptcha();
+        _captchaController.clear();
+      }
+    } else {
+      _generateCaptcha();
+      _captchaController.clear();
+    }
+  }
+
+  // ============================================================
+  // SNACKBARS
+  // ============================================================
 
   void _showSuccessMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -578,6 +562,409 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       ),
     );
   }
+
+  // ============================================================
+  // TERMS AND CONDITIONS DIALOG
+  // ============================================================
+
+  void _showTermsAndConditions() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  Colors.purple.shade50,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.description,
+                          color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Terms and Conditions',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTermsSection(
+                          'Last Updated: January 15, 2026',
+                          '',
+                          isDate: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTermsSection(
+                          '1. Acceptance of Terms',
+                          'By accessing and using the Achivo Student Portal, you accept and agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our services.',
+                        ),
+                        _buildTermsSection(
+                          '2. Student Account Registration',
+                          'You agree to provide accurate, current, and complete information during the registration process. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.',
+                        ),
+                        _buildTermsSection(
+                          '3. Authorized Use',
+                          'Student accounts are intended solely for enrolled students of registered educational institutions. You may not share your login credentials with unauthorized individuals or use the portal for any unlawful purposes.',
+                        ),
+                        _buildTermsSection(
+                          '4. Data Privacy and Security',
+                          'We take data security seriously. All personal and academic data is encrypted and stored securely. You acknowledge that you are responsible for maintaining the confidentiality of your credentials and the information accessible through the portal.',
+                        ),
+                        _buildTermsSection(
+                          '5. Intellectual Property',
+                          'All content, features, and functionality of the Achivo platform are owned by Achivo and are protected by international copyright, trademark, and other intellectual property laws.',
+                        ),
+                        _buildTermsSection(
+                          '6. Prohibited Activities',
+                          'You agree not to:\n• Attempt to gain unauthorized access to any portion of the portal\n• Use the platform to transmit malicious code or viruses\n• Interfere with or disrupt the integrity or performance of the platform\n• Attempt to decipher, decompile, or reverse engineer any software\n• Impersonate other students or academic staff',
+                        ),
+                        _buildTermsSection(
+                          '7. Academic Integrity',
+                          'Students are expected to uphold academic integrity at all times while using the platform. Any misuse of the platform to facilitate academic dishonesty may result in account suspension.',
+                        ),
+                        _buildTermsSection(
+                          '8. Service Availability',
+                          'While we strive to maintain continuous service availability, we do not guarantee uninterrupted access. We reserve the right to modify, suspend, or discontinue any aspect of the service with or without notice.',
+                        ),
+                        _buildTermsSection(
+                          '9. Limitation of Liability',
+                          'Achivo shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use or inability to use the service.',
+                        ),
+                        _buildTermsSection(
+                          '10. Governing Law',
+                          'These Terms shall be governed by and construed in accordance with the laws of India, without regard to its conflict of law provisions.',
+                        ),
+                        _buildTermsSection(
+                          '11. Contact Information',
+                          'For questions about these Terms and Conditions, please contact us at:\n\nEmail: support@achivo.com\nPhone: +91-XXX-XXX-XXXX',
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline,
+                                  color: Colors.blue.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'By clicking "Create Student Account" or "Sign In as Student", you acknowledge that you have read and agree to these Terms and Conditions.',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Footer Button
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Understand',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // PRIVACY POLICY DIALOG
+  // ============================================================
+
+  void _showPrivacyPolicy() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  Colors.blue.shade50,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
+                    ),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.privacy_tip,
+                          color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Privacy Policy',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildTermsSection(
+                          'Effective Date: January 15, 2026',
+                          '',
+                          isDate: true,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildTermsSection(
+                          '1. Information We Collect',
+                          'We collect information that you provide directly to us, including:\n• Personal identification (name, email, phone number)\n• Academic details (roll number, student ID, department, year)\n• Account authentication data\n• Usage data and preferences',
+                        ),
+                        _buildTermsSection(
+                          '2. How We Use Your Information',
+                          'We use the collected information to:\n• Provide and maintain our services\n• Authenticate and authorize student access\n• Communicate important updates and notifications\n• Improve our platform and user experience\n• Comply with legal obligations',
+                        ),
+                        _buildTermsSection(
+                          '3. Data Security',
+                          'We implement industry-standard security measures to protect your data:\n• End-to-end encryption for sensitive information\n• Secure authentication protocols (OTP verification)\n• Regular security audits and updates\n• Restricted access to authorized personnel only',
+                        ),
+                        _buildTermsSection(
+                          '4. Data Sharing and Disclosure',
+                          'We do not sell or rent your personal information. We may share data only:\n• With your explicit consent\n• With your registered educational institution\n• To comply with legal requirements\n• To protect our rights and prevent fraud',
+                        ),
+                        _buildTermsSection(
+                          '5. Cookies and Tracking',
+                          'We use cookies and similar technologies to enhance user experience, maintain sessions, and analyze platform usage. You can control cookie preferences through your browser settings.',
+                        ),
+                        _buildTermsSection(
+                          '6. Data Retention',
+                          'We retain your information for as long as your account is active or as needed to provide services. You may request account deletion at any time, subject to legal retention requirements.',
+                        ),
+                        _buildTermsSection(
+                          '7. Your Rights',
+                          'You have the right to:\n• Access your personal data\n• Correct inaccurate information\n• Request data deletion\n• Opt-out of marketing communications\n• Export your data in a portable format',
+                        ),
+                        _buildTermsSection(
+                          '8. Children\'s Privacy',
+                          'While our platform serves students who may be minors, we take extra care to protect their data. Parental consent may be required for students under 13 years of age.',
+                        ),
+                        _buildTermsSection(
+                          '9. International Data Transfers',
+                          'Your data may be transferred and processed in countries other than your own. We ensure appropriate safeguards are in place to protect your information.',
+                        ),
+                        _buildTermsSection(
+                          '10. Changes to Privacy Policy',
+                          'We may update this Privacy Policy periodically. We will notify you of significant changes via email or platform notification.',
+                        ),
+                        _buildTermsSection(
+                          '11. Contact Us',
+                          'For privacy-related inquiries:\n\nEmail: privacy@achivo.com\nPhone: +91-XXX-XXX-XXXX\nAddress: Achivo Headquarters, India',
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.green.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.verified_user,
+                                  color: Colors.green.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Your privacy is important to us. We are committed to protecting your personal information and maintaining transparency.',
+                                  style: TextStyle(
+                                    color: Colors.green.shade900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Footer Button
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B82F6),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'I Understand',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // TERMS SECTION HELPER
+  // ============================================================
+
+  Widget _buildTermsSection(String title, String content,
+      {bool isDate = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isDate ? 12 : 16,
+              fontWeight: isDate ? FontWeight.w500 : FontWeight.bold,
+              color: isDate ? Colors.grey[600] : Colors.grey[800],
+            ),
+          ),
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              content,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
+                height: 1.6,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -618,6 +1005,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
+  // ============================================================
+  // HEADER
+  // ============================================================
+
   Widget _buildHeader() {
     return Column(
       children: [
@@ -651,6 +1042,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
+  // ============================================================
+  // TAB SELECTOR
+  // ============================================================
+
   Widget _buildTabSelector() {
     return Container(
       height: 50,
@@ -672,10 +1067,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                 decoration: BoxDecoration(
                   gradient: !_isLogin
                       ? const LinearGradient(
-                    colors: [
-                      Color(0xFF8B5CF6),
-                      Color(0xFF3B82F6),
-                    ],
+                    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
                   )
                       : null,
                   borderRadius: BorderRadius.circular(21),
@@ -704,10 +1096,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                 decoration: BoxDecoration(
                   gradient: _isLogin
                       ? const LinearGradient(
-                    colors: [
-                      Color(0xFF8B5CF6),
-                      Color(0xFF3B82F6),
-                    ],
+                    colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
                   )
                       : null,
                   borderRadius: BorderRadius.circular(21),
@@ -728,6 +1117,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       ),
     );
   }
+
+  // ============================================================
+  // FORM
+  // ============================================================
 
   Widget _buildForm() {
     return Form(
@@ -792,9 +1185,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               hint: 'Select gender',
               icon: Icons.person_2_outlined,
               validator: (value) {
-                if (value == null) {
-                  return 'Please select your gender';
-                }
+                if (value == null) return 'Please select your gender';
                 return null;
               },
             ),
@@ -824,9 +1215,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               hint: 'Select year',
               icon: Icons.calendar_today_outlined,
               validator: (value) {
-                if (value == null) {
-                  return 'Please select your year';
-                }
+                if (value == null) return 'Please select your year';
                 return null;
               },
             ),
@@ -874,9 +1263,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                 hint: 'Select department',
                 icon: Icons.business_outlined,
                 validator: (value) {
-                  if (value == null) {
-                    return 'Please select your department';
-                  }
+                  if (value == null) return 'Please select your department';
                   return null;
                 },
               ),
@@ -922,20 +1309,15 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                 _passwordVisible ? Icons.visibility : Icons.visibility_off,
                 color: Colors.grey[500],
               ),
-              onPressed: () {
-                setState(() {
-                  _passwordVisible = !_passwordVisible;
-                });
-              },
+              onPressed: () =>
+                  setState(() => _passwordVisible = !_passwordVisible),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'Please enter your password';
               }
-              if (!_isLogin) {
-                if (!_isPasswordValid(value)) {
-                  return 'Password must be 8+ chars with uppercase, lowercase, digit & special char';
-                }
+              if (!_isLogin && !_isPasswordValid(value)) {
+                return 'Password must be 8+ chars with uppercase, lowercase, digit & special char';
               }
               return null;
             },
@@ -955,11 +1337,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                       : Icons.visibility_off,
                   color: Colors.grey[500],
                 ),
-                onPressed: () {
-                  setState(() {
-                    _confirmPasswordVisible = !_confirmPasswordVisible;
-                  });
-                },
+                onPressed: () => setState(
+                        () => _confirmPasswordVisible = !_confirmPasswordVisible),
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -998,10 +1377,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             height: 56,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF8B5CF6),
-                  Color(0xFF3B82F6),
-                ],
+                colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
               ),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
@@ -1058,13 +1434,52 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
+  // ============================================================
+  // FOOTER — clickable Terms & Privacy links
+  // ============================================================
+
   Widget _buildFooter() {
-    return Text(
-      'By continuing, you agree to our Terms of Service and Privacy Policy',
-      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+    return Text.rich(
+      TextSpan(
+        text: 'By continuing, you agree to our ',
+        style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        children: [
+          WidgetSpan(
+            child: GestureDetector(
+              onTap: _showTermsAndConditions,
+              child: const Text(
+                'Terms of Service',
+                style: TextStyle(
+                  color: Color(0xFF8B5CF6),
+                  decoration: TextDecoration.underline,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          const TextSpan(text: ' and '),
+          WidgetSpan(
+            child: GestureDetector(
+              onTap: _showPrivacyPolicy,
+              child: const Text(
+                'Privacy Policy',
+                style: TextStyle(
+                  color: Color(0xFF8B5CF6),
+                  decoration: TextDecoration.underline,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       textAlign: TextAlign.center,
     );
   }
+
+  // ============================================================
+  // INPUT FIELD WIDGET
+  // ============================================================
 
   Widget _buildInputField({
     required TextEditingController controller,
@@ -1127,6 +1542,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
+  // ============================================================
+  // DROPDOWN FIELD WIDGET
+  // ============================================================
+
   Widget _buildDropdownField({
     required String label,
     required String? value,
@@ -1177,16 +1596,17 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               ),
             ),
             items: items.map((item) {
-              return DropdownMenuItem(
-                value: item,
-                child: Text(item),
-              );
+              return DropdownMenuItem(value: item, child: Text(item));
             }).toList(),
           ),
         ),
       ],
     );
   }
+
+  // ============================================================
+  // EMAIL + OTP FIELD
+  // ============================================================
 
   Widget _buildEmailFieldWithOTP() {
     return Column(
@@ -1238,8 +1658,7 @@ class _AuthStudentPageState extends State<AuthStudentPage>
                 child: Text(
                   _isOtpSent ? 'Sent ✓' : 'Send OTP',
                   style: TextStyle(
-                    color:
-                    _isOtpSent ? Colors.green : const Color(0xFF8B5CF6),
+                    color: _isOtpSent ? Colors.green : const Color(0xFF8B5CF6),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1261,15 +1680,16 @@ class _AuthStudentPageState extends State<AuthStudentPage>
     );
   }
 
+  // ============================================================
+  // OTP FIELD WIDGET
+  // ============================================================
+
   Widget _buildEnhancedOtpField() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            Colors.blue.shade50,
-            Colors.purple.shade50,
-          ],
+          colors: [Colors.blue.shade50, Colors.purple.shade50],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.blue.shade200),
@@ -1297,7 +1717,6 @@ class _AuthStudentPageState extends State<AuthStudentPage>
             style: TextStyle(color: Colors.grey[600], fontSize: 14),
           ),
           const SizedBox(height: 16),
-          // ── OTP input + Verify button side by side ──
           Row(
             children: [
               Expanded(
@@ -1383,11 +1802,8 @@ class _AuthStudentPageState extends State<AuthStudentPage>
               Text(
                 _otpCountdown > 0
                     ? 'Resend OTP in ${_otpCountdown}s'
-                    : 'Didn\'t receive code?',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 12,
-                ),
+                    : "Didn't receive code?",
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
               TextButton(
                 onPressed: _otpCountdown == 0 ? _resendOTP : null,
@@ -1408,6 +1824,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
       ),
     );
   }
+
+  // ============================================================
+  // CAPTCHA FIELD WIDGET
+  // ============================================================
 
   Widget _buildEnhancedCaptchaField() {
     return Column(
@@ -1535,6 +1955,10 @@ class _AuthStudentPageState extends State<AuthStudentPage>
   }
 }
 
+// ============================================================
+// CAPTCHA PAINTER
+// ============================================================
+
 class CaptchaBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -1549,7 +1973,6 @@ class CaptchaBackgroundPainter extends CustomPainter {
       final startY = random.nextDouble() * size.height;
       final endX = random.nextDouble() * size.width;
       final endY = random.nextDouble() * size.height;
-
       canvas.drawLine(
         Offset(startX, startY),
         Offset(endX, endY),
