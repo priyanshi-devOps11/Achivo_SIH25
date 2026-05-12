@@ -343,9 +343,6 @@ class PaymentReceipt {
   final bool isCancelled;
   final DateTime createdAt;
 
-  // ── Extra fields used by receipt_pdf_service.dart ────────────────
-  /// Institute name snapshot. Falls back to empty string if the DB row
-  /// doesn't carry this column yet.
   final String instituteName;
 
   /// The date the payment was actually made (fee_payments.payment_date).
