@@ -369,10 +369,6 @@ class PayUService implements PayUCheckoutProProtocol {
 
   // ── Private helpers ──────────────────────────────────────────────────────
 
-  /// Safely convert any value to String.
-  /// Returns null if the value is itself a Map (nested map — not a string).
-  /// This is the core fix: the SDK sometimes puts nested Maps in response
-  /// fields that are supposed to be Strings, causing the cast crash.
   String? _toStr(dynamic v) {
     if (v == null) return null;
     if (v is String) return v.isEmpty ? null : v;
