@@ -1,4 +1,4 @@
-// lib/screens/student_fee_dashboard.dart  (PayU version)
+// lib/screens/student_fee_dashboard.dart  (Razorpay version)
 // ══════════════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
@@ -7,7 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models/fee_models.dart';
 import '../services/fee_service.dart';
-import '../services/payu_service.dart';
+import '../services/razorpay_service.dart';
 
 class StudentFeeDashboard extends StatefulWidget {
   final String studentId;
@@ -26,7 +26,7 @@ class _StudentFeeDashboardState extends State<StudentFeeDashboard>
   List<PaymentReceipt> _receipts = [];
   bool _loading = true;
 
-  // Student profile for PayU prefill
+  // Student profile for Razorpay prefill
   String _studentName  = '';
   String _studentEmail = '';
   String _studentPhone = '';
@@ -63,7 +63,7 @@ class _StudentFeeDashboardState extends State<StudentFeeDashboard>
 
   Future<void> _loadStudentProfile() async {
     try {
-      final db     = PayUService.supabaseClient;
+      final db      = RazorpayService.supabaseClient;
       final authUid = db.auth.currentUser?.id;
       if (authUid == null) return;
       final row = await db
@@ -301,7 +301,7 @@ class _StudentFeeDashboardState extends State<StudentFeeDashboard>
               child: ElevatedButton.icon(
                 onPressed: () => _openPaymentSheet(fee),
                 icon: const Icon(Icons.payment, size: 18),
-                label: const Text('Pay Now via PayU'),
+                label: const Text('Pay Now'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo.shade700,
                   foregroundColor: Colors.white,
@@ -584,14 +584,14 @@ class _StudentFeeDashboardState extends State<StudentFeeDashboard>
     }
   }
 
-  // ── Open PayU Payment Sheet ───────────────────────────────────────
+  // ── Open Razorpay Payment Sheet ───────────────────────────────────
 
   void _openPaymentSheet(StudentFee fee) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _PayUPaymentSheet(
+      builder: (_) => _RazorpayPaymentSheet(
         fee:          fee,
         studentName:  _studentName,
         studentEmail: _studentEmail,
@@ -612,17 +612,17 @@ class _StudentFeeDashboardState extends State<StudentFeeDashboard>
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// PAYU PAYMENT BOTTOM SHEET
+// RAZORPAY PAYMENT BOTTOM SHEET
 // ═════════════════════════════════════════════════════════════════════
 
-class _PayUPaymentSheet extends StatefulWidget {
+class _RazorpayPaymentSheet extends StatefulWidget {
   final StudentFee   fee;
   final String       studentName;
   final String       studentEmail;
   final String       studentPhone;
   final VoidCallback onSuccess;
 
-  const _PayUPaymentSheet({
+  const _RazorpayPaymentSheet({
     required this.fee,
     required this.studentName,
     required this.studentEmail,
@@ -631,16 +631,16 @@ class _PayUPaymentSheet extends StatefulWidget {
   });
 
   @override
-  State<_PayUPaymentSheet> createState() => _PayUPaymentSheetState();
+  State<_RazorpayPaymentSheet> createState() => _RazorpayPaymentSheetState();
 }
 
-class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
+class _RazorpayPaymentSheetState extends State<_RazorpayPaymentSheet> {
   FeeInstallment? _selectedInstallment;
   bool    _processing    = false;
   String? _errorMessage;
   String? _successMessage;
 
-  late final PayUService _payU;
+  late final RazorpayService _razorpay;
 
   List<FeeInstallment> get _installments =>
       widget.fee.feeStructure?.installments ?? [];
@@ -648,10 +648,16 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
   @override
   void initState() {
     super.initState();
-    _payU = PayUService();
+    _razorpay = RazorpayService();
     if (_installments.length == 1) {
       _selectedInstallment = _installments.first;
     }
+  }
+
+  @override
+  void dispose() {
+    _razorpay.dispose();
+    super.dispose();
   }
 
   double get _payAmount =>
@@ -661,7 +667,7 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
     if (_processing) return;
     setState(() { _processing = true; _errorMessage = null; });
 
-    await _payU.startPayment(
+    await _razorpay.startPayment(
       context:      context,
       studentFee:   widget.fee,
       amount:       _payAmount,
@@ -676,7 +682,7 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
 
         if (result.success) {
           setState(() => _successMessage =
-          'Payment Successful!\nReceipt: ${result.receiptNo ?? result.txnId}');
+          'Payment Successful!\nReceipt: ${result.receiptNo ?? result.razorpayId}');
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) Navigator.pop(context);
             widget.onSuccess();
@@ -743,7 +749,7 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
                 ]),
                 const SizedBox(height: 22),
 
-                // Installment picker
+                // Installment picker (only shown when > 1 installment)
                 if (_installments.length > 1) ...[
                   Text('Choose Installment',
                       style: TextStyle(
@@ -837,12 +843,12 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
                 ),
                 const SizedBox(height: 20),
 
-                // Payment method chips (info only — PayU shows its own UI)
+                // Payment method info chips
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   _infoChip(Icons.security,        'SSL Secured',   Colors.green),
-                  _infoChip(Icons.account_balance, 'Net Banking',   Colors.blue),
                   _infoChip(Icons.phone_android,   'UPI',           Colors.orange),
                   _infoChip(Icons.credit_card,     'Cards',         Colors.purple),
+                  _infoChip(Icons.account_balance, 'Net Banking',   Colors.blue),
                   _infoChip(Icons.wallet,          'Wallets',       Colors.teal),
                 ]),
                 const SizedBox(height: 22),
@@ -916,7 +922,7 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
                                   strokeWidth: 2,
                                   color: Colors.white)),
                           SizedBox(width: 12),
-                          Text('Opening PayU…',
+                          Text('Opening Razorpay…',
                               style: TextStyle(fontSize: 16)),
                         ],
                       )
@@ -926,7 +932,7 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
                           const Icon(Icons.lock, size: 18),
                           const SizedBox(width: 8),
                           Text(
-                            'Pay ₹${NumberFormat('#,##,###').format(_payAmount)} via PayU',
+                            'Pay ₹${NumberFormat('#,##,###').format(_payAmount)}',
                             style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold),
@@ -945,7 +951,7 @@ class _PayUPaymentSheetState extends State<_PayUPaymentSheet> {
                           Icon(Icons.lock_outline,
                               size: 13, color: Colors.grey.shade500),
                           const SizedBox(width: 4),
-                          Text('Secured by PayU Payments',
+                          Text('Secured by Razorpay',
                               style: TextStyle(
                                   color: Colors.grey.shade500, fontSize: 12)),
                         ]),

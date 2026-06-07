@@ -19,7 +19,7 @@ dependencies:
   url_launcher: ^6.2.6
   intl: ^0.19.0
   file_picker: ^10.3.3
-  payu_checkoutpro_flutter: 1.4.0
+  razorpay_flutter: ^1.3.7
   crypto: ^3.0.7
 
   # SQLite support
@@ -44,7 +44,6 @@ dependencies:
   share_plus: ^12.0.1
 
   flutter_dotenv: ^5.1.0
-  razorpay_flutter: ^1.3.6
 
 dependency_overrides:
   vector_math: ^2.2.0

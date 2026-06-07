@@ -19,6 +19,7 @@ migrate_working_dir/
 .idea/
 assets/.env.local
 assets/.env.example
+lib/config/secrets.dart
 
 **/doc/api/
 **/ios/Flutter/.last_build_id
