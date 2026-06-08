@@ -102,7 +102,6 @@ class AuthService {
     }
   }
 
-  // ================================
   // LOGOUT
   // ================================
   static Future<void> logout() async {
